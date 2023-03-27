@@ -1,0 +1,79 @@
+Amazon
+------
+https://www.amazon.com/dp/B01GDN1T4S?psc=1&ref=ppx_yo2ov_dt_b_product_details
+https://www.amazon.com/stores/Nooelec/page/19B596C7-6ED9-427B-8FA7-53232732CB8F?ref_=ast_bln
+
+Qudrature Encoding
+------------------
+https://www.dsprelated.com/showarticle/192.php#:~:text=Quadrature%2Dsampling%20is%20the%20process,frequency%20of%20fc%20Hz.
+
+The SDR
+-------
+http://www.nooelec.com
+https://www.nooelec.com/store/sdr.html
+https://www.nooelec.com/store/sdr/nesdr-smart.html
+https://www.nooelec.com/store/downloads/dl/file/id/111/product/246/nesdr_smart_rtl_sdr_v5_datasheet_revision_1.pdf
+
+Setup the SDR
+-------------
+start.nesdr.com
+https://www.nooelec.com/store/downloads/dl/file/id/72/product/0/nesdr_installation_manual_for_ubuntu.pdf
+
+Steps:
+- vi /etc/modprobe.d/blacklist-dvb.conf
+  blacklist dvb_usb_rtl28xxu
+  reboot
+- apt install rtl-sdr
+- Ubuntu Software -> install gqrx  (takes some time)
+
+rtl utils
+----------
+rtl_adsb
+rtl_biast
+rtl_eeprom
+rtl_fm
+   # ARM and Intel are Little Endian
+   rtl_fm -f 100700000  -s 200000 -r 48000  | aplay -r 48000 -f S16_LE
+   rtl_fm -f 100700000  -s 200000 -r 48000  | aplay -r 48000 -f S16_LE
+   rtl_fm -f 90.9M:101M:.1M -l 50 -s 200000 -r 48000  | aplay -r 48000 -f S16_LE
+rtl_power
+rtl_sdr
+rtl_tcp
+rtl_test
+
+web links
+---------
+https://www.rtl-sdr.com/big-list-rtl-sdr-supported-software/
+  List of RTL-SDR Software
+
+https://dsp.stackexchange.com/questions/2612/why-can-quadrature-demodulation-demod-a-frequency-modulated-signal
+  FM Demod
+
+https://en.wikipedia.org/wiki/Product_detector
+  A product detector is a type of demodulator used for AM and SSB signals.
+
+https://osmocom.org/projects/rtl-sdr/wiki
+https://cgit.osmocom.org/rtl-sdr
+git clone https://gitea.osmocom.org/sdr/rtl-sdr.git
+  the rtl utils code is here
+
+simulation
+----------
+src | am_mod | mixer | lpf | aplay
+
+src = sine wave, music, sine wave with varying amplitude
+
+viewer
+power
+
+old examples
+------------
+https://github.com/lgeek/sdr-examples.git
+  git clone https://github.com/lgeek/sdr-examples.git
+  sudo apt install librtlsdr-dev
+  sudo apt install fftw3-dev
+  gcc -o fm_receiver fm_receiver.c -l fftw3 -l m -l rtlsdr
+  fm_receiver
+
+https://github.com/keenerd/rtl-sdr-misc
+
