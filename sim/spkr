@@ -1,0 +1,3 @@
+#!/bin/bash
+
+aplay -t raw -c 1 -f S16_LE -r 22000
