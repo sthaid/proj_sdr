@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "common.h"
+    #define TWO_PI (2*M_PI)
 
 #include <sndfile.h>
 
@@ -14,19 +15,118 @@
 //   file:///usr/share/doc/libsndfile1-dev/html/api.html
 //   https://github.com/libsndfile/libsndfile
 
-// sine
+// sine [hz]
 // white
-// file=xxx.wav
+// wav <xxx.wav>
+
+#define SAMPLE_RATE 22000
 
 char *progname = "src";
 
-int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, int *sample_rate);
+static int sine(char *freq_str);
+static int white(char *arg);
+static int wav(char *filename);
+
+// xxx print the avg or running amplitude
 
 int main(int argc, char **argv)
 {
-    int rc, num_chan, num_items, sample_rate;
+    char *arg1, *arg2;
+    int rc;
+
+    if (argc < 2) {
+        ERROR("arg expected\n");
+        return 1;
+    }
+
+    arg1 = argv[1];
+    arg2 = argc > 2 ? argv[2] : "";
+
+    if (strcmp(arg1, "sine") == 0) {
+        rc = sine(arg2);
+    } else if (strcmp(arg1, "white") == 0) {
+        rc = white(arg2);
+    } else if (strcmp(arg1, "wav") == 0) {
+        rc = wav(arg2);
+    } else {
+        ERROR("invalid arg '%s'\n", arg1);
+        rc = -1;
+        return 1;
+    }
+
+    return rc == 0 ? 0 : 1;
+}
+
+// -----------------  SINE  ----------------------------
+
+static int sine(char *freq_str)
+{
+    short  data[SAMPLE_RATE];
+    int    i;
+    double amp = 10000;
+    double freq = 1000;
+
+    if (freq_str[0] != '\0') {
+        if (sscanf(freq_str, "%lf", &freq) != 1) {
+            ERROR("freq '%s' not a number\n", freq_str);
+            return -1;
+        }
+        if (freq < 100 || freq > 10000) {
+            ERROR("freq '%s' not in range 100 to 10000 hz\n", freq_str);
+            return -1;
+        }
+    }
+
+    for (i = 0; i < SAMPLE_RATE; i++) {
+        data[i] = amp * sin(freq * TWO_PI * ((double)i/SAMPLE_RATE));
+    }
+
+    while (true) {
+        fwrite(data, sizeof(short), SAMPLE_RATE, stdout);
+    }
+
+    return 0;
+}
+
+// -----------------  WHITE ----------------------------
+
+static int white(char *arg)
+{
+    short  data[SAMPLE_RATE];
+    int    i;
+    double amp = 10000;
+
+    #define RAND_RANGE_PLUS_MINUS_ONE ((double)(random() - 0x40000000) / 0x40000000)
+
+    for (i = 0; i < SAMPLE_RATE; i++) {
+        data[i] = RAND_RANGE_PLUS_MINUS_ONE * amp;
+    }
+
+    while (true) {
+        fwrite(data, sizeof(short), SAMPLE_RATE, stdout);
+    }
+
+    return 0;
+
+}
+
+// -----------------  WAV  -----------------------------
+        
+static int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, int *sample_rate);
+
+static int wav(char *filename)
+{
+    int    rc, num_chan, num_items, sample_rate;
     short *data;
-    char *filename = "/home/haid/Audio/super_critical.wav";
+
+    #define MIN_SAMPLE_RATE (0.9 * SAMPLE_RATE)
+    #define MAX_SAMPLE_RATE (1.1 * SAMPLE_RATE)
+
+    #define DEFAULT_FILENAME "super_critical.wav"
+
+    if (filename[0] == '\0') {
+        filename = DEFAULT_FILENAME;
+    }
 
     rc = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
     if (rc != 0) {
@@ -34,16 +134,25 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    NOTICE("%d %d %d\n", num_chan, num_items, sample_rate);
+    NOTICE("num_chan=%d num_items=%d sample_rate=%d\n", num_chan, num_items, sample_rate);
 
-    // xxx if multi chan ...
+    if (num_chan != 1) {
+        ERROR("num_chan must be 1\n", num_chan);
+        return -1;
+    }
 
-    fwrite(data, sizeof(short), num_items, stdout);
+    if (sample_rate < MIN_SAMPLE_RATE || sample_rate > MAX_SAMPLE_RATE) {
+        ERROR("sample_rate=%d, out of range %d - %d\n",
+              sample_rate, MIN_SAMPLE_RATE, MAX_SAMPLE_RATE);
+        return -1;
+    }
+
+    while (true) {
+        fwrite(data, sizeof(short), num_items, stdout);
+    }
 
     return 0;
 }
-
-// ------------------------------------------------
 
 // caller must free returned data when done
 int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, int *sample_rate)
@@ -63,7 +172,7 @@ int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, i
     memset(&sfinfo, 0, sizeof (sfinfo));
     file = sf_open(filename, SFM_READ, &sfinfo);
     if (file == NULL) {
-        ERROR("sf_open '%s'\n", filename);
+        //ERROR("sf_open '%s'\n", filename);
         return -1;
     }
 
@@ -74,7 +183,7 @@ int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, i
     // read the wav file data 
     cnt = sf_read_short(file, d, items);
     if (cnt != items) {
-        ERROR("sf_read_short, cnt=%d items=%d\n", cnt, items);
+        //ERROR("sf_read_short, cnt=%d items=%d\n", cnt, items);
         sf_close(file);
         return -1;
     }
@@ -89,51 +198,3 @@ int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, i
     *sample_rate = sfinfo.samplerate;
     return 0;
 }
-
-
-#if 0
-// on input num_items is the total number of shorts in caller's data buffer
-int read_wav_file2(char *filename, short *data, int *num_chan, int *num_items, int *sample_rate)
-{
-    SNDFILE *file;
-    SF_INFO  sfinfo;
-    int      cnt, items;
-    int      num_items_orig = *num_items;
-
-    // preset return values
-    *num_chan = 0;
-    *num_items = 0;
-    *sample_rate = 0;
-
-    // open wav file and get info
-    memset(&sfinfo, 0, sizeof (sfinfo));
-    file = sf_open(filename, SFM_READ, &sfinfo);
-    if (file == NULL) {
-        ERROR("sf_open '%s'\n", filename);
-        return -1;
-    }
-
-    // limit number of items being read to not overflow caller's buffer
-    items = sfinfo.frames * sfinfo.channels;
-    if (items > num_items_orig) {
-        items = num_items_orig;
-    }
-
-    // read the wav file data
-    cnt = sf_read_short(file, data, items);
-    if (cnt != items) {
-        ERROR("sf_read_short, cnt=%d items=%d\n", cnt, items);
-        sf_close(file);
-    }
-
-    // close file
-    sf_close(file);
-
-    // return values
-    *num_chan    = sfinfo.channels;
-    *num_items    = items;
-    *sample_rate = sfinfo.samplerate;
-    return 0;
-}
-
-#endif
