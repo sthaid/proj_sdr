@@ -1,12 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <string.h>
-
 #include "common.h"
-    #define TWO_PI (2*M_PI)
 
 #include <sndfile.h>
 
@@ -15,11 +7,10 @@
 //   file:///usr/share/doc/libsndfile1-dev/html/api.html
 //   https://github.com/libsndfile/libsndfile
 
+// xxx review
 // sine [hz]
 // white
 // wav <xxx.wav>
-
-#define SAMPLE_RATE 22000
 
 char *progname = "src";
 
@@ -61,9 +52,9 @@ int main(int argc, char **argv)
 
 static int sine(char *freq_str)
 {
-    short  data[SAMPLE_RATE];
+    float  data[SAMPLE_RATE];
     int    i;
-    double amp = 10000;
+    double amp = 1;
     double freq = 1000;
 
     if (freq_str[0] != '\0') {
@@ -82,7 +73,7 @@ static int sine(char *freq_str)
     }
 
     while (true) {
-        fwrite(data, sizeof(short), SAMPLE_RATE, stdout);
+        fwrite(data, sizeof(float), SAMPLE_RATE, stdout);
     }
 
     return 0;
@@ -92,9 +83,9 @@ static int sine(char *freq_str)
 
 static int white(char *arg)
 {
-    short  data[SAMPLE_RATE];
+    float  data[SAMPLE_RATE];
     int    i;
-    double amp = 10000;
+    double amp = 1;
 
     #define RAND_RANGE_PLUS_MINUS_ONE ((double)(random() - 0x40000000) / 0x40000000)
 
@@ -103,7 +94,7 @@ static int white(char *arg)
     }
 
     while (true) {
-        fwrite(data, sizeof(short), SAMPLE_RATE, stdout);
+        fwrite(data, sizeof(float), SAMPLE_RATE, stdout);
     }
 
     return 0;
@@ -112,12 +103,12 @@ static int white(char *arg)
 
 // -----------------  WAV  -----------------------------
         
-static int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, int *sample_rate);
+static int read_wav_file(char *filename, float **data, int *num_chan, int *num_items, int *sample_rate);
 
 static int wav(char *filename)
 {
     int    rc, num_chan, num_items, sample_rate;
-    short *data;
+    float *data;
 
     #define MIN_SAMPLE_RATE (0.9 * SAMPLE_RATE)
     #define MAX_SAMPLE_RATE (1.1 * SAMPLE_RATE)
@@ -148,19 +139,19 @@ static int wav(char *filename)
     }
 
     while (true) {
-        fwrite(data, sizeof(short), num_items, stdout);
+        fwrite(data, sizeof(float), num_items, stdout);
     }
 
     return 0;
 }
 
 // caller must free returned data when done
-int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, int *sample_rate)
+int read_wav_file(char *filename, float **data, int *num_chan, int *num_items, int *sample_rate)
 {
     SNDFILE *file;
     SF_INFO  sfinfo;
     int      cnt, items;
-    short   *d;
+    float   *d;
 
     // preset return values
     *data = NULL;
@@ -178,12 +169,13 @@ int read_wav_file(char *filename, short **data, int *num_chan, int *num_items, i
 
     // allocate memory for the data
     items = sfinfo.frames * sfinfo.channels;
-    d = malloc(items*sizeof(short));
+    d = malloc(items*sizeof(float));
 
     // read the wav file data 
-    cnt = sf_read_short(file, d, items);
+    cnt = sf_read_float(file, d, items);
     if (cnt != items) {
-        //ERROR("sf_read_short, cnt=%d items=%d\n", cnt, items);
+        //ERROR("sf_read_float, cnt=%d items=%d\n", cnt, items);
+        free(d);
         sf_close(file);
         return -1;
     }
