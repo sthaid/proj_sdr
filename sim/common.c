@@ -20,7 +20,7 @@ void log_msg(char *lvl, char *fmt, ...)
     fprintf(stderr, "%s %s: %s\n", lvl, progname, s);
 }
 
-// -----------------  TIME ROUTINES  --------------------------------------
+// -----------------  TIME  -----------------------------------------------
 
 unsigned long microsec_timer(void)
 {
@@ -36,5 +36,125 @@ unsigned long get_real_time_us(void)
 
     clock_gettime(CLOCK_REALTIME,&ts);
     return ((unsigned long)ts.tv_sec * 1000000) + ((unsigned long)ts.tv_nsec / 1000);
+}
+
+// -----------------  AUDIO SRC  ------------------
+
+// reference:
+//   apt install libsndfile1-dev
+//   file:///usr/share/doc/libsndfile1-dev/html/api.html
+//   https://github.com/libsndfile/libsndfile
+
+#include <sndfile.h>
+
+// defines
+
+#define MAX_SRC 10
+
+// variables
+
+static struct src_s {
+    int max;
+    int sample_rate;
+    float *data;
+} src[MAX_SRC];
+
+// prototypes
+
+static void init_audio_src_from_wav_file(int id, char *filename);
+static int read_wav_file(char *filename, float **data, int *num_chan, int *num_items, int *sample_rate);
+
+double get_src(int id, double t)
+{
+    int idx;
+    struct src_s *s = &src[id];
+
+    idx = (unsigned long)nearbyint(t * s->sample_rate) % s->max;
+    return s->data[idx];
+}
+
+void init_audio_src(void)  // xxx caller should pass in list of srcs to init
+{
+    init_audio_src_from_wav_file(0, "super_critical.wav");
+}
+
+static void init_audio_src_from_wav_file(int id, char *filename)
+{
+    int    rc, num_chan, num_items, sample_rate;
+    struct src_s *s = &src[id];
+    float *data;
+
+    rc = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
+    if (rc != 0) {
+        ERROR("read_wav_file %s, %s\n", filename, strerror(errno));
+        exit(1);
+    }
+    NOTICE("num_chan=%d num_items=%d sample_rate=%d\n", num_chan, num_items, sample_rate);
+
+    if (num_chan != 1) {
+        ERROR("num_chan must be 1\n", num_chan);
+        exit(1);
+    }
+
+    s->max         = num_items;
+    s->sample_rate = sample_rate;
+    s->data        = data;
+}
+
+static int read_wav_file(char *filename, float **data, int *num_chan, int *num_items, int *sample_rate)
+{
+    SNDFILE *file;
+    SF_INFO  sfinfo;
+    int      cnt, items;
+    float   *d;
+
+    // preset return values
+    *data = NULL;
+    *num_chan = 0;
+    *num_items = 0; 
+    *sample_rate = 0;
+
+    // open wav file and get info
+    memset(&sfinfo, 0, sizeof (sfinfo));
+    file = sf_open(filename, SFM_READ, &sfinfo);
+    if (file == NULL) {
+        return -1;
+    }
+
+    // allocate memory for the data
+    items = sfinfo.frames * sfinfo.channels;
+    d = malloc(items*sizeof(float));
+
+    // read the wav file data 
+    cnt = sf_read_float(file, d, items);
+    if (cnt != items) {
+        free(d);
+        sf_close(file);
+        return -1;
+    }
+
+    // close file
+    sf_close(file);
+
+    // return values
+    *data        = d;
+    *num_chan    = sfinfo.channels;
+    *num_items   = items;
+    *sample_rate = sfinfo.samplerate;
+    return 0;
+}
+
+// -----------------  FILTERS  --------------------
+
+double lpf(double x)
+{
+    return 0; //xxx
+}
+
+// -----------------  SINE WAVE  ------------------
+
+double sine_wave(double f, double t)
+{
+    return 0;
 }
 

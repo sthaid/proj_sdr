@@ -9,7 +9,6 @@
 #include <time.h>
 
 #define TWO_PI (2*M_PI)
-#define SAMPLE_RATE 22000
 
 // -----------------  LOGGING  --------------------
 
@@ -26,3 +25,15 @@ void log_msg(char *lvl, char *fmt, ...);
 unsigned long microsec_timer(void);
 unsigned long get_real_time_us(void);
 
+// -----------------  AUDIO SRC  ------------------
+
+double get_src(int id, double t);
+void init_audio_src(void);
+
+// -----------------  FILTERS  --------------------
+
+double lpf(double x);
+
+// -----------------  SINE WAVE  ------------------
+
+double sine_wave(double f, double t);

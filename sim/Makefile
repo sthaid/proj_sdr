@@ -1,7 +1,10 @@
 
-TARGETS=src am_mod
+TARGETS=sim
 
 all: $(TARGETS)
+
+sim: sim.c common.c common.h
+	gcc -g -O2 -Wall -o sim sim.c common.c -lsndfile -lm
 
 src: src.c common.c common.h
 	gcc -g -O2 -Wall -o src src.c common.c -lsndfile -lm
