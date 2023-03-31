@@ -36,4 +36,5 @@ double lpf(double x);
 
 // -----------------  SINE WAVE  ------------------
 
+void init_sine_wave(void);
 double sine_wave(double f, double t);

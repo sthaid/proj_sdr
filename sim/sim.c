@@ -28,18 +28,56 @@ int main(int argc, char **argv)
     int          max = 0;
     const double dt = 1 / 10e6;
 
+    // xxx cleanup
+    int cnt = 0;
+    int num_usleep = 0;
+    unsigned long start_us, t_us, real_us;
+    start_us = microsec_timer();
+    
+
     fc[0] = 500 * KHZ;
-    ftune = 500 * KHZ;
+    ftune = 500 * KHZ + 0;
 
     // init
+    init_sine_wave();
     init_audio_src();
 
     // xxx
     t = 0;
     while (true) {
-        y = modulate(0, fc[0], t);
+#if 0
+        if (t > 5) {
+            NOTICE("5 secs %d\n", num_usleep);
+            exit(1);
+        }
+#endif
+        if (cnt++ > 1000) {
+            t_us = t * 1000000;
+            real_us = microsec_timer() - start_us;
+            if (t_us > real_us + 10) {
+                usleep(t_us - real_us);
+                num_usleep++;
+            }
+            cnt = 0;
+        }
 
-        out[max++] = de_modulate(y, ftune, t);
+#if 1
+        y = modulate(0, fc[0], t); // xxx call get_src here
+        static int cnt1;
+        if (cnt1++ == 454) {
+            out[max++] = de_modulate(y, ftune, t);
+            cnt1 = 0;
+        }
+#else
+        //printf("t = %f\n", t);
+        static int cnt1;
+        if (cnt1++ == 454) {
+            out[max++] = get_src(0,t);
+            cnt1 = 0;
+        }
+#endif
+        //printf("%f\n", out[max-1]);
+
         if (max == 1000) {
             fwrite(out, sizeof(float), 1000, stdout);
             max = 0;
@@ -53,10 +91,9 @@ int main(int argc, char **argv)
 
 double modulate(int id, double fc, double t)
 {
-    double m = 0.5;
     double y;
 
-    y = (1 + m * get_src(id,t)) * (0.5 * sine_wave(fc,t));
+    y = (1 + get_src(id,t)) * (0.5 * sine_wave(fc,t));  // xxx optimize
 
     return y;
 }

@@ -70,6 +70,7 @@ double get_src(int id, double t)
     struct src_s *s = &src[id];
 
     idx = (unsigned long)nearbyint(t * s->sample_rate) % s->max;
+    //printf("get t=%f %d %f\n", t, idx, s->data[idx]);
     return s->data[idx];
 }
 
@@ -94,6 +95,23 @@ static void init_audio_src_from_wav_file(int id, char *filename)
     if (num_chan != 1) {
         ERROR("num_chan must be 1\n", num_chan);
         exit(1);
+    }
+
+    float max = 0;
+    float min = 0;
+    for (int i = 0; i < num_items; i++) {
+        if (data[i] > max) {
+            max = data[i];
+        }
+        if (data[i] < min) {
+            min = data[i];
+        }
+    }
+    //printf("min, max %f %f\n", min, max);
+    //exit(1);
+
+    for (int i = 0; i < num_items; i++) {
+        data[i] *= 1.4;
     }
 
     s->max         = num_items;
@@ -148,13 +166,30 @@ static int read_wav_file(char *filename, float **data, int *num_chan, int *num_i
 
 double lpf(double x)
 {
-    return 0; //xxx
+    return x; //xxx
 }
 
 // -----------------  SINE WAVE  ------------------
 
+static double sine[1000];
+
+void init_sine_wave(void)
+{
+    for (int i = 0; i < 1000; i++) {
+        sine[i] = sin((TWO_PI / 1000) * i);
+    }
+}
+
 double sine_wave(double f, double t)
 {
-    return 0;
+    double iptr;
+    int idx;
+
+    idx = modf(f*t, &iptr) * 1000;
+    if (idx < 0 || idx >= 1000) {
+        ERROR("sine_wave idx %d\n", idx); //xxx del
+        exit(1);
+    }
+    return sine[idx];
 }
 
