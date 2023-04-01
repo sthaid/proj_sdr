@@ -184,7 +184,7 @@ static inline double low_pass_filter_ex(double v, double *cx, int k1, double k2)
 double lpf(double v)
 {
     static double cx[20];
-    return low_pass_filter_ex(v, cx, 2, .90);
+    return low_pass_filter_ex(v, cx, 1, .90);
 }
 #else
 double lpf(double v)

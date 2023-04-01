@@ -35,8 +35,8 @@ int main(int argc, char **argv)
     start_us = microsec_timer();
     
     fc[0] = 500 * KHZ;
-    fc[1] = 600 * KHZ;  // xxx move to 10khz
-    ftune = 600 * KHZ;
+    fc[1] = 520 * KHZ;  // xxx move to 10khz
+    ftune = 520 * KHZ;
 
     // init
     init_sine_wave();

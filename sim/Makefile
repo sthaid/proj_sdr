@@ -6,6 +6,9 @@ all: $(TARGETS)
 sim: sim.c common.c common.h
 	gcc -g -O2 -Wall -o sim sim.c common.c -lsndfile -lm
 
+run: sim
+	./sim | ./spkr
+
 src: src.c common.c common.h
 	gcc -g -O2 -Wall -o src src.c common.c -lsndfile -lm
 
