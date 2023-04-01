@@ -100,3 +100,17 @@ https://medium.com/geekculture/digital-filter-design-in-python-and-c-4484b6d6f4a
 fftfilt
 
 
+xxxxxxxxxx next steps
+
+fft display of data set
+
+fftfilt
+
+find gqrx code
+
+what exactly is being sampled
+
+rtl=0,direct_samp=2
+https://www.rtl-sdr.com/rtl-sdr-blog-v-3-dongles-user-guide/
+
+why getting twice as many samples as expected

@@ -1,7 +1,9 @@
 #include "common.h"
 #include <rtl-sdr.h>
 
-#define SAMPLE_RATE 1000000
+//#define SAMPLE_RATE 1000000
+//#define SAMPLE_RATE   3200000
+#define SAMPLE_RATE   2400000  // ok
 
 #define KHZ 1000
 #define MHZ 1000000
@@ -40,6 +42,7 @@ void * reader(void *cx)
 
     NOTICE("total = %ld\n", total);
     NOTICE("bytes/sec = %ld\n", total * 1000000 / duration);
+    NOTICE("bytes/sec = %f\n", (double)total / duration);
     NOTICE("min = %d   max = %d\n", min, max);
 
     return NULL;
@@ -144,32 +147,38 @@ int main(int argc, char **argv)
     NOTICE("cancel ret %d\n", rc);
     sleep(5);
 
-    NOTICE("closing\n");
-    rtlsdr_close(dev);
-    return 0;
-#endif
+#else
 
 #if 1
-    // direct sampling
+    // DIRECT SAMPLE
+    // note - wbz is 1030000
+    #define DIRECT_SAMPLE DIRECT_SAMPLING_Q_ADC_ENABLED
+    #define CENTER_FREQ   (6000 * KHZ)
+#else
+    // NOT DIRECT SAMPLE
+    #define DIRECT_SAMPLE DIRECT_SAMPLING_DISABLED
+    #define CENTER_FREQ   100700000
+#endif
+
+    // direct sampling on/off
     #define DIRECT_SAMPLING_DISABLED          0
     #define DIRECT_SAMPLING_I_ADC_ENABLED     1
     #define DIRECT_SAMPLING_Q_ADC_ENABLED     2
 
     int direct_sampling_state;
-    rc = rtlsdr_set_direct_sampling(dev, DIRECT_SAMPLING_Q_ADC_ENABLED);  // xxx can both be enabled
+    rc = rtlsdr_set_direct_sampling(dev, DIRECT_SAMPLE);
     if (rc != 0) {
         ERROR("rtlsdr_set_direct_sampling\n");
         exit(1);
     }
-    NOTICE("direct sampling enabled\n");
+    NOTICE("direct sampling %s\n",
+           DIRECT_SAMPLE == 2 ? "ENABLED" : "DISABLED");
 
     direct_sampling_state = rtlsdr_get_direct_sampling(dev);
     NOTICE("direct sampling state = %d\n", direct_sampling_state);
 
-    #define WBZ (1030 * KHZ)
-    #define OTHER_FREQ (6000 * KHZ)
     unsigned int ctr_freq;
-    rtlsdr_set_center_freq(dev, OTHER_FREQ);
+    rtlsdr_set_center_freq(dev, CENTER_FREQ);
     ctr_freq = rtlsdr_get_center_freq(dev);
     NOTICE("ctr_freq %d  %f MHZ\n", ctr_freq, (double)ctr_freq/MHZ);
 
@@ -184,11 +193,11 @@ int main(int argc, char **argv)
     NOTICE("cancel ret %d\n", rc);
     sleep(5);
 
+#endif
+
     NOTICE("closing\n");
     rtlsdr_close(dev);
     return 0;
-#endif
-
 
     // NOTES FOLLOW ...
 
