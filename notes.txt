@@ -14,6 +14,8 @@ https://www.nooelec.com/store/sdr.html
 https://www.nooelec.com/store/sdr/nesdr-smart.html
 https://www.nooelec.com/store/downloads/dl/file/id/111/product/246/nesdr_smart_rtl_sdr_v5_datasheet_revision_1.pdf
 
+gqrx  rtl=0,direct_samp=2   <===========
+
 Setup the SDR
 -------------
 start.nesdr.com
