@@ -76,7 +76,9 @@ double get_src(int id, double t)
 
 void init_audio_src(void)  // xxx caller should pass in list of srcs to init
 {
-    init_audio_src_from_wav_file(0, "super_critical.wav");
+    //init_audio_src_from_wav_file(0, "super_critical.wav");
+    init_audio_src_from_wav_file(0, "one_bourbon_one_scotch_one_beer.wav");
+    init_audio_src_from_wav_file(1, "proud_mary.wav");
 }
 
 static void init_audio_src_from_wav_file(int id, char *filename)
@@ -164,10 +166,36 @@ static int read_wav_file(char *filename, float **data, int *num_chan, int *num_i
 
 // -----------------  FILTERS  --------------------
 
-double lpf(double x)
+#if 1
+static inline double low_pass_filter(double v, double *cx, double k2)
 {
-    return x; //xxx
+    *cx = k2 * *cx + (1-k2) * v;
+    return *cx;
 }
+
+static inline double low_pass_filter_ex(double v, double *cx, int k1, double k2)
+{
+    for (int i = 0; i < k1; i++) {
+        v = low_pass_filter(v, &cx[i], k2);
+    }
+    return v;
+}
+
+double lpf(double v)
+{
+    static double cx[20];
+    return low_pass_filter_ex(v, cx, 2, .90);
+}
+#else
+double lpf(double v)
+{
+    static double cx;
+    static double k2 = 0.85;
+
+    cx = k2 * cx + (1-k2) * v;
+    return cx;
+}
+#endif
 
 // -----------------  SINE WAVE  ------------------
 

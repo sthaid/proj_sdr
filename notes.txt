@@ -88,4 +88,13 @@ aplay -t raw -c 1 -f S16_LE -r 22000
 - viewer pgm
 
 
-160    160 million
+-- filter --
+https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/
+
+https://sestevenson.wordpress.com/implementation-of-fir-filtering-in-c-part-1/
+
+https://medium.com/geekculture/digital-filter-design-in-python-and-c-4484b6d6f4a5
+
+fftfilt
+
+

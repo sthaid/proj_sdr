@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     double       t, y, ftune, fc[10];
     float        out[1000];
     int          max = 0;
-    const double dt = 1 / 10e6;
+    const double dt = 1 / 5e6;
 
     // xxx cleanup
     int cnt = 0;
@@ -34,9 +34,9 @@ int main(int argc, char **argv)
     unsigned long start_us, t_us, real_us;
     start_us = microsec_timer();
     
-
     fc[0] = 500 * KHZ;
-    ftune = 500 * KHZ + 0;
+    fc[1] = 600 * KHZ;  // xxx move to 10khz
+    ftune = 600 * KHZ;
 
     // init
     init_sine_wave();
@@ -52,9 +52,9 @@ int main(int argc, char **argv)
         }
 #endif
         if (cnt++ > 1000) {
-            t_us = t * 1000000;
+            t_us = t * 10000;
             real_us = microsec_timer() - start_us;
-            if (t_us > real_us + 10) {
+            if (t_us > real_us + 1000) {
                 usleep(t_us - real_us);
                 num_usleep++;
             }
@@ -62,9 +62,12 @@ int main(int argc, char **argv)
         }
 
 #if 1
-        y = modulate(0, fc[0], t); // xxx call get_src here
+        // xxx call get_src here
+        y = modulate(0, fc[0], t) + 
+            modulate(1, fc[1], t);
+
         static int cnt1;
-        if (cnt1++ == 454) {
+        if (cnt1++ == 227) {  // 454
             out[max++] = de_modulate(y, ftune, t);
             cnt1 = 0;
         }
