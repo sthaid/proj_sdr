@@ -95,7 +95,7 @@ static void init_audio_src_from_wav_file(int id, char *filename)
     NOTICE("num_chan=%d num_items=%d sample_rate=%d\n", num_chan, num_items, sample_rate);
 
     if (num_chan != 1) {
-        ERROR("num_chan must be 1\n", num_chan);
+        ERROR("num_chan must be 1\n");
         exit(1);
     }
 

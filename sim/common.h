@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <math.h>
 #include <time.h>
+#include <pthread.h>
 
 #define TWO_PI (2*M_PI)
 
@@ -18,7 +19,7 @@
 
 extern char *progname;
 
-void log_msg(char *lvl, char *fmt, ...);
+void log_msg(char *lvl, char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 
 // -----------------  TIME  -----------------------
 
