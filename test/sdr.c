@@ -15,6 +15,12 @@ rtlsdr_dev_t *dev;
 unsigned long total = 0;
 int min = 128, max = 128;
 
+unsigned char buf0[25000000];
+unsigned char buf1[25000000];
+unsigned char buf2[25000000];
+int max0, max1, max2;
+
+
 void cb(unsigned char *buf, uint32_t len, void *ctx)
 {
     printf("len = %d - buf = %d %d %d %d - %d %d %d %d\n", 
@@ -26,6 +32,10 @@ void cb(unsigned char *buf, uint32_t len, void *ctx)
     for (int i = 0; i < len; i++) {
         if (buf[i] < min) min = buf[i];
         if (buf[i] > max) max = buf[i];
+
+        buf0[max0++] = buf[i];
+        if ((i & 1) == 0) buf1[max1++] = buf[i];
+        if ((i & 1) == 1) buf2[max2++] = buf[i];
     }
 }
 
@@ -45,6 +55,21 @@ void * reader(void *cx)
     NOTICE("bytes/sec = %f\n", (double)total / duration);
     NOTICE("min = %d   max = %d\n", min, max);
 
+    NOTICE("max0,1,2 = %d %d %d\n", max0, max1, max2);
+
+    FILE *fp;
+
+    fp = fopen("buf0", "w");
+    fwrite(buf0, 1, max0, fp);
+    fclose(fp);
+
+    fp = fopen("buf1", "w");
+    fwrite(buf1, 1, max1, fp);
+    fclose(fp);
+
+    fp = fopen("buf2", "w");
+    fwrite(buf2, 1, max2, fp);
+    fclose(fp);
     return NULL;
 }
 
