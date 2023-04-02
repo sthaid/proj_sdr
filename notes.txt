@@ -114,3 +114,10 @@ rtl=0,direct_samp=2
 https://www.rtl-sdr.com/rtl-sdr-blog-v-3-dongles-user-guide/
 
 why getting twice as many samples as expected
+
+--------
+
+git clone https://github.com/csete/gr-osmosdr-gqrx
+
+git clone git://github.com/csete/gr-osmosdr-gqrx
+git clone git://git.osmocom.org/gr-osmosdr
