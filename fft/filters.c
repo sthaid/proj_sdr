@@ -32,12 +32,17 @@
 #include <util_sdl.h>
 #include <util_misc.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+
 //
 // defines
 //
 
-#define SAMPLE_RATE 48000  // samples per sec
-#define DURATION    5      // secs
+#define SAMPLE_RATE 2400000 // samples per sec
+#define DURATION    1       // secs
 #define N           (DURATION * SAMPLE_RATE)
 
 #define TIME(code) \
@@ -62,10 +67,10 @@ static int         hpf_k1;
 static double      hpf_k2;
 
 static char       *file_name;
-static float      *file_data;
-static int         file_max_chan;
+static unsigned char       *file_data;
+//static int         file_max_chan;
 static int         file_max_data;
-static int         file_sample_rate;
+//static int         file_sample_rate;
 
 static char       *audio_out_dev = DEFAULT_OUTPUT_DEVICE;
 static int         audio_out_filter;
@@ -80,8 +85,8 @@ static int         plot_scale[4];
 
 static void reset_params(void);
 static void init_in_data(int type);
-static void *audio_out_thread(void *cx);
-static int audio_out_get_frame(void *data, void *cx);
+//static void *audio_out_thread(void *cx);
+//static int audio_out_get_frame(void *data, void *cx);
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 static int plot(rect_t *pane, int idx, complex *data, int n);
 static void apply_low_pass_filter(complex *data, int n);
@@ -95,10 +100,12 @@ static int clip_meter(complex *data, int n, double vol, double *max);
 
 int main(int argc, char **argv)
 {
-    pthread_t tid;
+    //pthread_t tid;
 
     #define USAGE \
     "usage: filters [-f file_name.wav] [-d out_dev] -h"  // XXX better usage comment
+
+    file_name = "buf1";
 
     // parse options
     while (true) {
@@ -130,6 +137,17 @@ int main(int argc, char **argv)
     // if file_name provided then read the wav file;
     // this file's data will be one of the 'in' data sources
     if (file_name) {
+        int fd = open(file_name, O_RDONLY);
+        if (fd < 0) {
+            printf("FATAL: open %s\n", file_name);
+            return 1;
+        }
+        file_data = calloc(1, 10*SAMPLE_RATE);
+        file_max_data = read(fd, file_data, 10*SAMPLE_RATE);
+        close(fd);
+        printf("file_max_data = %d\n", file_max_data);
+
+#if 0
         if (strstr(file_name, ".wav") == NULL) {
             printf("FATAL: file_name must have '.wav' extension\n");
             return 1;
@@ -147,6 +165,7 @@ int main(int argc, char **argv)
                    file_max_data/file_max_chan, file_max_data, file_max_chan, N);
             return 1;
         }
+#endif
     }
 
     // init portaudio
@@ -165,7 +184,7 @@ int main(int argc, char **argv)
     init_in_data(file_data ? '3': '2');
 
     // create audio_out_thread
-    pthread_create(&tid, NULL, audio_out_thread, NULL);
+    //pthread_create(&tid, NULL, audio_out_thread, NULL);
 
     // init sdl
     if (sdl_init(&win_width, &win_height, opt_fullscreen, false, false) < 0) {
@@ -219,32 +238,37 @@ static void reset_params(void)
 // - '3':    file-data
 static void init_in_data(int type)
 {
-    int i, j, freq;
-    static int static_freq = 100;
+    int i, freq;
+    static int static_freq = 100000;
 
     // fill the in_data array, based on 'type' arg
     switch (type) {
     case SDL_EVENT_KEY_F(1) ... SDL_EVENT_KEY_F(2): 
         if (type == SDL_EVENT_KEY_F(1)) {
-            static_freq -= 100;
+            static_freq -= 100000;
         } else {
-            static_freq += 100;
+            static_freq += 100000;
         }
-        clip_int(&static_freq, 100, 5000);
+        if (static_freq > 1600000) static_freq = 100000;
+        if (static_freq < 100000) static_freq = 1600000;
+        printf("INIT FREQ %d\n", static_freq);
         for (i = 0; i < N; i++) {
-            in_data[i] = sin((2*M_PI) * static_freq * ((double)i/SAMPLE_RATE));
+            in_data[i] = sin((2*M_PI) * (static_freq+123) * ((double)i/SAMPLE_RATE));
         }
         break;
     case '1':  // white nosie
+        printf("INIT WHITE\n");
         for (i = 0; i < N; i++) {
             in_data[i] = ((double)random() / RAND_MAX) - 0.5;
         }
         break;
     case '2':  // sum of sine waves
+        printf("INIT SINE WAVE SUM\n");
         memset(in_data, 0, N*sizeof(complex));
-        for (freq = 25; freq <= 5000; freq += 25) {
+        for (freq = 100000; freq <= 1600000; freq += 100000) {
+            printf("freq = %d\n", freq);
             for (i = 0; i < N; i++) {
-                in_data[i] += sin((2*M_PI) * freq * ((double)i/SAMPLE_RATE));
+                in_data[i] += sin((2*M_PI) * (freq+123) * ((double)i/SAMPLE_RATE));
             }
         }
         break;
@@ -253,10 +277,31 @@ static void init_in_data(int type)
             printf("WARNING: no file data\n");
             break;
         }
+        printf("INIT FILE DATA - %s\n", file_name);
+#if 0
         for (i = 0, j = 0; i < N; i++) {
             in_data[i] = file_data[j];
             j += file_max_chan;
         }
+#endif
+        if (strcmp(file_name, "buf0") != 0) {
+            printf("INIT REAL\n");
+            for (i = 0; i < N; i++) {
+                in_data[i] = (file_data[i] - 128) / 128.;
+            }
+        } else {
+            // buf0
+            printf("INIT COMPLEX\n");
+            for (i = 0; i < N; i++) {
+                double a, b;
+                complex z;
+                a = (file_data[2*i] - 128) / 128.;
+                b = (file_data[2*i+1] - 128) / 128.;
+                z = a + b * I;
+                in_data[i] = creal(z);
+            }
+        }
+
         break;
     default:
         printf("FATAL: init_in_data, invalid type=%d\n", type);
@@ -277,6 +322,7 @@ static void init_in_data(int type)
 
 // -----------------  PLAY FILTERED AUDIO  -----------------------
 
+#if 0
 static void *audio_out_thread(void *cx)
 {
     if (pa_play2(audio_out_dev, 1, SAMPLE_RATE, PA_FLOAT32, audio_out_get_frame, NULL) < 0) {
@@ -327,6 +373,7 @@ static int audio_out_get_frame(void *out_data_arg, void *cx_arg)
     // continue 
     return 0;
 }
+#endif
 
 // -----------------  PANE HNDLR----------------------------------
 
@@ -424,6 +471,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
         DISPLAY_COMMON("UNF", 0, SDL_EVENT_UNF_VOLUME, SDL_EVENT_AUDIO_OUT_UNF, SDL_EVENT_PLOT_SCALE_UNF);
 
+#if 1
         // -------------------------------------
         // plot fft of low pass filtered 'in' data
         // -------------------------------------
@@ -510,6 +558,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_HPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
+#endif
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -673,7 +722,8 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
 
     static double max_y_value;
 
-    #define MAX_PLOT_FREQ 5001
+    //#define MAX_PLOT_FREQ 1600000
+    #define MAX_PLOT_FREQ 20000
 
     // init
     y_pixels = pane->h / 4;
@@ -681,14 +731,10 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     y_max    = y_pixels - 20;
     x_max    = pane->w - 200;
     memset(y_values, 0, sizeof(y_values));
-#if 0
-    if (idx == 0) max_y_value = 0;
-#else
     max_y_value = 0;
-#endif
 
     // determine the y value that will be plotted below
-    for (i = 0; i < n; i++) {
+    for (i = 10; i < n; i++) {
         freq = i * ((double)SAMPLE_RATE / n);
         if (freq > MAX_PLOT_FREQ) {
             break;
@@ -701,18 +747,10 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
         if (absv > y_values[x]) {
             y_values[x] = absv;
 
-#if 0
-            // max_y_value is determined for plot idx 0, and is 
-            // subsequently used for plot idx 1 to 3 the are next called
-            if (idx == 0 && y_values[x] > max_y_value) {
-                max_y_value = y_values[x];
-            }
-#else
             // max_y_values is determined for each plot
             if (y_values[x] > max_y_value) {
                 max_y_value = y_values[x];
             }
-#endif
         }
     }
 
@@ -732,12 +770,19 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     // x axis
     int color = (idx == audio_out_filter ? SDL_BLUE : SDL_GREEN);
     sdl_render_line(pane, 0, y_origin, x_max, y_origin, color);
-    for (freq = 200; freq <= MAX_PLOT_FREQ-200; freq+= 200) {
+    //for (freq = 100000; freq <= 1600000; freq+= 100000) 
+    for (freq = 1000; freq <= 20000; freq+= 1000) 
+    {
         x = freq / MAX_PLOT_FREQ * x_max;
-        sprintf(str, "%d", (int)(nearbyint(freq)/100));
+        if (x > x_max) break;
+        sprintf(str, "%d", (int)(nearbyint(freq)/1000));
         sdl_render_text(pane,
             x-COL2X(strlen(str),20)/2, y_origin+1, 20, str, color, SDL_BLACK);
     }
+
+    // max_y
+    sprintf(str, "max_y = %f", max_y_value);
+    sdl_render_text(pane, 0, y_origin+30, 20, str, SDL_GREEN, SDL_BLACK);
 
     // return the location of the y axis for this plot;
     // this is used by caller when displaying plot information text 

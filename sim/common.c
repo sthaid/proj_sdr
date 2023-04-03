@@ -166,7 +166,6 @@ static int read_wav_file(char *filename, float **data, int *num_chan, int *num_i
 
 // -----------------  FILTERS  --------------------
 
-#if 1
 static inline double low_pass_filter(double v, double *cx, double k2)
 {
     *cx = k2 * *cx + (1-k2) * v;
@@ -181,21 +180,11 @@ static inline double low_pass_filter_ex(double v, double *cx, int k1, double k2)
     return v;
 }
 
-double lpf(double v)
+double lpf(double v, int k1, double k2)
 {
     static double cx[20];
-    return low_pass_filter_ex(v, cx, 1, .90);
+    return low_pass_filter_ex(v, cx, k1, k2);
 }
-#else
-double lpf(double v)
-{
-    static double cx;
-    static double k2 = 0.85;
-
-    cx = k2 * cx + (1-k2) * v;
-    return cx;
-}
-#endif
 
 // -----------------  SINE WAVE  ------------------
 

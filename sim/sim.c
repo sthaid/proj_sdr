@@ -109,6 +109,6 @@ double de_modulate(double y, double ftune, double t)
 
     tmp = y * sine_wave(ftune,t);
 
-    return lpf(tmp);
+    return lpf(tmp,1,.90);
 }
 

@@ -9,6 +9,10 @@
 #include <time.h>
 #include <pthread.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #define TWO_PI (2*M_PI)
 
 // -----------------  LOGGING  --------------------
@@ -33,7 +37,7 @@ void init_audio_src(void);
 
 // -----------------  FILTERS  --------------------
 
-double lpf(double x);
+double lpf(double x, int k1, double k2);
 
 // -----------------  SINE WAVE  ------------------
 
