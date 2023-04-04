@@ -6,6 +6,11 @@
 
 #define KHZ 1000
 
+#define SAMPLE_RATE 2400000
+#define AUDIO_SAMPLE_RATE 22000
+
+#define FC 50000
+
 //
 // variables
 //
@@ -16,43 +21,98 @@ char *progname = "sim";
 // prototypes
 //
 
-double modulate(int id, double fc, double t);
-double de_modulate(double y, double ftune, double t);
+void audio_out(double yo);
 
 // -----------------  MAIN  -------------------------------------------
 
 int main(int argc, char **argv)
 {
-    double       t, y, ftune, fc[10];
-    float        out[1000];
-    int          max = 0;
-    const double dt = 1 / 5e6;
+    double dt = 1. / SAMPLE_RATE;
+    double yo = 0;
+    double t = 0;
+    int    cnt = 0;
+    double y;
+
+    // init
+    init_sine_wave();
+    init_audio_src();
+
+    // xxx comment
+    while (true) {
+        // modulate
+        y = 0;
+        y += (1 + get_src(0,t)) * (0.5 * sine_wave(FC,t));
+
+        // detector
+        if (y > yo) {
+            yo = y;
+        }
+        yo = .999 * yo;
+
+        // audio out
+        if (cnt++ == (SAMPLE_RATE / AUDIO_SAMPLE_RATE)) {
+            audio_out(yo);
+            cnt = 0;
+        }
+
+        // advance time
+        t += dt;
+    }
+}
+
+// -----------------  xxx  --------------------------------------------
+
+void audio_out(double yo)
+{
+    #define MAX_MA 1000
+    #define MAX_OUT 1000
+
+    static void *ma_cx;
+    static float out[MAX_OUT];
+    static int max;
+
+    double ma;
+
+    ma = moving_avg(yo, MAX_MA, &ma_cx);
+    out[max++] = yo - ma;
+
+    if (max == MAX_OUT) {
+        fwrite(out, sizeof(float), MAX_OUT, stdout);
+#if 0
+        double out_min, out_max, out_avg;
+        average_float(out, MAX_OUT, &out_min, &out_max, &out_avg);        
+        fprintf(stderr, "min=%f max=%f avg=%f\n", out_min, out_max, out_avg);
+#endif
+        max = 0;
+    }
+}
+
+// -----------------  xxx  --------------------------------------------
+// -----------------  save --------------------------------------------
+#if 0
+double de_modulate(double y, double ftune, double t)
+{
+    double tmp;
+
+    tmp = y * sine_wave(ftune,t);
+    //return tmp;
+
+    return lpf(tmp,1,.90);
+}
 
     // xxx cleanup
     int cnt = 0;
     int num_usleep = 0;
     unsigned long start_us, t_us, real_us;
     start_us = microsec_timer();
-    
-    fc[0] = 500 * KHZ;
-    fc[1] = 520 * KHZ;  // xxx move to 10khz
-    ftune = 520 * KHZ;
 
-    // init
-    init_sine_wave();
-    init_audio_src();
-
-    // xxx
-    t = 0;
-    while (true) {
-#if 0
         if (t > 5) {
             NOTICE("5 secs %d\n", num_usleep);
             exit(1);
         }
-#endif
+
         if (cnt++ > 1000) {
-            t_us = t * 10000;
+            t_us = t * 2000;
             real_us = microsec_timer() - start_us;
             if (t_us > real_us + 1000) {
                 usleep(t_us - real_us);
@@ -60,55 +120,35 @@ int main(int argc, char **argv)
             }
             cnt = 0;
         }
-
-#if 1
-        // xxx call get_src here
-        y = modulate(0, fc[0], t) + 
-            modulate(1, fc[1], t);
-
-        static int cnt1;
-        if (cnt1++ == 227) {  // 454
-            out[max++] = de_modulate(y, ftune, t);
-            cnt1 = 0;
-        }
-#else
-        //printf("t = %f\n", t);
-        static int cnt1;
-        if (cnt1++ == 454) {
-            out[max++] = get_src(0,t);
-            cnt1 = 0;
-        }
-#endif
-        //printf("%f\n", out[max-1]);
-
-        if (max == 1000) {
-            fwrite(out, sizeof(float), 1000, stdout);
-            max = 0;
-        }
-
-        t += dt;
-    }
-}
-
-// -----------------  xxx  --------------------------------------------
-
-double modulate(int id, double fc, double t)
+double modulate(double m, double fc, double t)
 {
     double y;
 
-    y = (1 + get_src(id,t)) * (0.5 * sine_wave(fc,t));  // xxx optimize
+    y = (1 + m) * (0.5 * sine_wave(fc,t));  // xxx optimize
 
     return y;
 }
 
-// -----------------  xxx  --------------------------------------------
-
-double de_modulate(double y, double ftune, double t)
+double average(float *array, int cnt)
 {
-    double tmp;
-
-    tmp = y * sine_wave(ftune,t);
-
-    return lpf(tmp,1,.90);
+    double sum = 0;
+    for (int i = 0; i < cnt; i++) {
+        sum += array[i];
+    }
+    return sum / cnt;
 }
 
+double moving_avg(float v)
+{
+    #define MAX_VALS 10000
+
+    static float vals[MAX_VALS];
+    static int idx;
+    static double sum;
+
+    sum += (v - vals[idx]);
+    vals[idx] = v;
+    if (++idx == MAX_VALS) idx = 0;
+    return sum / MAX_VALS;
+}
+#endif

@@ -105,7 +105,7 @@ int main(int argc, char **argv)
     #define USAGE \
     "usage: filters [-f file_name.wav] [-d out_dev] -h"  // XXX better usage comment
 
-    file_name = "buf1";
+    file_name = "buf0";
 
     // parse options
     while (true) {
@@ -290,13 +290,14 @@ static void init_in_data(int type)
                 in_data[i] = (file_data[i] - 128) / 128.;
             }
         } else {
-            // buf0
+            // buf0 xxxxxxxxxxxxxxxxx
             printf("INIT COMPLEX\n");
             for (i = 0; i < N; i++) {
                 double a, b;
                 complex z;
                 a = (file_data[2*i] - 128) / 128.;
-                b = (file_data[2*i+1] - 128) / 128.;
+                //b = (file_data[2*i+1] - 128) / 128.;
+                b = 0;
                 z = a + b * I;
                 in_data[i] = creal(z);
             }
@@ -468,19 +469,25 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(fftw_execute(plan));
         y_origin = plot(pane, 0, out, N);
-
         DISPLAY_COMMON("UNF", 0, SDL_EVENT_UNF_VOLUME, SDL_EVENT_AUDIO_OUT_UNF, SDL_EVENT_PLOT_SCALE_UNF);
 
-#if 1
+#if 0
+        y_origin = plot(pane, 1, out, N);
+        DISPLAY_COMMON("UNF", 1, SDL_EVENT_UNF_VOLUME, SDL_EVENT_AUDIO_OUT_UNF, SDL_EVENT_PLOT_SCALE_UNF);
+
+        y_origin = plot(pane, 2, out, N);
+        DISPLAY_COMMON("UNF", 2, SDL_EVENT_UNF_VOLUME, SDL_EVENT_AUDIO_OUT_UNF, SDL_EVENT_PLOT_SCALE_UNF);
+#endif
+
         // -------------------------------------
         // plot fft of low pass filtered 'in' data
         // -------------------------------------
         memcpy(in, in_data, N*sizeof(complex));
         t1 = TIME(apply_low_pass_filter(in, N));
         fftw_execute(plan);
-        y_origin = plot(pane, 1, out, N);
+        y_origin = plot(pane, 3, out, N);
 
-        DISPLAY_COMMON("LPF", 1, SDL_EVENT_LPF_VOLUME, SDL_EVENT_AUDIO_OUT_LPF, SDL_EVENT_PLOT_SCALE_LPF);
+        DISPLAY_COMMON("LPF", 3, SDL_EVENT_LPF_VOLUME, SDL_EVENT_AUDIO_OUT_LPF, SDL_EVENT_PLOT_SCALE_LPF);
 
         sprintf(str, "%4d", lpf_k1);
         sdl_render_text_and_register_event(
@@ -496,6 +503,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
             FSZ, str, SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_LPF_K2, SDL_EVENT_TYPE_MOUSE_WHEEL, pane_cx);
 
+#if 0
         // -------------------------------------
         // plot fft of high pass filtered 'in' data
         // -------------------------------------
@@ -717,13 +725,18 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 static int plot(rect_t *pane, int idx, complex *data, int n)
 {
     int y_pixels, y_max, y_origin, x_max, i, x;
-    double freq, absv, y_values[4000];
+    double freq, v, y_values[4000], y_phases[4000];
     char str[100];
 
     static double max_y_value;
 
-    //#define MAX_PLOT_FREQ 1600000
+#define FULL 
+
+#ifdef FULL
+    #define MAX_PLOT_FREQ 2400000
+#else
     #define MAX_PLOT_FREQ 20000
+#endif
 
     // init
     y_pixels = pane->h / 4;
@@ -731,6 +744,7 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     y_max    = y_pixels - 20;
     x_max    = pane->w - 200;
     memset(y_values, 0, sizeof(y_values));
+    memset(y_phases, 0, sizeof(y_phases));
     max_y_value = 0;
 
     // determine the y value that will be plotted below
@@ -740,16 +754,46 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
             break;
         }
 
-        absv = cabs(data[i]);
-
         x = freq / MAX_PLOT_FREQ * x_max;
+        switch (idx) {
+        case 0:
+            v = cabs(data[i]);
+            break;
+        case 1:
+            v = carg(data[i]);
+            break;
+        case 2:
+            v = -carg(data[i]);
+            break;
+        case 3:
+            v = cabs(data[i]);
+            break;
+        default:
+            ERROR("plot, invld idx %d\n", idx);
+            exit(1);
+        }
 
-        if (absv > y_values[x]) {
-            y_values[x] = absv;
-
-            // max_y_values is determined for each plot
+        if (v > y_values[x]) {
+            y_values[x] = v;
+            y_phases[x] = carg(data[i]);
             if (y_values[x] > max_y_value) {
                 max_y_value = y_values[x];
+            }
+        }
+    }
+
+    // xxx
+    static bool first = 1;
+    if (idx == 0 && first) {
+        first = 0;
+        printf("--------------------------------\n");
+        for (x = 0; x < x_max; x++) {
+            if (y_values[x] / max_y_value > .25) {
+                double freq = x * MAX_PLOT_FREQ / x_max;
+                double freq1 = (680000 - freq) / 1000;
+                double freq2 = (680000 + freq) / 1000;
+                printf("freq = %f OR %f  mag = %f  phase = %f\n", 
+                       freq1, freq2, y_values[x], y_phases[x]);
             }
         }
     }
@@ -757,7 +801,7 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     // plot y values
     if (max_y_value > 0) {
         for (x = 0; x < x_max; x++) {
-            double v = (y_values[x] / max_y_value) * plot_scale[idx];
+            v = (y_values[x] / max_y_value) * plot_scale[idx];
             if (v < .01) continue;
             if (v > 1) v = 1;
             sdl_render_line(pane, 
@@ -770,8 +814,11 @@ static int plot(rect_t *pane, int idx, complex *data, int n)
     // x axis
     int color = (idx == audio_out_filter ? SDL_BLUE : SDL_GREEN);
     sdl_render_line(pane, 0, y_origin, x_max, y_origin, color);
-    //for (freq = 100000; freq <= 1600000; freq+= 100000) 
+#ifdef FULL
+    for (freq = 100000; freq <= 2400000; freq+= 100000) 
+#else
     for (freq = 1000; freq <= 20000; freq+= 1000) 
+#endif
     {
         x = freq / MAX_PLOT_FREQ * x_max;
         if (x > x_max) break;

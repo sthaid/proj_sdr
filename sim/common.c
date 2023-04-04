@@ -76,7 +76,6 @@ double get_src(int id, double t)
 
 void init_audio_src(void)  // xxx caller should pass in list of srcs to init
 {
-    //init_audio_src_from_wav_file(0, "super_critical.wav");
     init_audio_src_from_wav_file(0, "one_bourbon_one_scotch_one_beer.wav");
     init_audio_src_from_wav_file(1, "proud_mary.wav");
 }
@@ -99,22 +98,24 @@ static void init_audio_src_from_wav_file(int id, char *filename)
         exit(1);
     }
 
-    float max = 0;
-    float min = 0;
-    for (int i = 0; i < num_items; i++) {
-        if (data[i] > max) {
-            max = data[i];
-        }
-        if (data[i] < min) {
-            min = data[i];
-        }
-    }
-    //printf("min, max %f %f\n", min, max);
-    //exit(1);
+    // xxx cleanup
 
-    for (int i = 0; i < num_items; i++) {
-        data[i] *= 1.4;
+    double min, max, avg;
+    average_float(data, num_items, &min, &max, &avg);
+    fprintf(stderr, "min, max, avg = %f %f %f\n", min, max, avg);
+
+    double scale;
+    if (-min > max) {
+        scale = 1. / -min;
+    } else {
+        scale = 1. / max;
     }
+    for (int i = 0; i < num_items; i++) {
+        data[i] *= scale;
+    }
+
+    average_float(data, num_items, &min, &max, &avg);
+    fprintf(stderr, "min, max, avg = %f %f %f\n", min, max, avg);
 
     s->max         = num_items;
     s->sample_rate = sample_rate;
@@ -186,14 +187,15 @@ double lpf(double v, int k1, double k2)
     return low_pass_filter_ex(v, cx, k1, k2);
 }
 
-// -----------------  SINE WAVE  ------------------
+// -----------------  FAST SINE WAVE  ------------------
 
-static double sine[1000];
+#define MAX_SINE_WAVE 2000
+static double sine[MAX_SINE_WAVE];
 
 void init_sine_wave(void)
 {
-    for (int i = 0; i < 1000; i++) {
-        sine[i] = sin((TWO_PI / 1000) * i);
+    for (int i = 0; i < MAX_SINE_WAVE; i++) {
+        sine[i] = sin((TWO_PI / MAX_SINE_WAVE) * i);
     }
 }
 
@@ -202,11 +204,49 @@ double sine_wave(double f, double t)
     double iptr;
     int idx;
 
-    idx = modf(f*t, &iptr) * 1000;
-    if (idx < 0 || idx >= 1000) {
+    idx = modf(f*t, &iptr) * MAX_SINE_WAVE;
+    if (idx < 0 || idx >= MAX_SINE_WAVE) {
         ERROR("sine_wave idx %d\n", idx); //xxx del
         exit(1);
     }
     return sine[idx];
 }
 
+// -----------------  XXXXXXXXXXXXXX  ------------------
+
+double moving_avg(double v, int n, void **cx_arg)
+{
+    struct {
+        double sum;
+        int    idx;
+        double vals[0];
+    } *cx;
+
+    if (*cx_arg == NULL) {
+        int len = sizeof(*cx) + n*sizeof(double);
+        *cx_arg = malloc(len);
+        memset(*cx_arg, 0, len);
+    }
+    cx = *cx_arg;
+
+    cx->sum += (v - cx->vals[cx->idx]);
+    cx->vals[cx->idx] = v;
+    if (++(cx->idx) == n) cx->idx = 0;
+    return cx->sum / n;
+}
+
+void average_float(float *v, int n, double *min_arg, double *max_arg, double *avg)
+{
+    double sum = 0;
+    double min = 1e99;
+    double max = -1e99;
+
+    for (int i = 0; i < n; i++) {
+        sum += v[i];
+        if (v[i] < min) min = v[i];
+        if (v[i] > max) max = v[i];
+    }
+    *avg = sum / n;
+    *min_arg = min;
+    *max_arg = max;
+}

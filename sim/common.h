@@ -43,3 +43,9 @@ double lpf(double x, int k1, double k2);
 
 void init_sine_wave(void);
 double sine_wave(double f, double t);
+
+// -----------------  xxxxxxxxx  ------------------
+
+double moving_avg(double v, int n, void **cx_arg);
+void average_float(float *v, int n, double *min_arg, double *max_arg, double *avg);
+
