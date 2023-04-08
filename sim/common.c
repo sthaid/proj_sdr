@@ -78,6 +78,7 @@ void init_audio_src(void)  // xxx caller should pass in list of srcs to init
 {
     init_audio_src_from_wav_file(0, "one_bourbon_one_scotch_one_beer.wav");
     init_audio_src_from_wav_file(1, "proud_mary.wav");
+    init_audio_src_from_wav_file(2, "primitive_cool.wav");
 }
 
 static void init_audio_src_from_wav_file(int id, char *filename)

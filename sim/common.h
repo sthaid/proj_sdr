@@ -8,6 +8,8 @@
 #include <math.h>
 #include <time.h>
 #include <pthread.h>
+#include <complex.h>
+#include <fftw3.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,9 +19,11 @@
 
 // -----------------  LOGGING  --------------------
 
-#define NOTICE(fmt, args...) log_msg("NOTICE", fmt, ## args);
-#define WARN(fmt, args...) log_msg("WARN", fmt, ## args);
-#define ERROR(fmt, args...) log_msg("ERROR", fmt, ## args);
+#define NOTICE(fmt, args...) do { log_msg("NOTICE", fmt, ## args); } while (0)
+#define WARN(fmt, args...)   do { log_msg("WARN", fmt, ## args); } while (0)
+#define ERROR(fmt, args...)  do { log_msg("ERROR", fmt, ## args); } while (0)
+#define FATAL(fmt, args...)  do { log_msg("FATAL", fmt, ## args); exit(1); } while (0)
+#define DEBUG(fmt, args...)  do { } while (0)
 
 extern char *progname;
 
