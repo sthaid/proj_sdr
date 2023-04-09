@@ -18,6 +18,10 @@
 #define TIME(code) \
     ( { unsigned long start=microsec_timer(); code; (microsec_timer()-start)/1000000.; } )
 
+#define FREQ_FIRST   50000
+#define FREQ_LAST    200000
+#define FREQ_STEP    10000
+#define FREQ(n)  (FREQ_FIRST + (n) * FREQ_STEP)
 
 //
 // variables
@@ -28,6 +32,8 @@ char *progname = "sim";
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 complex *in, *out1, *out2, *out3;
+
+int freq = FREQ_FIRST;
 
 //
 // prototypes
@@ -90,8 +96,8 @@ int main(int argc, char **argv)
 
 struct pd_s {
     double data[N];
-    int max;
-} pd_array[4];
+    //int max;
+} pd_array[6];
 
 void *work_thread(void *cx)
 {
@@ -118,10 +124,6 @@ void *work_thread(void *cx)
     pause();
 #endif
 
-
-
-
-
     // init
     init_sine_wave();
     init_audio_src();
@@ -130,13 +132,13 @@ void *work_thread(void *cx)
     while (true) {
         // modulate  3 stations
         y = 0;
-        y += (1 + get_src(0,t)) * (0.5 * sine_wave(25000,t));
-        y += (1 + get_src(0,t)) * (0.5 * sine_wave(50000,t));
-        y += (1 + get_src(1,t)) * (0.5 * sine_wave(75000,t));
-
-        struct pd_s *pd = &pd_array[0];
-        pd->data[pd->max++] = y;
-        if (pd->max == N) pd->max = 0;
+        y += (1 + get_src(2,t)) * (0.5 * sine_wave(FREQ(0),t));  // music ...
+        y += (1 + get_src(3,t)) * (0.5 * sine_wave(FREQ(1),t));
+        y += (1 + get_src(4,t)) * (0.5 * sine_wave(FREQ(2),t));
+        y += (1 + get_src(5,t)) * (0.5 * sine_wave(FREQ(3),t));
+        y += (1 + get_src(0,t)) * (0.5 * sine_wave(FREQ(4),t));  // sine wave
+        // xxx maybe white noise needs to be bw limitted
+        //y += (1 + get_src(1,t)) * (0.5 * sine_wave(FREQ(5),t));  // white noise
 
         in[max_in++] = y;
         if (max_in == N) {
@@ -144,6 +146,12 @@ void *work_thread(void *cx)
             max_in = 0;
 
             pthread_mutex_lock(&mutex);
+
+            // air wave plot
+            pd = &pd_array[0];
+            for (int i = 0; i < N; i++) {
+                pd->data[i] = in[i];
+            }
 
             // fft,  creates out
             TIME(fftw_execute(plan1));
@@ -153,8 +161,8 @@ void *work_thread(void *cx)
             }
 
             // filter fft out2
-            int freq_start = 25000 - 2000;
-            int freq_end = 25000 + 2000;
+            int freq_start = freq - 3000;
+            int freq_end = freq + 3000;
             for (int i = 0; i < N/2; i++) {
                 if (i < freq_start || i > freq_end) {
                     out1[i] = 0;
@@ -166,7 +174,7 @@ void *work_thread(void *cx)
             TIME(fftw_execute(plan2));
             pd = &pd_array[2];
             for (int i = 0; i < N; i++) {
-                pd->data[i] = creal(out2[i]);
+                pd->data[i] = creal(out2[i]) / N;
             }
 
             // look at the fft of the filtered data
@@ -180,6 +188,24 @@ void *work_thread(void *cx)
             pd = &pd_array[3];
             for (int i = 0; i < N; i++) {
                 pd->data[i] = cabs(out3[i]);
+            }
+
+            pd = &pd_array[4];
+            for (int i = 0; i < N; i++) {
+                y = creal(out2[i]) / 2138063;
+
+                // detector
+                if (y > yo) {
+                    yo = y;
+                }
+                yo = .9995 * yo;
+                pd->data[i] = yo;
+
+                // audio out
+                if (cnt++ == (SAMPLE_RATE / AUDIO_SAMPLE_RATE)) {
+                    audio_out(yo);
+                    cnt = 0;
+                }
             }
 
             pthread_mutex_unlock(&mutex);
@@ -242,9 +268,15 @@ void *work_thread(void *cx)
     return NULL;
 }
 
+    #define FONTSZ 20
+    #define FONTSZ_LG 40
+
 static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
 {
     rect_t *pane = &pane_cx->pane;
+
+#define SDL_EVENT_FREQ_DOWN    (SDL_EVENT_USER_DEFINED + 0)
+#define SDL_EVENT_FREQ_UP      (SDL_EVENT_USER_DEFINED + 1)
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -263,6 +295,8 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         struct pd_s *pd;
         pthread_mutex_lock(&mutex);
 
+        // air wave
+        NOTICE("air wave\n");
         pd = &pd_array[0];
         normalize(pd->data, (int)(T_MAX*N), -1, 1);
         plot(pane, 0,
@@ -270,13 +304,17 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
              0, T_MAX,   
              -1, 1);
 
+        // air wave fft
+        NOTICE("air wave fft\n");
         pd = &pd_array[1];
-        normalize(pd->data, 100000, 0, 1);
+        normalize(pd->data, 200000, 0, 1);
         plot(pane, 1,
-             pd->data, 100000,   
-             0, 100000,   
+             pd->data, 200000,   
+             0, 200000,   
              0, 1);
 
+        // filtered air wave
+        NOTICE("filtered air wave\n");
         pd = &pd_array[2];
         normalize(pd->data, (int)(T_MAX*N), -1, 1);
         plot(pane, 2,
@@ -284,14 +322,41 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
              0, T_MAX,   
              -1, 1);
 
+        // filtered air wave fft
+        NOTICE("filtered air wave fft\n");
         pd = &pd_array[3];
-        normalize(pd->data, 100000, 0, 1);
+        normalize(pd->data, 200000, 0, 1);
         plot(pane, 3,
-             pd->data, 100000,   
-             0, 100000,   
+             pd->data, 200000,   
+             0, 200000,   
              0, 1);
 
+        // detected
+        NOTICE("detected\n");
+        pd = &pd_array[4];
+        normalize(pd->data, (int)(T_MAX*N), -1, 1);
+        plot(pane, 4,
+             pd->data, (int)(T_MAX*N),   
+             0, T_MAX,   
+             -1, 1);
+
         pthread_mutex_unlock(&mutex);
+
+
+        char str[100];
+        sprintf(str, "%d", freq);
+        sdl_render_text_and_register_event(
+            pane, 
+            0, pane->h-ROW2Y(1,FONTSZ_LG),
+            FONTSZ_LG, str, SDL_LIGHT_BLUE, SDL_BLACK,
+            SDL_EVENT_FREQ_DOWN, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+
+        sdl_render_text_and_register_event(
+            pane, 
+            COL2X(10,FONTSZ_LG), pane->h-ROW2Y(1,FONTSZ_LG),
+            FONTSZ_LG, str, SDL_LIGHT_BLUE, SDL_BLACK,
+            SDL_EVENT_FREQ_UP, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -300,12 +365,19 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // -----------------------
 
     if (request == PANE_HANDLER_REQ_EVENT) {
-#if 0
         switch (event->event_id) {
-        case xxx:
+        case SDL_EVENT_FREQ_DOWN:
+            freq = freq - FREQ_STEP;
+            if (freq < FREQ_FIRST) freq = FREQ_LAST;
+            break;
+        case SDL_EVENT_FREQ_UP:
+            freq = freq + FREQ_STEP;
+            if (freq > FREQ_LAST) freq = FREQ_FIRST;
+            break;
         default:
+            break;
         }
-#endif
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -329,7 +401,6 @@ static int plot(rect_t *pane, int idx,
                 double yv_min, double yv_max)
 {
     #define MAX_YV 4000
-    #define FONTSZ 20
 
     struct {
         double min;
@@ -341,6 +412,8 @@ static int plot(rect_t *pane, int idx,
     int x, i;
     char s[100];
 
+    #define MAX_PLOT 6
+
     // init
     yv_span  = yv_max - yv_min;
 
@@ -348,8 +421,8 @@ static int plot(rect_t *pane, int idx,
     x_end    = pane->w - 20;
     x_span   = x_end - x_origin;
 
-    y_top    = idx * pane->h / 4;
-    y_bottom = (idx + 1) * pane->h / 4 - 40;
+    y_top    = idx * pane->h / MAX_PLOT;
+    y_bottom = (idx + 1) * pane->h / MAX_PLOT - 40;
     y_span   = y_bottom - y_top;
     y_origin = y_top + (yv_max / yv_span) * y_span;
 
@@ -456,7 +529,7 @@ void audio_out(double yo)
 
     if (max == MAX_OUT) {
         fwrite(out, sizeof(float), MAX_OUT, stdout);
-#if 0
+#if 1
         double out_min, out_max, out_avg;
         average_float(out, MAX_OUT, &out_min, &out_max, &out_avg);        
         fprintf(stderr, "min=%f max=%f avg=%f\n", out_min, out_max, out_avg);

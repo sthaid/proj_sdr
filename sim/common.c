@@ -78,11 +78,12 @@ double get_src(int id, double t)
 
 void init_audio_src(void)  // xxx caller should pass in list of srcs to init
 {
-    init_audio_src_sine_wave(0, 2000);
+    init_audio_src_sine_wave(0, 300);
     init_audio_src_white_noise(1);
-    //init_audio_src_from_wav_file(1, "one_bourbon_one_scotch_one_beer.wav");
-    //init_audio_src_from_wav_file(2, "proud_mary.wav");
-    //init_audio_src_from_wav_file(3, "primitive_cool.wav");
+    init_audio_src_from_wav_file(2, "proud_mary.wav");
+    init_audio_src_from_wav_file(3, "one_bourbon_one_scotch_one_beer.wav");
+    init_audio_src_from_wav_file(4, "primitive_cool.wav");
+    init_audio_src_from_wav_file(5, "super_critical.wav");
 }
 
 static void init_audio_src_sine_wave(int id, int hz)
@@ -312,6 +313,6 @@ void normalize(double *v, int n, double min, double max)
         v[i] = (v[i] - vmin) * (span / vspan) + min;
     }
 
-    average(v, n, &vmin, &vmax, &vavg);
-    NOTICE("   now %f %f\n", vmin, vmax);
+    //average(v, n, &vmin, &vmax, &vavg);
+    //NOTICE("   now %f %f\n", vmin, vmax);
 }
