@@ -18,8 +18,13 @@
 #define TIME(code) \
     ( { unsigned long start=microsec_timer(); code; (microsec_timer()-start)/1000000.; } )
 
-#define FREQ_FIRST   50000
-#define FREQ_LAST    200000
+#define FREQ_BFO  350000
+
+#define FREQ_FIRST_IF  50000
+#define FREQ_LAST_IF   250000
+
+#define FREQ_FIRST   400000
+#define FREQ_LAST    600000
 #define FREQ_STEP    10000
 #define FREQ(n)  (FREQ_FIRST + (n) * FREQ_STEP)
 
@@ -33,7 +38,7 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 complex *in, *out1, *out2, *out3;
 
-int freq = FREQ_FIRST;
+int freq = FREQ_FIRST_IF;
 
 //
 // prototypes
@@ -139,6 +144,10 @@ void *work_thread(void *cx)
         y += (1 + get_src(0,t)) * (0.5 * sine_wave(FREQ(4),t));  // sine wave
         // xxx maybe white noise needs to be bw limitted
         //y += (1 + get_src(1,t)) * (0.5 * sine_wave(FREQ(5),t));  // white noise
+
+        // bfo 
+        y += (1 + y) * (0.5 * sine_wave(FREQ_BFO,t));  // sine wave
+        
 
         in[max_in++] = y;
         if (max_in == N) {
@@ -304,13 +313,14 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
              0, T_MAX,   
              -1, 1);
 
+#define FREQ_FFT_LAST 1200000
         // air wave fft
         NOTICE("air wave fft\n");
         pd = &pd_array[1];
-        normalize(pd->data, 200000, 0, 1);
+        normalize(pd->data, FREQ_FFT_LAST, 0, 1);
         plot(pane, 1,
-             pd->data, 200000,   
-             0, 200000,   
+             pd->data, FREQ_FFT_LAST,   
+             0, FREQ_FFT_LAST,   
              0, 1);
 
         // filtered air wave
@@ -325,10 +335,10 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         // filtered air wave fft
         NOTICE("filtered air wave fft\n");
         pd = &pd_array[3];
-        normalize(pd->data, 200000, 0, 1);
+        normalize(pd->data, FREQ_FFT_LAST, 0, 1);
         plot(pane, 3,
-             pd->data, 200000,   
-             0, 200000,   
+             pd->data, FREQ_FFT_LAST,   
+             0, FREQ_FFT_LAST,   
              0, 1);
 
         // detected
@@ -368,11 +378,11 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
         switch (event->event_id) {
         case SDL_EVENT_FREQ_DOWN:
             freq = freq - FREQ_STEP;
-            if (freq < FREQ_FIRST) freq = FREQ_LAST;
+            if (freq < FREQ_FIRST_IF) freq = FREQ_LAST_IF;
             break;
         case SDL_EVENT_FREQ_UP:
             freq = freq + FREQ_STEP;
-            if (freq > FREQ_LAST) freq = FREQ_FIRST;
+            if (freq > FREQ_LAST_IF) freq = FREQ_FIRST_IF;
             break;
         default:
             break;
