@@ -61,6 +61,8 @@ static struct src_s {
 
 // prototypes
 
+static void init_audio_src_sine_wave(int id, int hz);
+static void init_audio_src_white_noise(int id);
 static void init_audio_src_from_wav_file(int id, char *filename);
 static int read_wav_file(char *filename, float **data, int *num_chan, int *num_items, int *sample_rate);
 
@@ -76,9 +78,37 @@ double get_src(int id, double t)
 
 void init_audio_src(void)  // xxx caller should pass in list of srcs to init
 {
-    init_audio_src_from_wav_file(0, "one_bourbon_one_scotch_one_beer.wav");
-    init_audio_src_from_wav_file(1, "proud_mary.wav");
-    init_audio_src_from_wav_file(2, "primitive_cool.wav");
+    init_audio_src_sine_wave(0, 2000);
+    init_audio_src_white_noise(1);
+    //init_audio_src_from_wav_file(1, "one_bourbon_one_scotch_one_beer.wav");
+    //init_audio_src_from_wav_file(2, "proud_mary.wav");
+    //init_audio_src_from_wav_file(3, "primitive_cool.wav");
+}
+
+static void init_audio_src_sine_wave(int id, int hz)
+{
+    struct src_s *s = &src[id];
+
+    s->max = 24000;
+    s->sample_rate = 24000;
+    s->data = (float*)calloc(s->max, sizeof(float));
+
+    for (int i = 0; i < s->max; i++) {
+        s->data[i] = sin(TWO_PI * ((double)i / s->sample_rate) * hz);
+    }
+}
+
+static void init_audio_src_white_noise(int id)
+{
+    struct src_s *s = &src[id];
+
+    s->max = 24000;
+    s->sample_rate = 24000;
+    s->data = (float*)calloc(s->max, sizeof(float));
+
+    for (int i = 0; i < s->max; i++) {
+        s->data[i] =  2 * (((double)random() / RAND_MAX) - 0.5);
+    }
 }
 
 static void init_audio_src_from_wav_file(int id, char *filename)
@@ -250,4 +280,38 @@ void average_float(float *v, int n, double *min_arg, double *max_arg, double *av
     *avg = sum / n;
     *min_arg = min;
     *max_arg = max;
+}
+
+void average(double *v, int n, double *min_arg, double *max_arg, double *avg)
+{
+    double sum = 0;
+    double min = 1e99;
+    double max = -1e99;
+
+    for (int i = 0; i < n; i++) {
+        sum += v[i];
+        if (v[i] < min) min = v[i];
+        if (v[i] > max) max = v[i];
+    }
+    *avg = sum / n;
+    *min_arg = min;
+    *max_arg = max;
+}
+
+void normalize(double *v, int n, double min, double max)
+{
+    double span = max - min;
+    double vmin, vmax, vavg, vspan;
+
+    average(v, n, &vmin, &vmax, &vavg);
+    vspan = vmax - vmin;
+    NOTICE("normalize  %f %f\n", vmin, vmax);
+
+    for (int i = 0; i < n; i++) {
+        //v[i] = (v[i] + (min - vmin)) * (span / vspan);
+        v[i] = (v[i] - vmin) * (span / vspan) + min;
+    }
+
+    average(v, n, &vmin, &vmax, &vavg);
+    NOTICE("   now %f %f\n", vmin, vmax);
 }

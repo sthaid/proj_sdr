@@ -14,10 +14,7 @@
 #define N (SAMPLE_RATE / 1)
 //#define N 100
 
-#define FC0      0
-#define FC1  50000
-#define FC2 150000
-
+// xxx print time in here
 #define TIME(code) \
     ( { unsigned long start=microsec_timer(); code; (microsec_timer()-start)/1000000.; } )
 
@@ -30,7 +27,7 @@ char *progname = "sim";
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-complex *in, *out;
+complex *in, *out1, *out2, *out3;
 
 //
 // prototypes
@@ -46,8 +43,9 @@ static int plot(rect_t *pane, int idx,
 
 // -----------------  MAIN  -------------------------------------------
 
-static fftw_plan   plan;
+static fftw_plan   plan1;
 static fftw_plan   plan2;
+static fftw_plan   plan3;
 
 int main(int argc, char **argv)
 {
@@ -55,11 +53,16 @@ int main(int argc, char **argv)
 
     // allocate in and out arrays in create the plan
     in  = (complex*)fftw_malloc(sizeof(complex) * N);
-    out = (complex*)fftw_malloc(sizeof(complex) * N);
+    out1 = (complex*)fftw_malloc(sizeof(complex) * N);
+    out2 = (complex*)fftw_malloc(sizeof(complex) * N);
+    out3 = (complex*)fftw_malloc(sizeof(complex) * N);
     memset(in, 0, sizeof(complex)*N);
-    memset(out, 0, sizeof(complex)*N);
-    plan = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-    plan2 = fftw_plan_dft_1d(N, out, in, FFTW_BACKWARD, FFTW_ESTIMATE);
+    memset(out1, 0, sizeof(complex)*N);
+    memset(out2, 0, sizeof(complex)*N);
+    memset(out3, 0, sizeof(complex)*N);
+    plan1 = fftw_plan_dft_1d(N, in, out1, FFTW_FORWARD, FFTW_ESTIMATE);
+    plan2 = fftw_plan_dft_1d(N, out1, out2, FFTW_BACKWARD, FFTW_ESTIMATE);
+    plan3 = fftw_plan_dft_1d(N, out2, out3, FFTW_FORWARD, FFTW_ESTIMATE);
 
     // xxx
     pthread_create(&tid, NULL, work_thread, NULL);
@@ -85,7 +88,10 @@ int main(int argc, char **argv)
 #endif
 }
 
-double plot_test[N];
+struct pd_s {
+    double data[N];
+    int max;
+} pd_array[4];
 
 void *work_thread(void *cx)
 {
@@ -99,18 +105,18 @@ void *work_thread(void *cx)
 
     NOTICE("work thread start\n");
 
+#if 0
     init_sine_wave();
-
     pthread_mutex_lock(&mutex);
     for (int i = 0; i < N; i++) {
-        plot_test[i] = sine_wave(1,t);
-        //NOTICE("t = %f  data = %f\n", t, plot_test[i]);
+        pd[i] = sine_wave(1,t);
+        //NOTICE("t = %f  data = %f\n", t, pd[i]);
         t += (1. / N);
     }
     pthread_mutex_unlock(&mutex);
-
     NOTICE("work thread pauuse\n");
     pause();
+#endif
 
 
 
@@ -122,17 +128,68 @@ void *work_thread(void *cx)
 
     // xxx comment
     while (true) {
-        // modulate
+        // modulate  3 stations
         y = 0;
-#if 1
-        y += (1 + get_src(1,t));
-        y += (1 + get_src(0,t)) * (0.5 * sine_wave(FC1,t));
-        y += (1 + get_src(2,t)) * (0.5 * sine_wave(FC2,t));
-#else
-        y += sine_wave(1,t);
-        //y += (1) * (0.5 * sine_wave(FC2,t));
-#endif
+        y += (1 + get_src(0,t)) * (0.5 * sine_wave(25000,t));
+        y += (1 + get_src(0,t)) * (0.5 * sine_wave(50000,t));
+        y += (1 + get_src(1,t)) * (0.5 * sine_wave(75000,t));
 
+        struct pd_s *pd = &pd_array[0];
+        pd->data[pd->max++] = y;
+        if (pd->max == N) pd->max = 0;
+
+        in[max_in++] = y;
+        if (max_in == N) {
+            struct pd_s *pd;
+            max_in = 0;
+
+            pthread_mutex_lock(&mutex);
+
+            // fft,  creates out
+            TIME(fftw_execute(plan1));
+            pd = &pd_array[1];
+            for (int i = 0; i < N; i++) {
+                pd->data[i] = cabs(out1[i]);
+            }
+
+            // filter fft out2
+            int freq_start = 25000 - 2000;
+            int freq_end = 25000 + 2000;
+            for (int i = 0; i < N/2; i++) {
+                if (i < freq_start || i > freq_end) {
+                    out1[i] = 0;
+                    out1[N-1-i] = 0;
+                }
+            }
+
+            // backward fft, creates out2
+            TIME(fftw_execute(plan2));
+            pd = &pd_array[2];
+            for (int i = 0; i < N; i++) {
+                pd->data[i] = creal(out2[i]);
+            }
+
+            // look at the fft of the filtered data
+            // forward fft, creates out3
+#if 0
+            for (int i = 0; i < N; i++) {
+                out2[i] = creal(out2[i]);
+            }
+#endif
+            TIME(fftw_execute(plan3));
+            pd = &pd_array[3];
+            for (int i = 0; i < N; i++) {
+                pd->data[i] = cabs(out3[i]);
+            }
+
+            pthread_mutex_unlock(&mutex);
+        }
+
+
+
+        // advance time
+        t += dt;
+#if 0
         in[max_in++] = y;
         if (max_in < N) {
             t += dt;
@@ -179,6 +236,7 @@ void *work_thread(void *cx)
 
         // advance time
         t += dt;
+#endif
     }
 
     return NULL;
@@ -201,13 +259,37 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
+        #define T_MAX .01
+        struct pd_s *pd;
         pthread_mutex_lock(&mutex);
-        //plot(pane, 0, out, N);
-        //plot(pane, 0, in, N);
 
-        plot(pane, 0,   plot_test, N,   0, 1,   -1, 1);
-        plot(pane, 1,   plot_test, N,   0, 1,   0, 2);
-        plot(pane, 2,   plot_test, N,   0, 1,   0.5, 1);
+        pd = &pd_array[0];
+        normalize(pd->data, (int)(T_MAX*N), -1, 1);
+        plot(pane, 0,
+             pd->data, (int)(T_MAX*N),   
+             0, T_MAX,   
+             -1, 1);
+
+        pd = &pd_array[1];
+        normalize(pd->data, 100000, 0, 1);
+        plot(pane, 1,
+             pd->data, 100000,   
+             0, 100000,   
+             0, 1);
+
+        pd = &pd_array[2];
+        normalize(pd->data, (int)(T_MAX*N), -1, 1);
+        plot(pane, 2,
+             pd->data, (int)(T_MAX*N),   
+             0, T_MAX,   
+             -1, 1);
+
+        pd = &pd_array[3];
+        normalize(pd->data, 100000, 0, 1);
+        plot(pane, 3,
+             pd->data, 100000,   
+             0, 100000,   
+             0, 1);
 
         pthread_mutex_unlock(&mutex);
         return PANE_HANDLER_RET_NO_ACTION;
@@ -267,7 +349,7 @@ static int plot(rect_t *pane, int idx,
     x_span   = x_end - x_origin;
 
     y_top    = idx * pane->h / 4;
-    y_bottom = (idx + 1) * pane->h / 4 - 20;
+    y_bottom = (idx + 1) * pane->h / 4 - 40;
     y_span   = y_bottom - y_top;
     y_origin = y_top + (yv_max / yv_span) * y_span;
 
@@ -311,15 +393,20 @@ static int plot(rect_t *pane, int idx,
 
     // x axis
     if (y_origin <= y_bottom && y_origin >= y_top) {
+        sprintf(s, "%0.2f", xv_min);
+        sdl_render_printf(pane, 
+                        x_origin, y_origin,
+                        FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
+
         sprintf(s, "%0.2f", xv_max);
         sdl_render_printf(pane, 
-                        x_end-COL2X(strlen(s),FONTSZ), y_origin-ROW2Y(1,FONTSZ)+0,
+                        x_end-COL2X(strlen(s),FONTSZ), y_origin,
                         FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
 
         sdl_render_line(pane, 
-                     x_origin, y_origin, 
-                     x_origin + x_span, y_origin,
-                     SDL_GREEN);
+                        x_origin, y_origin, 
+                        x_origin + x_span, y_origin,
+                        SDL_GREEN);
     }
 
     // y axis
@@ -327,8 +414,8 @@ static int plot(rect_t *pane, int idx,
                       x_origin+3, y_top, 
                       FONTSZ, SDL_GREEN, SDL_BLACK, "%0.2f", yv_max);
     sdl_render_printf(pane, 
-                    x_origin+3, y_bottom-ROW2Y(1,FONTSZ)+0, 
-                    FONTSZ, SDL_GREEN, SDL_BLACK, "%0.2f", yv_min);
+                      x_origin+3, y_bottom-ROW2Y(1,FONTSZ)+0, 
+                      FONTSZ, SDL_GREEN, SDL_BLACK, "%0.2f", yv_min);
 
     sdl_render_line(pane, 
                     x_origin, y_top,

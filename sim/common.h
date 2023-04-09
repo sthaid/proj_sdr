@@ -52,4 +52,6 @@ double sine_wave(double f, double t);
 
 double moving_avg(double v, int n, void **cx_arg);
 void average_float(float *v, int n, double *min_arg, double *max_arg, double *avg);
+void average(double *v, int n, double *min_arg, double *max_arg, double *avg);
+void normalize(double *v, int n, double min, double max);
 
