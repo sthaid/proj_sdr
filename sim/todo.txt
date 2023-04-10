@@ -1,0 +1,46 @@
+
+
+rx -----  radio
+-s sim
+-p port
+
+msgs to rx_sim
+- start
+- stop
+- set_freq
+
+msgs to radio
+- data
+- cmd_response
+
+----------- radio    -------------
+
+options
+- specify audio out device, or stdout
+- list audio devices
+
+
+threads
+- main  for sdl
+- data_reader  cb  OR read from socket,   puts data in circ buffer  (complex)
+- data_processor
+    - fft forward                        in -> fft_orig
+    - bfo (converts to IF freq)          in -> if
+    - fft forward                        if -> fft
+    - fft backward                       fft -> if
+    - fft forward check                  fft -> fft_check
+    - detector                           if -> audio
+    - output to portaudio or stdout
+- buffers
+    - in
+    - fft_orig
+    - if
+    - fft
+    - fft_check
+    - audio
+- plots
+    in 
+ 
+
+
+

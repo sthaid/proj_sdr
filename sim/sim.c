@@ -11,22 +11,20 @@
 
 #define SAMPLE_RATE 2400000
 #define AUDIO_SAMPLE_RATE 22000
-#define N (SAMPLE_RATE / 1)
+#define N (SAMPLE_RATE / 10)
 //#define N 100
 
 // xxx print time in here
 #define TIME(code) \
     ( { unsigned long start=microsec_timer(); code; (microsec_timer()-start)/1000000.; } )
 
-#define FREQ_BFO  350000
-
-#define FREQ_FIRST_IF  50000
-#define FREQ_LAST_IF   250000
-
-#define FREQ_FIRST   400000
-#define FREQ_LAST    600000
-#define FREQ_STEP    10000
+#define FREQ_BFO_FIRST  400000
+#define FREQ_BFO_LAST   500000
+#define FREQ_IF      100000
+#define FREQ_FIRST   500000
+#define FREQ_STEP     10000
 #define FREQ(n)  (FREQ_FIRST + (n) * FREQ_STEP)
+
 
 //
 // variables
@@ -38,7 +36,7 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 complex *in, *out1, *out2, *out3;
 
-int freq = FREQ_FIRST_IF;
+int freq_bfo = FREQ_BFO_FIRST;
 
 //
 // prototypes
@@ -142,11 +140,12 @@ void *work_thread(void *cx)
         y += (1 + get_src(4,t)) * (0.5 * sine_wave(FREQ(2),t));
         y += (1 + get_src(5,t)) * (0.5 * sine_wave(FREQ(3),t));
         y += (1 + get_src(0,t)) * (0.5 * sine_wave(FREQ(4),t));  // sine wave
+
         // xxx maybe white noise needs to be bw limitted
         //y += (1 + get_src(1,t)) * (0.5 * sine_wave(FREQ(5),t));  // white noise
 
         // bfo 
-        y += (1 + y) * (0.5 * sine_wave(FREQ_BFO,t));  // sine wave
+        y += (1 + y) * (0.5 * sine_wave(freq_bfo,t));
         
 
         in[max_in++] = y;
@@ -170,8 +169,8 @@ void *work_thread(void *cx)
             }
 
             // filter fft out2
-            int freq_start = freq - 3000;
-            int freq_end = freq + 3000;
+            int freq_start = (FREQ_IF - 3000) / 10;
+            int freq_end = (FREQ_IF + 3000) / 10;
             for (int i = 0; i < N/2; i++) {
                 if (i < freq_start || i > freq_end) {
                     out1[i] = 0;
@@ -201,7 +200,8 @@ void *work_thread(void *cx)
 
             pd = &pd_array[4];
             for (int i = 0; i < N; i++) {
-                y = creal(out2[i]) / 2138063;
+                //y = creal(out2[i]) / 2138063;
+                y = creal(out2[i])   * 5e-5; 
 
                 // detector
                 if (y > yo) {
@@ -300,7 +300,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        #define T_MAX .01
+        #define T_MAX .1
         struct pd_s *pd;
         pthread_mutex_lock(&mutex);
 
@@ -313,7 +313,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
              0, T_MAX,   
              -1, 1);
 
-#define FREQ_FFT_LAST 1200000
+#define FREQ_FFT_LAST (N/2)
         // air wave fft
         NOTICE("air wave fft\n");
         pd = &pd_array[1];
@@ -354,7 +354,7 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
 
 
         char str[100];
-        sprintf(str, "%d", freq);
+        sprintf(str, "%d", freq_bfo + FREQ_IF);
         sdl_render_text_and_register_event(
             pane, 
             0, pane->h-ROW2Y(1,FONTSZ_LG),
@@ -377,12 +377,12 @@ static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_
     if (request == PANE_HANDLER_REQ_EVENT) {
         switch (event->event_id) {
         case SDL_EVENT_FREQ_DOWN:
-            freq = freq - FREQ_STEP;
-            if (freq < FREQ_FIRST_IF) freq = FREQ_LAST_IF;
+            freq_bfo = freq_bfo - FREQ_STEP;
+            if (freq_bfo < FREQ_BFO_FIRST) freq_bfo = FREQ_BFO_LAST;
             break;
         case SDL_EVENT_FREQ_UP:
-            freq = freq + FREQ_STEP;
-            if (freq > FREQ_LAST_IF) freq = FREQ_FIRST_IF;
+            freq_bfo = freq_bfo + FREQ_STEP;
+            if (freq_bfo > FREQ_BFO_LAST) freq_bfo = FREQ_BFO_FIRST;
             break;
         default:
             break;
