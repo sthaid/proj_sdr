@@ -1,3 +1,53 @@
+devel
+- sdl.c simplified
+- utils.c
+- gtf   gen_test_file
+   run at 28.8 MHZ
+   create N channels around 5 MHZ
+   get an fft of this
+   freq shift
+   get an fft of this
+
+
+-----
+
+just one program (rx)
+
+utils dir
+- sdl
+- misc
+
+rx
+- server mode
+- file mode
+
+program to create sim file
+- 
+
+
+rx flow
+- init
+- ctls
+  - start, stop
+  - freq
+- processing
+  - cb will add a buffer   262144
+      or drop it if no free
+  - fft_fwd thread will fft fwd
+  - fft_back thread ...   filter and fft back
+  - audio_out thread ... detect and output the audio to stdout
+- example
+   - desird freq 1200000   1Mhz
+   - rtlsdr freq 500000
+   - fft filter 
+
+   - beat freq  400000
+   - IF 100000
+
+
+
+
+xxxxxxxxxxxxxxxxxxxxxxxxx
 
 
 rx -----  radio
@@ -30,7 +80,7 @@ threads
     - fft backward                       fft -> if
     - fft forward check                  fft -> fft_check
     - detector                           if -> audio
-    - output to portaudio or stdout
+    - output to stdout
 - buffers
     - in
     - fft_orig
