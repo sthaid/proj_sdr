@@ -64,6 +64,9 @@ https://pa3fwm.nl/technotes/
 https://pa3fwm.nl/technotes/tn20.html
   How RTL-SDR dongles work ***
 
+https://dsp.stackexchange.com/questions/51889/what-exactly-is-a-90-degree-phase-shift-of-a-digital-signal-in-fm-demodulation-a
+https://rahsoft.com/2022/10/17/understanding-90%cb%9a-phase-shift-and-hilbert-transform/
+
 
 old examples found on web
 -------------------------

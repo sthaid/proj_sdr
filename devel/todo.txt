@@ -1,0 +1,20 @@
+utils
+- sdl  add plot
+- filter   lpf_fft
+
+progs  (*) tools and tests
+- gen    *
+- plot   *
+- record *
+- svr
+- rx
+
+
+plot improvements
+
+    // xxx improvements
+    // - samller font
+    // - y axis label on left
+    // - flexability on where in the pane
+    // - auto y scale
+

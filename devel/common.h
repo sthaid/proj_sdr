@@ -10,10 +10,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-
-#include <math.h>
 #include <complex.h>
-#include <fftw3.h>   // xxx maybe this is in a util file
+#include <math.h>
 
-#include <sdl.h>
+//xxx #include <fftw3.h>   // xxx maybe this is in a util file
+
 #include <misc.h>
+#include <sdl.h>
+#include <png_rw.h>
+#include <wav.h>

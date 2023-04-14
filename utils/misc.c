@@ -44,6 +44,7 @@ unsigned long get_real_time_us(void)
     return ((unsigned long)ts.tv_sec * 1000000) + ((unsigned long)ts.tv_nsec / 1000);
 }
 
+#if 0
 // -----------------  FAST SINE WAVE  ------------------
 
 #define MAX_SINE_WAVE 4096
@@ -69,6 +70,7 @@ double sine_wave(double f, double t)
     }
     return sine[idx];
 }
+#endif
 
 // -----------------  DATA SET OPS ---------------------
 
