@@ -84,19 +84,23 @@ static uint32_t         sdl_color_to_rgba[MAX_SDL_COLOR_TO_RGBA] = {
 //
 
 static void exit_handler(void);
-static void set_color(int32_t color); 
 static void font_init(int32_t ptsize);
+
+static char *get_print_screen_filename(void);
+
 static void pane_terminate(struct pane_list_head_s * pane_list_head, pane_cx_t * pane_cx);
 static rect_t init_pane(int32_t x_disp, int32_t y_disp, int32_t w, int32_t h,
                         int32_t border_style, int32_t border_color, bool clear,
                         rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_x);
 static rect_t get_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
                        int32_t border_style);
+
+static void set_color(int32_t color); 
+
 static int find_1_intersect(point_t *p1, point_t *p2, rect_t *pane, point_t *p_intersect);
 static int find_n_intersect(point_t *p1, point_t *p2, rect_t *pane, point_t *p_intersect);
 static int find_x_intersect(point_t *p1, point_t *p2, double X, point_t *p_intersect);
 static int find_y_intersect(point_t *p1, point_t *p2, double Y, point_t *p_intersect);
-static char *get_print_screen_filename(void);
 
 // 
 // inline procedures
@@ -122,9 +126,9 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool fullscreen, bool resizeable, bool 
     // display available and current video drivers
     int num, i;
     num = SDL_GetNumVideoDrivers();
-    NOTICE("Available Video Drivers: ");
+    DEBUG("Available Video Drivers: ");
     for (i = 0; i < num; i++) {
-        NOTICE("   %s\n",  SDL_GetVideoDriver(i));
+        DEBUG("   %s\n",  SDL_GetVideoDriver(i));
     }
 
     // initialize Simple DirectMedia Layer  (SDL)
@@ -175,7 +179,7 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool fullscreen, bool resizeable, bool 
         ERROR("failed to locate font file\n");
         return -1;
     }
-    NOTICE("using font %s\n", sdl_font_path);
+    DEBUG("using font %s\n", sdl_font_path);
 
     // currently the SDL Text Input feature is not being used here
     SDL_StopTextInput();
@@ -194,6 +198,26 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool fullscreen, bool resizeable, bool 
     // return success
     DEBUG("success\n");
     return 0;
+}
+
+static void font_init(int32_t font_ptsize)
+{
+    // if this font has already been initialized then return
+    if (sdl_font[font_ptsize].font != NULL) {
+        return;
+    }
+
+    // open font for this font_ptsize,
+    assert(sdl_font_path);
+    sdl_font[font_ptsize].font = TTF_OpenFont(sdl_font_path, font_ptsize);
+    if (sdl_font[font_ptsize].font == NULL) {
+        FATAL("failed TTF_OpenFont(%s,%d)\n", sdl_font_path, font_ptsize);
+    }
+
+    // and init the char_width / char_height
+    TTF_SizeText(sdl_font[font_ptsize].font, "X", &sdl_font[font_ptsize].char_width, &sdl_font[font_ptsize].char_height);
+    DEBUG("font_ptsize=%d width=%d height=%d\n",
+         font_ptsize, sdl_font[font_ptsize].char_width, sdl_font[font_ptsize].char_height);
 }
 
 void sdl_get_window_size(int32_t *w, int32_t *h)
@@ -240,43 +264,93 @@ static void exit_handler(void)
     SDL_Quit();
 }
 
-static void set_color(int32_t color)
-{
-    uint8_t r, g, b, a;
-    uint32_t rgba;
+// -----------------  PRINT SCREEN -------------------------------------- 
 
-    if (color < 0 || color >= MAX_SDL_COLOR_TO_RGBA) {
-        FATAL("color %d out of range\n", color);
+void sdl_print_screen(char *file_name, bool flash_display, rect_t * rect_arg) 
+{
+    uint8_t * pixels = NULL;
+    SDL_Rect  rect;
+    int32_t   ret, len;
+
+    // if caller has supplied region to print then 
+    //   init rect to print with caller supplied position
+    // else
+    //   init rect to print with entire window
+    // endif
+    if (rect_arg) {
+        rect.x = rect_arg->x;
+        rect.y = rect_arg->y;
+        rect.w = rect_arg->w;
+        rect.h = rect_arg->h;
+    } else {
+        rect.x = 0;
+        rect.y = 0;
+        rect.w = sdl_win_width;
+        rect.h = sdl_win_height;   
     }
 
-    rgba = sdl_color_to_rgba[color];
-    
-    r = (rgba >>  0) & 0xff;
-    g = (rgba >>  8) & 0xff;
-    b = (rgba >> 16) & 0xff;
-    a = (rgba >> 24) & 0xff;
-
-    SDL_SetRenderDrawColor(sdl_renderer, r, g, b, a);
-}
-
-static void font_init(int32_t font_ptsize)
-{
-    // if this font has already been initialized then return
-    if (sdl_font[font_ptsize].font != NULL) {
+    // allocate memory for pixels
+    pixels = calloc(1, rect.w * rect.h * BYTES_PER_PIXEL);
+    if (pixels == NULL) {
+        ERROR("allocate pixels failed\n");
         return;
     }
 
-    // open font for this font_ptsize,
-    assert(sdl_font_path);
-    sdl_font[font_ptsize].font = TTF_OpenFont(sdl_font_path, font_ptsize);
-    if (sdl_font[font_ptsize].font == NULL) {
-        FATAL("failed TTF_OpenFont(%s,%d)\n", sdl_font_path, font_ptsize);
+    // copy display rect to pixels
+    ret = SDL_RenderReadPixels(sdl_renderer, 
+                               &rect, 
+                               SDL_PIXELFORMAT_ABGR8888, 
+                               pixels, 
+                               rect.w * BYTES_PER_PIXEL);
+    if (ret < 0) {
+        ERROR("SDL_RenderReadPixels, %s\n", SDL_GetError());
+        free(pixels);
+        return;
     }
 
-    // and init the char_width / char_height
-    TTF_SizeText(sdl_font[font_ptsize].font, "X", &sdl_font[font_ptsize].char_width, &sdl_font[font_ptsize].char_height);
-    DEBUG("font_ptsize=%d width=%d height=%d\n",
-         font_ptsize, sdl_font[font_ptsize].char_width, sdl_font[font_ptsize].char_height);
+    // write pixels to file_name, 
+    // filename must have .png extension
+    len = strlen(file_name);
+    if (len > 4 && strcmp(file_name+len-4, ".png") == 0) {
+        ret = write_png_file(file_name, pixels, rect.w, rect.h);
+        if (ret != 0) {
+            ERROR("write_png_file %s failed\n", file_name);
+        }
+    } else {
+        ret = -1;
+        ERROR("filename %s must have .jpg or .png extension\n", file_name);
+    }
+    if (ret != 0) {
+        free(pixels);
+        return;
+    }
+
+    // it worked, flash display if enabled;
+    // the caller must redraw the screen if flash_display is enabled
+    if (flash_display) {
+        set_color(SDL_WHITE);
+        SDL_RenderClear(sdl_renderer);
+        SDL_RenderPresent(sdl_renderer);
+        usleep(250000);
+    }
+
+    // free pixels
+    free(pixels);
+}
+
+static char *get_print_screen_filename(void)
+{
+    struct tm tm;
+    time_t t;
+    static char filename[PATH_MAX];
+
+    t = time(NULL);
+    localtime_r(&t, &tm);
+    sprintf(filename, "screenshot_%2.2d%2.2d%2.2d_%2.2d%2.2d%2.2d.png",
+            tm.tm_year-100, tm.tm_mon+1, tm.tm_mday,
+            tm.tm_hour, tm.tm_min, tm.tm_sec);
+
+    return filename;
 }
 
 // -----------------  PANE MANAGER  ------------------------------------- 
@@ -663,6 +737,84 @@ void sdl_display_init(int32_t * win_width, int32_t * win_height, bool * win_mini
 void sdl_display_present(void)
 {
     SDL_RenderPresent(sdl_renderer);
+}
+
+// -----------------  COLORS  ------------------------------------------- 
+
+static void set_color(int32_t color)
+{
+    uint8_t r, g, b, a;
+    uint32_t rgba;
+
+    if (color < 0 || color >= MAX_SDL_COLOR_TO_RGBA) {
+        FATAL("color %d out of range\n", color);
+    }
+
+    rgba = sdl_color_to_rgba[color];
+    
+    r = (rgba >>  0) & 0xff;
+    g = (rgba >>  8) & 0xff;
+    b = (rgba >> 16) & 0xff;
+    a = (rgba >> 24) & 0xff;
+
+    SDL_SetRenderDrawColor(sdl_renderer, r, g, b, a);
+}
+
+void sdl_define_custom_color(int32_t color, uint8_t r, uint8_t g, uint8_t b)
+{
+    if (color < FIRST_SDL_CUSTOM_COLOR || color >= MAX_SDL_COLOR_TO_RGBA) {
+        FATAL("color %d out of range\n", color);
+    }
+
+    sdl_color_to_rgba[color] = (r << 0) | ( g << 8) | (b << 16) | (0xff << 24);
+}
+
+// ported from http://www.noah.org/wiki/Wavelength_to_RGB_in_Python
+void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b)
+{
+    double attenuation;
+    double gamma = 0.8;
+    double R,G,B;
+
+    if (wavelength >= 380 && wavelength <= 440) {
+        double attenuation = 0.3 + 0.7 * (wavelength - 380) / (440 - 380);
+        R = pow((-(wavelength - 440) / (440 - 380)) * attenuation, gamma);
+        G = 0.0;
+        B = pow(1.0 * attenuation, gamma);
+    } else if (wavelength >= 440 && wavelength <= 490) {
+        R = 0.0;
+        G = pow((wavelength - 440) / (490 - 440), gamma);
+        B = 1.0;
+    } else if (wavelength >= 490 && wavelength <= 510) {
+        R = 0.0;
+        G = 1.0;
+        B = pow(-(wavelength - 510) / (510 - 490), gamma);
+    } else if (wavelength >= 510 && wavelength <= 580) {
+        R = pow((wavelength - 510) / (580 - 510), gamma);
+        G = 1.0;
+        B = 0.0;
+    } else if (wavelength >= 580 && wavelength <= 645) {
+        R = 1.0;
+        G = pow(-(wavelength - 645) / (645 - 580), gamma);
+        B = 0.0;
+    } else if (wavelength >= 645 && wavelength <= 750) {
+        attenuation = 0.3 + 0.7 * (750 - wavelength) / (750 - 645);
+        R = pow(1.0 * attenuation, gamma);
+        G = 0.0;
+        B = 0.0;
+    } else {
+        R = 0.0;
+        G = 0.0;
+        B = 0.0;
+    }
+
+    if (R < 0) R = 0; else if (R > 1) R = 1;
+    if (G < 0) G = 0; else if (G > 1) G = 1;
+    if (B < 0) B = 0; else if (B > 1) B = 1;
+
+    *r = R * 255;
+    *g = G * 255;
+    *b = B * 255;
 }
 
 // -----------------  FONT SUPPORT ROUTINES  ---------------------------- 
@@ -2050,183 +2202,120 @@ void sdl_update_iyuv_texture(texture_t texture,
                          v_plane, v_pitch);
 }
 
-// -----------------  PRINT SCREEN -------------------------------------- 
+// -----------------  RENDER PLOTS  ------------------------------------- 
 
-void sdl_print_screen(char *file_name, bool flash_display, rect_t * rect_arg) 
+void sdl_plot(rect_t *pane, int idx, 
+              double *data, int n, 
+              double xv_min, double xv_max, 
+              double yv_min, double yv_max,
+              char *title)
 {
-    uint8_t * pixels = NULL;
-    SDL_Rect  rect;
-    int32_t   ret, len;
+    #define MAX_YV 4000
+    #define PLOT_FONTSZ 14
 
-    // if caller has supplied region to print then 
-    //   init rect to print with caller supplied position
-    // else
-    //   init rect to print with entire window
-    // endif
-    if (rect_arg) {
-        rect.x = rect_arg->x;
-        rect.y = rect_arg->y;
-        rect.w = rect_arg->w;
-        rect.h = rect_arg->h;
-    } else {
-        rect.x = 0;
-        rect.y = 0;
-        rect.w = sdl_win_width;
-        rect.h = sdl_win_height;   
+    struct {
+        double min;
+        double max;
+    } yv[MAX_YV];
+    double yv_span, y, y_min, y_max;
+    int x_origin, x_end, x_span;
+    int y_top, y_bottom, y_span, y_origin;
+    int x_title;
+    int x, i;
+    char s[100];
+
+    // init
+    yv_span  = yv_max - yv_min;
+
+    x_origin = COL2X(6,PLOT_FONTSZ);
+    x_end    = pane->w - 20;
+    x_span   = x_end - x_origin;
+
+    y_top    = idx * pane->h / MAX_PLOT;
+    y_bottom = (idx + 1) * pane->h / MAX_PLOT - 40;
+    y_span   = y_bottom - y_top;
+    y_origin = y_top + (yv_max / yv_span) * y_span;
+
+    // sanity checks
+    if (x_span >= MAX_YV) {
+        FATAL("x_span = %d too large\n", x_span);
+    }
+    if (idx < 0 || idx >= MAX_PLOT) {
+        FATAL("sdl_plot invalid idx %d\n", idx);
     }
 
-    // allocate memory for pixels
-    pixels = calloc(1, rect.w * rect.h * BYTES_PER_PIXEL);
-    if (pixels == NULL) {
-        ERROR("allocate pixels failed\n");
-        return;
+    // init yv array
+    for (i = 0; i < x_span; i++) {
+        yv[i].min = 1e99;
+        yv[i].max = -1e99;
     }
 
-    // copy display rect to pixels
-    ret = SDL_RenderReadPixels(sdl_renderer, 
-                               &rect, 
-                               SDL_PIXELFORMAT_ABGR8888, 
-                               pixels, 
-                               rect.w * BYTES_PER_PIXEL);
-    if (ret < 0) {
-        ERROR("SDL_RenderReadPixels, %s\n", SDL_GetError());
-        free(pixels);
-        return;
+    // determine yv min/max
+    for (i = 0; i < n; i++) {
+        x = (long)i * x_span / n;
+        y = data[i];
+        if (y > yv[x].max) yv[x].max = y;
+        if (y < yv[x].min) yv[x].min = y;
     }
 
-    // write pixels to file_name, 
-    // filename must have .png extension
-    len = strlen(file_name);
-    if (len > 4 && strcmp(file_name+len-4, ".png") == 0) {
-        ret = write_png_file(file_name, pixels, rect.w, rect.h);
-        if (ret != 0) {
-            ERROR("write_png_file %s failed\n", file_name);
+    // limit yv to caller supplied min/max
+    for (x = 0; x < x_span; x++) {
+        if (yv[x].max == -1e99) {
+            continue;
         }
-    } else {
-        ret = -1;
-        ERROR("filename %s must have .jpg or .png extension\n", file_name);
-    }
-    if (ret != 0) {
-        free(pixels);
-        return;
+        if (yv[x].max > yv_max) yv[x].max = yv_max;
+        if (yv[x].max < yv_min) yv[x].max = yv_min;
+
+        if (yv[x].min > yv_max) yv[x].min = yv_max;
+        if (yv[x].min < yv_min) yv[x].min = yv_min;
     }
 
-    // it worked, flash display if enabled;
-    // the caller must redraw the screen if flash_display is enabled
-    if (flash_display) {
-        set_color(SDL_WHITE);
-        SDL_RenderClear(sdl_renderer);
-        SDL_RenderPresent(sdl_renderer);
-        usleep(250000);
-    }
-
-    // free pixels
-    free(pixels);
-}
-
-static char *get_print_screen_filename(void)
-{
-    struct tm tm;
-    time_t t;
-    static char filename[PATH_MAX];
-
-    t = time(NULL);
-    localtime_r(&t, &tm);
-    sprintf(filename, "screenshot_%2.2d%2.2d%2.2d_%2.2d%2.2d%2.2d.png",
-            tm.tm_year-100, tm.tm_mon+1, tm.tm_mday,
-            tm.tm_hour, tm.tm_min, tm.tm_sec);
-
-    return filename;
-}
-
-// -----------------  COLORS  ------------------------------------------- 
-
-void sdl_define_custom_color(int32_t color, uint8_t r, uint8_t g, uint8_t b)
-{
-    if (color < FIRST_SDL_CUSTOM_COLOR || color >= MAX_SDL_COLOR_TO_RGBA) {
-        FATAL("color %d out of range\n", color);
-    }
-
-    sdl_color_to_rgba[color] = (r << 0) | ( g << 8) | (b << 16) | (0xff << 24);
-}
-
-// ported from http://www.noah.org/wiki/Wavelength_to_RGB_in_Python
-void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b)
-{
-    double attenuation;
-    double gamma = 0.8;
-    double R,G,B;
-
-    if (wavelength >= 380 && wavelength <= 440) {
-        double attenuation = 0.3 + 0.7 * (wavelength - 380) / (440 - 380);
-        R = pow((-(wavelength - 440) / (440 - 380)) * attenuation, gamma);
-        G = 0.0;
-        B = pow(1.0 * attenuation, gamma);
-    } else if (wavelength >= 440 && wavelength <= 490) {
-        R = 0.0;
-        G = pow((wavelength - 440) / (490 - 440), gamma);
-        B = 1.0;
-    } else if (wavelength >= 490 && wavelength <= 510) {
-        R = 0.0;
-        G = 1.0;
-        B = pow(-(wavelength - 510) / (510 - 490), gamma);
-    } else if (wavelength >= 510 && wavelength <= 580) {
-        R = pow((wavelength - 510) / (580 - 510), gamma);
-        G = 1.0;
-        B = 0.0;
-    } else if (wavelength >= 580 && wavelength <= 645) {
-        R = 1.0;
-        G = pow(-(wavelength - 645) / (645 - 580), gamma);
-        B = 0.0;
-    } else if (wavelength >= 645 && wavelength <= 750) {
-        attenuation = 0.3 + 0.7 * (750 - wavelength) / (750 - 645);
-        R = pow(1.0 * attenuation, gamma);
-        G = 0.0;
-        B = 0.0;
-    } else {
-        R = 0.0;
-        G = 0.0;
-        B = 0.0;
-    }
-
-    if (R < 0) R = 0; else if (R > 1) R = 1;
-    if (G < 0) G = 0; else if (G > 1) G = 1;
-    if (B < 0) B = 0; else if (B > 1) B = 1;
-
-    *r = R * 255;
-    *g = G * 255;
-    *b = B * 255;
-}
-
-int32_t sdl_color(char * color_str)
-{
-    #define MAX_COLORS (sizeof(colors)/sizeof(colors[0]))
-
-    static struct {
-        char * name;
-        int32_t id;
-    } colors[] = {
-        { "PURPLE",     SDL_PURPLE     },
-        { "BLUE",       SDL_BLUE       },
-        { "LIGHT_BLUE", SDL_LIGHT_BLUE },
-        { "GREEN",      SDL_GREEN      },
-        { "YELLOW",     SDL_YELLOW     },
-        { "ORANGE",     SDL_ORANGE     },
-        { "PINK",       SDL_PINK       },
-        { "RED",        SDL_RED        },
-        { "GRAY",       SDL_GRAY       },
-        { "WHITE",      SDL_WHITE      },
-        { "BLACK",      SDL_BLACK      },
-                    };
-
-    int32_t i;
-
-    for (i = 0; i < MAX_COLORS; i++) {
-        if (strcasecmp(color_str, colors[i].name) == 0) {
-            return colors[i].id;
+    // plot
+    for (x = 0; x < x_span; x++) {
+        if (yv[x].max == -1e99) {
+            continue;
         }
+        y_min = yv[x].min * (y_span / yv_span);
+        y_max = yv[x].max * (y_span / yv_span);
+        sdl_render_line(pane, 
+                        x_origin+x, y_origin-y_min,
+                        x_origin+x, y_origin-y_max,
+                        SDL_WHITE);
     }
 
-    return -1;
-}
+    // x axis
+    if (y_origin <= y_bottom && y_origin >= y_top) {
+        sdl_render_line(pane, 
+                        x_origin, y_origin, 
+                        x_origin + x_span, y_origin,
+                        SDL_GREEN);
+    }
 
+    sprintf(s, "%0.2f", xv_min);
+    sdl_render_printf(pane, 
+                    x_origin, y_bottom,
+                    PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
+    sprintf(s, "%0.2f", xv_max);
+    sdl_render_printf(pane, 
+                      x_end-COL2X(strlen(s),PLOT_FONTSZ), y_bottom,
+                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
+
+    x_title = (x_end + x_origin) / 2 - COL2X(strlen(title),PLOT_FONTSZ) / 2;
+    sdl_render_printf(pane, 
+                      x_title, y_bottom,
+                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", title);
+
+    // y axis
+    sdl_render_line(pane, 
+                    x_origin, y_top,
+                    x_origin, y_bottom,
+                    SDL_GREEN);
+
+    sdl_render_printf(pane, 
+                      0, y_top, 
+                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_max);
+    sdl_render_printf(pane, 
+                      0, y_bottom-ROW2Y(1,PLOT_FONTSZ)+0, 
+                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_min);
+
+}

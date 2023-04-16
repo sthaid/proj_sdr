@@ -1,3 +1,8 @@
+#include <stdlib.h>
+#include <string.h>
+
+#include <misc.h>
+#include <fft.h>
 
 // xxx these are not thread safe, for now
 
@@ -6,25 +11,36 @@
 #define R2C_1D 2
 #define C2R_1D 3
 
+#define TYPE_STR(t) \
+    ((t) == NONE   ? "NONE" : \
+     (t) == DFT_1D ? "DFT_1D" : \
+     (t) == R2C_1D ? "R2C_1D" : \
+     (t) == C2R_1D ? "C2R_1D" : \
+                     "????")
+
+#define DIR_STR(d) ((d) == FFTW_FORWARD ? "FWD" : "BACK")
+
 typedef struct {
     int type;
     int n;
     void *in;
     void *out;
     int dir;
-    fftw_plan *plan;
+    fftw_plan plan;
 } plan_t;
 
 #define MAX_PLAN 20
-static plan_t plan[MAX_PLAN];
+static plan_t Plan[MAX_PLAN];
 
-static fftw_plan * get_plan(int type, int n, void *in, void *out, int dir)
+static fftw_plan get_plan(int type, int n, void *in, void *out, int dir)
 {
     int i;
+    plan_t *p;
+    fftw_plan plan;
     
     for (i = 0; i < MAX_PLAN; i++) {
-        plan_t *p = plan[i];
-        if (p->type == TYPE_NONE) {
+        p = &Plan[i];
+        if (p->type == NONE) {
             break;
         }
         if (p->type == type && p->n == n && p->in == in && p->out == out && p->dir == dir) {
@@ -38,6 +54,8 @@ static fftw_plan * get_plan(int type, int n, void *in, void *out, int dir)
 
     // xxx save the in array and restore it when creating the plan
 
+    NOTICE("creating fftw_plan %s n=%d in=%p out=%p dir=%s\n",
+           TYPE_STR(type), n, in, out, DIR_STR(dir));
     switch (type) {
     case DFT_1D:
         plan = fftw_plan_dft_1d(n, in, out, dir, FFTW_ESTIMATE);
@@ -59,27 +77,31 @@ static fftw_plan * get_plan(int type, int n, void *in, void *out, int dir)
     p->out  = out;
     p->dir  = dir;
     p->plan = plan;
+
+    return p->plan;
 }
 
-void lpf_complex(complex *data, int n, double sample_rate, double f)
+void lpf_complex(complex *data, int n, double sample_rate, double f, char *str)
 {
     unsigned long start, duration;
-    fftw_plan *fwd, *back;
+    fftw_plan fwd, back;
+    int i, ix;
+
+    NOTICE("lpf_complex %s starting\n", str);
 
     // find/create the plans
-    fwd = find_plan(DFT_1D, n, data, data, FFT_FORWARD);
-    back = find_plan(DFT_1D, n, data, data, FFT_BACKWARD);
+    fwd = get_plan(DFT_1D, n, data, data, FFTW_FORWARD);
+    back = get_plan(DFT_1D, n, data, data, FFTW_BACKWARD);
     
     // perform forward fft
     start = microsec_timer();
     fftw_execute(fwd);
 
     // apply filter
-    // xxx check this
     ix = n / sample_rate * f;
     for (i = ix; i < n/2+1; i++) {
         data[i] = 0;
-        data[n-i] = 0;
+        data[n-i-1] = 0;
     }
 
     // perform backward fft
@@ -87,17 +109,20 @@ void lpf_complex(complex *data, int n, double sample_rate, double f)
     duration = microsec_timer() - start;
 
     // print elapsed time
-    NOTICE("duration %ld ms\n", duration/1000);
+    NOTICE("lpf_complex %s duration %ld ms\n", str, duration/1000);
 }
 
-void lpf_real(double *data_arg, int n, double sample_rate, double f)
+void lpf_real(double *data_arg, int n, double sample_rate, double f, char *str)
 {
     unsigned long start, duration;
-    fftw_plan *fwd, *back;
+    fftw_plan fwd, back;
+    int i, ix;
 
     #define MAX_N 20000000
 
     static double *data;
+
+    NOTICE("lpf_real %s starting\n", str);
 
     // xxx
     if (n > MAX_N) {
@@ -106,19 +131,19 @@ void lpf_real(double *data_arg, int n, double sample_rate, double f)
 
     // allocate data buffer, and copy caller's data to it
     if (data == NULL) {
-        data = fft_alloc_real(2*(MAX_N/2+1));
+        data = fftw_alloc_real(2*(MAX_N/2+1));
     }
     memcpy(data, data_arg, n*sizeof(double));
 
     // find/create the plans
-    fwd = find_plan(R2C_1D, n, data, data, FFT_FORWARD);
-    back = find_plan(C2R_1D, n, data, data, FFT_BACKWARD);
+    fwd = get_plan(R2C_1D, n, data, data, FFTW_FORWARD);
+    back = get_plan(C2R_1D, n, data, data, FFTW_BACKWARD);
 
     // perform forward fft
     start = microsec_timer();
     fftw_execute(fwd);
 
-    // xxx filter
+    // apply filter
     ix = n / sample_rate * f;
     for (i = ix; i < n/2+1; i++) {
         data[i] = 0;
@@ -132,5 +157,5 @@ void lpf_real(double *data_arg, int n, double sample_rate, double f)
     memcpy(data_arg, data, n*sizeof(double));
 
     // print elapsed time
-    NOTICE("duration %ld ms\n", duration/1000);
+    NOTICE("lpf_real %s duration %ld ms\n", str, duration/1000);
 }

@@ -35,10 +35,12 @@ void log_msg(char *lvl, char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 unsigned long microsec_timer(void);
 unsigned long get_real_time_us(void);
 
+#if 0
 // -----------------  FAST SINE WAVE  -------------
 
 void init_sine_wave(void);
 double sine_wave(double f, double t);
+#endif
 
 // -----------------  DATA SET OPS  ---------------
 

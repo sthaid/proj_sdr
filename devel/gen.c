@@ -129,9 +129,9 @@ void init_antenna(void)
 // - - - - - - - - - - - - - - - - - - - - 
 
 struct audio_s {
-    int max;
+    int n;
     int sample_rate;
-    float *data;
+    double *data;
 } audio[MAX_AUDIO];
 
 double get_audio(int id, double t)
@@ -139,7 +139,7 @@ double get_audio(int id, double t)
     int idx;
     struct audio_s *a = &audio[id];
 
-    idx = (unsigned long)nearbyint(t * a->sample_rate) % a->max;
+    idx = (unsigned long)nearbyint(t * a->sample_rate) % a->n;
     return a->data[idx];
 }
 
@@ -147,7 +147,7 @@ void init_audio_wav_file(int id, char *filename)
 {
     int    ret, num_chan, num_items, sample_rate;
     struct audio_s *a = &audio[id];
-    float *data;
+    double *data;
 
     ret = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
     if (ret != 0) {
@@ -161,9 +161,11 @@ void init_audio_wav_file(int id, char *filename)
         exit(1);
     }
 
-    a->max         = num_items;
+    a->n         = num_items;
     a->sample_rate = sample_rate;
     a->data        = data;
+
+    lpf_real(a->data, a->n, sample_rate, 3000, filename);
 
     //lpf
     //normalize
@@ -176,14 +178,14 @@ void init_audio_sine_wave(int id, int f)
     double          t, dt;
     int             i;
 
-    a->max = 24000;
+    a->n = 24000;
     a->sample_rate = 24000;
-    a->data = (float*)calloc(a->max, sizeof(float));
+    a->data = (double*)calloc(a->n, sizeof(double));
 
     t = 0;
     dt = 1. / a->sample_rate;
 
-    for (i = 0; i < a->max; i++) {
+    for (i = 0; i < a->n; i++) {
         a->data[i] = sin(w * t);
         t += dt;
     }
@@ -193,11 +195,11 @@ void init_audio_white_noise(int id)
 {
     struct audio_s *a = &audio[id];
 
-    a->max = 24000;
+    a->n = 24000;
     a->sample_rate = 24000;
-    a->data = (float*)calloc(a->max, sizeof(float));
+    a->data = (double*)calloc(a->n, sizeof(double));
 
-    for (int i = 0; i < a->max; i++) {
+    for (int i = 0; i < a->n; i++) {
         a->data[i] =  2 * (((double)random() / RAND_MAX) - 0.5);
     }
 

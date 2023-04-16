@@ -180,6 +180,9 @@ void sdl_get_max_texture_dim(int32_t * max_texture_dim);
 // display mode
 void sdl_full_screen(bool enable);
 
+// print screen, file_name must end in .jpg or .png
+void sdl_print_screen(char * file_name, bool flash_display, rect_t * rect);
+
 // pane support
 void sdl_pane_manager(void *display_cx,                        // optional, context
                       void (*display_start)(void *display_cx), // optional, called prior to pane handlers
@@ -196,6 +199,10 @@ void sdl_pane_update(pane_cx_t *pane_cx,
 // display init and present
 void sdl_display_init(int32_t * win_width, int32_t * win_height, bool * win_minimized);
 void sdl_display_present(void);
+
+// colors
+void sdl_define_custom_color(int32_t color, uint8_t r, uint8_t g, uint8_t b);
+void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b);
 
 // font support
 int32_t sdl_pane_cols(rect_t * pane, int32_t font_ptsize);
@@ -248,12 +255,12 @@ texture_t sdl_create_iyuv_texture(int32_t w, int32_t h);
 void sdl_update_iyuv_texture(texture_t texture, uint8_t *y_plane, int y_pitch, 
             uint8_t *u_plane, int u_pitch, uint8_t *v_plane, int v_pitch);
 
-// print screen, file_name must end in .jpg or .png
-void sdl_print_screen(char * file_name, bool flash_display, rect_t * rect);
-
-// colors
-void sdl_define_custom_color(int32_t color, uint8_t r, uint8_t g, uint8_t b);
-void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b);
-int32_t sdl_color(char * color_str);
+// plot
+#define MAX_PLOT 6
+void sdl_plot(rect_t *pane, int idx,
+              double *data, int n,
+              double xv_min, double xv_max,
+              double yv_min, double yv_max,
+              char *title);
 
 #endif
