@@ -2284,13 +2284,6 @@ void sdl_plot(rect_t *pane, int idx,
     }
 
     // x axis
-    if (y_origin <= y_bottom && y_origin >= y_top) {
-        sdl_render_line(pane, 
-                        x_origin, y_origin, 
-                        x_origin + x_span, y_origin,
-                        SDL_GREEN);
-    }
-
     sprintf(s, "%0.2f", xv_min);
     sdl_render_printf(pane, 
                     x_origin, y_bottom,
@@ -2305,6 +2298,13 @@ void sdl_plot(rect_t *pane, int idx,
                       x_title, y_bottom,
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", title);
 
+    if (y_origin <= y_bottom && y_origin >= y_top) {
+        sdl_render_line(pane, 
+                        x_origin, y_origin, 
+                        x_origin + x_span, y_origin,
+                        SDL_GREEN);
+    }
+
     // y axis
     sdl_render_line(pane, 
                     x_origin, y_top,
@@ -2317,5 +2317,4 @@ void sdl_plot(rect_t *pane, int idx,
     sdl_render_printf(pane, 
                       0, y_bottom-ROW2Y(1,PLOT_FONTSZ)+0, 
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_min);
-
 }

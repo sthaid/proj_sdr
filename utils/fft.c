@@ -1,10 +1,18 @@
+// xxx 
+// - work on lpf_complex
+// - these are not thread safe, for now
+// - check for MAX_OUT_COMPLEX whereever out_complex is used
+// - save the in array and restore it when creating the plan, or comment about it not needed
+
 #include <stdlib.h>
 #include <string.h>
 
 #include <misc.h>
 #include <fft.h>
 
-// xxx these are not thread safe, for now
+//
+// defines
+//
 
 #define NONE   0
 #define DFT_1D 1
@@ -20,6 +28,13 @@
 
 #define DIR_STR(d) ((d) == FFTW_FORWARD ? "FWD" : "BACK")
 
+#define MAX_OUT_COMPLEX 20000000
+#define MAX_PLAN 20
+
+//
+// typedefs
+//
+
 typedef struct {
     int type;
     int n;
@@ -29,8 +44,21 @@ typedef struct {
     fftw_plan plan;
 } plan_t;
 
-#define MAX_PLAN 20
-static plan_t Plan[MAX_PLAN];
+//
+// variables
+//
+
+static plan_t   Plan[MAX_PLAN];
+static complex *out_complex;
+
+// -----------------  INIT  -------------------------------------------
+
+void init_fft(void)
+{
+    out_complex = fftw_alloc_complex(MAX_OUT_COMPLEX);
+}
+
+// -----------------  GET PLAN  ---------------------------------------
 
 static fftw_plan get_plan(int type, int n, void *in, void *out, int dir)
 {
@@ -51,8 +79,6 @@ static fftw_plan get_plan(int type, int n, void *in, void *out, int dir)
     if (i == MAX_PLAN) {
         FATAL("out of plan\n");
     }
-
-    // xxx save the in array and restore it when creating the plan
 
     NOTICE("creating fftw_plan %s n=%d in=%p out=%p dir=%s\n",
            TYPE_STR(type), n, in, out, DIR_STR(dir));
@@ -80,6 +106,38 @@ static fftw_plan get_plan(int type, int n, void *in, void *out, int dir)
 
     return p->plan;
 }
+
+// -----------------  EXECUTE FFT  ------------------------------------
+
+void fft_fwd_r2c(double *in, complex *out, int n)
+{
+    fftw_plan p;
+
+    p = get_plan(R2C_1D, n, in, out, FFTW_FORWARD);
+    fftw_execute(p);
+}
+
+void fft_back_c2r(complex *in, double *out, int n)
+{
+    fftw_plan p;
+
+    p = get_plan(C2R_1D, n, in, out, FFTW_BACKWARD);
+    fftw_execute(p);
+}
+
+void fft_fwd_r2r(double *in, double *out, int n)
+{
+    fftw_plan p;
+
+    p = get_plan(R2C_1D, n, in, out_complex, FFTW_FORWARD);
+    fftw_execute(p);
+
+    for (int i = 0; i < n; i++) {
+        out[i] = cabs(out_complex[i]);
+    }
+}
+
+// -----------------  LOW PASS FILTERS  -------------------------------
 
 void lpf_complex(complex *data, int n, double sample_rate, double f, char *str)
 {
@@ -112,50 +170,21 @@ void lpf_complex(complex *data, int n, double sample_rate, double f, char *str)
     NOTICE("lpf_complex %s duration %ld ms\n", str, duration/1000);
 }
 
-void lpf_real(double *data_arg, int n, double sample_rate, double f, char *str)
+void lpf_real(double *in, double *out, int n, double sample_rate, double f, char *str)
 {
-    unsigned long start, duration;
-    fftw_plan fwd, back;
-    int i, ix;
+    unsigned long start=microsec_timer();
+    int           i, ix;
 
-    #define MAX_N 20000000
-
-    static double *data;
-
-    NOTICE("lpf_real %s starting\n", str);
-
-    // xxx
-    if (n > MAX_N) {
-        FATAL("n=%d is too large\n", n);
-    }
-
-    // allocate data buffer, and copy caller's data to it
-    if (data == NULL) {
-        data = fftw_alloc_real(2*(MAX_N/2+1));
-    }
-    memcpy(data, data_arg, n*sizeof(double));
-
-    // find/create the plans
-    fwd = get_plan(R2C_1D, n, data, data, FFTW_FORWARD);
-    back = get_plan(C2R_1D, n, data, data, FFTW_BACKWARD);
-
-    // perform forward fft
-    start = microsec_timer();
-    fftw_execute(fwd);
-
-    // apply filter
+    // perform forward fft,
+    // apply filter,
+    // perform backward fft
+    fft_fwd_r2c(in, out_complex, n);
     ix = n / sample_rate * f;
     for (i = ix; i < n/2+1; i++) {
-        data[i] = 0;
+        out_complex[i] = 0;
     }
-
-    // perform backward fft
-    fftw_execute(back);
-    duration = microsec_timer() - start;
-
-    // copy result back to caller's buffer
-    memcpy(data_arg, data, n*sizeof(double));
+    fft_back_c2r(out_complex, out, n);
 
     // print elapsed time
-    NOTICE("lpf_real %s duration %ld ms\n", str, duration/1000);
+    NOTICE("lpf_real %s duration %ld ms\n", str, (microsec_timer()-start)/1000);
 }

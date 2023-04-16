@@ -165,7 +165,7 @@ void init_audio_wav_file(int id, char *filename)
     a->sample_rate = sample_rate;
     a->data        = data;
 
-    lpf_real(a->data, a->n, sample_rate, 3000, filename);
+    // xxx lpf_real(a->data, a->n, sample_rate, 3000, filename);
 
     //lpf
     //normalize

@@ -16,7 +16,7 @@ run_gen: gen
 	./gen > out
 
 run: ut
-	./ut plot
+	./ut lpf
 
 #################
 
