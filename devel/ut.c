@@ -67,6 +67,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
 void *plot_test(void *cx);
 void *lpf_test(void *cx);
+void *audio_test(void *cx);
 
 //
 // test table
@@ -78,6 +79,7 @@ static struct test_s {
 } tests[] = {
         { "plot", plot_test },
         { "lpf",  lpf_test  },
+        { "audio",  audio_test  },
                 };
 
 // -----------------  MAIN  --------------------------------
@@ -307,3 +309,50 @@ void *lpf_test(void *cx)
 
     return NULL;
 }
+
+// -----------------  AUDIO TEST  ---------------------------
+
+void *audio_test(void *cx)
+{
+    double *data;
+    int ret, num_chan, num_items, sample_rate, n, idx;
+
+    // read wav file
+    ret = read_wav_file("super_critical.wav", &data, &num_chan, &num_items, &sample_rate);
+    if (ret != 0 || num_chan != 1) {
+        FATAL("audio_test ret=%d num_chan=%d\n", ret, num_chan);
+    }
+    NOTICE("num_chan=%d num_items=%d sample_rate=%d\n", num_chan, num_items, sample_rate);
+
+    n = sample_rate / 10;
+    idx = 0;
+
+    double *in = fftw_alloc_real(n);
+    double *out = fftw_alloc_real(n);
+    double *out_fft = fftw_alloc_real(n);
+
+    // loop forever, writing wav file audio to stdout
+    while (true) {
+        float audio_out[n];
+
+        memcpy(in, data+idx, n*sizeof(double));
+        fft_lpf_real(in, out, n, sample_rate, 2700);
+
+        fft_fwd_r2r(out, out_fft, n);
+        normalize(out_fft, n, 0, 1);
+        PLOT(0, out_fft, n,  0, sample_rate,  0, 1, "XXX");
+
+        for (int i = 0; i < n; i++) {
+            audio_out[i] = out[i] / n;
+        }
+        fwrite(audio_out, sizeof(float), n, stdout);
+
+        idx += n;
+        if (idx + n >= num_items) {
+            idx = 0;
+        }
+    }
+}
+
+// xxx put tick marks on plot
+// - adjust the cutoff frequency

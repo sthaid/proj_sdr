@@ -1,0 +1,1 @@
+aplay -t raw -c 1 -f FLOAT_LE -r 22000
