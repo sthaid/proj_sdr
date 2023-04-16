@@ -6,6 +6,18 @@
 
 #define MAX_TESTS (sizeof(tests)/sizeof(tests[0]))
 
+#define PLOT(_idx,_data,_n,_xvmin,_xvmax,_yvmin,_yvmax,_title) \
+    do { \
+        plots_t *p = &plots[_idx]; \
+        p->data    = _data; \
+        p->n       = _n; \
+        p->xv_min  = _xvmin; \
+        p->xv_max  = _xvmax; \
+        p->yv_min  = _yvmin; \
+        p->yv_max  = _yvmax; \
+        p->title   = _title; \
+    } while (0)
+
 //
 // typedefs
 //
@@ -195,12 +207,10 @@ void zero_real(double *data, int n)
 
 // -----------------  PLOT TEST  ---------------------------
 
-// xxx macros for plot
 void *plot_test(void *cx)
 {
     int sample_rate, f, n;
     double *data;
-    plots_t *p;
 
     #define SECS 1
 
@@ -212,110 +222,49 @@ void *plot_test(void *cx)
 
     add_sine_wave(sample_rate, f, n, data);
 
-    p = &plots[0];
-    p->data    = data;
-    p->n       = n;
-    p->xv_min  = 0;
-    p->xv_max  = 1;
-    p->yv_min  = -1;
-    p->yv_max  = +1;
-    p->title   = "SINE WAVE";
-
-    p = &plots[1];
-    p->data    = data;
-    p->n       = n;
-    p->xv_min  = 0;
-    p->xv_max  = 1;
-    p->yv_min  = -0.5;
-    p->yv_max  = +0.5;
-    p->title   = "SINE WAVE";
-
-    p = &plots[2];
-    p->data    = data;
-    p->n       = n;
-    p->xv_min  = 0;
-    p->xv_max  = 1;
-    p->yv_min  = 0.5;
-    p->yv_max  = 1.5;
-    p->title   = "SINE WAVE";
+    PLOT(0, data, n,  0, 1,  -1, +1,  "SINE WAVE");
+    PLOT(1, data, n,  0, 1,  -0.5, +0.5,  "SINE WAVE");
+    PLOT(2, data, n,  0, 1,  0.5, +1.5,  "SINE WAVE");
 
     return NULL;
 }
-
 
 // -----------------  LPF TEST  ---------------------------
 
 void *lpf_test(void *cx)
 {
     int sample_rate, f, n;
-    double *in, *lpf, *out, *out2;
-    plots_t *p;
+    double *in, *in_fft;
+    double *lpf, *lpf_fft;
 
     #define SECS 1
 
     sample_rate = 24000;
     n = SECS * sample_rate;
-    in = fftw_alloc_real(n);
-    lpf = fftw_alloc_real(n);
-    out = fftw_alloc_real(n);
-    out2 = fftw_alloc_real(n);
-    zero_real(in, n);
 
-    // - - - - - -
+    // allocate buffers
+    in      = fftw_alloc_real(n);
+    in_fft  = fftw_alloc_real(n);
+    lpf     = fftw_alloc_real(n);
+    lpf_fft = fftw_alloc_real(n);
 
     // create sum of sine waves, to 'in' buff
+    zero_real(in, n);
     for (f = 1000; f <= 12000; f += 1000) {
         add_sine_wave(sample_rate, f, n, in);
     }
     normalize(in, n, -1, 1);
 
-    // plot 'in' buff
-    p = &plots[0];
-    p->data    = in;
-    p->n       = n / 100;
-    p->xv_min  = 0;
-    p->xv_max  = 1 / 100.;
-    p->yv_min  = -1;
-    p->yv_max  = +1;
-    p->title   = "SUM OF SINE WAVES";
+    // perfrom fwd fft on 'in' to 'in_fft', and plot
+    fft_fwd_r2r(in, in_fft, n);
+    normalize(in_fft, n, 0, 1);
+    PLOT(0, in_fft, n,  0, n,  0, +1,  "IN_FFT");
 
-    // - - - - - -
-
-    // perfrom fwd fft on 'in' to 'out';
-    fft_fwd_r2r(in, out, n);
-    normalize(out, n, 0, 1);
-
-    // plot 'out'
-    p = &plots[1];
-    p->data    = out;
-    p->n       = n;
-    p->xv_min  = 0;
-    p->xv_max  = n / 2;
-    p->yv_min  = 0;
-    p->yv_max  = +1;
-    p->title   = "LPF 1500";
-
-    // - - - - - -
-
-    // perform lpf on 'in' to 'lpf'
+    // perform lpf on 'in' to 'lpf', and plot the fft
     lpf_real(in, lpf, n, sample_rate, 1500, "LPF");
-
-    // - - - - - -
-
-    // perfrom fwd fft on 'lpf' to 'out2';
-    fft_fwd_r2r(lpf, out2, n);
-    normalize(out2, n, 0, 1);
-    // xxx streamline the plot with a macro
-
-    // plot 'out'
-    p = &plots[2];
-    p->data    = out2;
-    p->n       = n;
-    p->xv_min  = 0;
-    p->xv_max  = n / 2;
-    p->yv_min  = 0;
-    p->yv_max  = +1;
-    p->title   = "LPF 1500";
+    fft_fwd_r2r(lpf, lpf_fft, n);
+    normalize(lpf_fft, n, 0, 1);
+    PLOT(1, lpf_fft, n,  0, n,  0, +1,  "LPF_FFT");
 
     return NULL;
 }
