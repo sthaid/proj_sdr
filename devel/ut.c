@@ -18,6 +18,23 @@
         p->title   = _title; \
     } while (0)
 
+#define PLOT_COMPLEX(_idx,_data_complex,_n,_xvmin,_xvmax,_yvmin,_yvmax,_title) \
+    do { \
+        plots_t *p = &plots[_idx]; \
+        double *data = malloc(n*sizeof(double)); \
+        for (int i = 0; i < _n; i++) { \
+            data[i] = cabs(_data_complex[i]); \
+        } \
+        normalize(data, n, _yvmin, _yvmax); \
+        p->data    = data; \
+        p->n       = _n; \
+        p->xv_min  = _xvmin; \
+        p->xv_max  = _xvmax; \
+        p->yv_min  = _yvmin; \
+        p->yv_max  = _yvmax; \
+        p->title   = _title; \
+    } while (0)
+
 //
 // typedefs
 //
@@ -236,6 +253,8 @@ void *lpf_test(void *cx)
     int sample_rate, f, n;
     double *in, *in_fft;
     double *lpf, *lpf_fft;
+    complex *in_complex, *in_fft_complex;
+    complex *lpf_complex, *lpf_fft_complex;
 
     #define SECS 1
 
@@ -247,13 +266,22 @@ void *lpf_test(void *cx)
     in_fft  = fftw_alloc_real(n);
     lpf     = fftw_alloc_real(n);
     lpf_fft = fftw_alloc_real(n);
+    in_complex = fftw_alloc_complex(n);
+    in_fft_complex = fftw_alloc_complex(n);
+    lpf_complex = fftw_alloc_complex(n);
+    lpf_fft_complex = fftw_alloc_complex(n);
 
-    // create sum of sine waves, to 'in' buff
+    // create sum of sine waves, to 'in' and 'in_complex' buffs
     zero_real(in, n);
-    for (f = 1000; f <= 12000; f += 1000) {
+    for (f = 990; f <= 12000; f += 1000) {
         add_sine_wave(sample_rate, f, n, in);
     }
     normalize(in, n, -1, 1);
+    for (int i = 0; i < n; i++) {
+        in_complex[i] = in[i];
+    }
+
+    // - -
 
     // perfrom fwd fft on 'in' to 'in_fft', and plot
     fft_fwd_r2r(in, in_fft, n);
@@ -261,10 +289,21 @@ void *lpf_test(void *cx)
     PLOT(0, in_fft, n,  0, n,  0, +1,  "IN_FFT");
 
     // perform lpf on 'in' to 'lpf', and plot the fft
-    lpf_real(in, lpf, n, sample_rate, 1500, "LPF");
+    fft_lpf_real(in, lpf, n, sample_rate, 1500);
     fft_fwd_r2r(lpf, lpf_fft, n);
     normalize(lpf_fft, n, 0, 1);
     PLOT(1, lpf_fft, n,  0, n,  0, +1,  "LPF_FFT");
+
+    // - - 
+
+    // perfrom fwd fft on 'in_complex' to 'in_fft_complex', and plot
+    fft_fwd_c2c(in_complex, in_fft_complex, n);
+    PLOT_COMPLEX(2, in_fft_complex, n,  0, n,  0, +1,  "IN_FFT_COMPLEX");
+
+    // perform lpf on 'in_complex' to 'lpf_complex' and plot the fft
+    fft_lpf_complex(in_complex, lpf_complex, n, sample_rate, 1500);
+    fft_fwd_c2c(lpf_complex, lpf_fft_complex, n);
+    PLOT_COMPLEX(3, lpf_fft_complex, n,  0, n,  0, +1,  "LPF_FFT_COMPLEX");
 
     return NULL;
 }
