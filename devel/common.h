@@ -18,3 +18,8 @@
 #include <png_rw.h>
 #include <wav.h>
 #include <fft.h>
+
+// ut_antenna.c
+void init_antenna(void);
+double get_antenna(double t, double f_center);
+

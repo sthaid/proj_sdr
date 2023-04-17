@@ -1,4 +1,4 @@
-TARGETS=gen ut
+TARGETS=ut
 
 LIBS=-lm -lsndfile -lpng -lfftw3 -lSDL2 -lSDL2_ttf
 INCLUDE=-I../utils -I/usr/include/SDL2
@@ -6,19 +6,20 @@ UTILS=../utils/fft.c ../utils/misc.c ../utils/png_rw.c ../utils/sdl.c ../utils/w
 
 all: $(TARGETS)
 
-gen: gen.c $(UTILS)
+ut: ut.c ut_antenna.c $(UTILS)
 	gcc -g -O2 -Wall $(INCLUDE) -o $@ $^ $(LIBS)
 
-ut: ut.c $(UTILS)
+run: ut
+	#./ut audio | spkr
+	./ut gen
+
+#################
+
+gen: gen.c $(UTILS)
 	gcc -g -O2 -Wall $(INCLUDE) -o $@ $^ $(LIBS)
 
 run_gen: gen
 	./gen > out
-
-run: ut
-	./ut audio | spkr
-
-#################
 
 old: gen.c ../utils/sdl.c ../utils/misc.c ../utils/png_rw.c ../utils/wav.c
 	gcc -g -O2 -Wall -I../utils -I/usr/include/SDL2 -o $@ $^ -lsndfile -lpng -lm -lfftw3 -lSDL2 -lSDL2_ttf

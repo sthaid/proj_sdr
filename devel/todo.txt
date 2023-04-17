@@ -3,18 +3,23 @@ utils
 - filter   lpf_fft
 
 progs  (*) tools and tests
+- ut
 - gen    *
 - plot   *
 - record *
 - svr
 - rx
 
-
 plot improvements
-
     // xxx improvements
     // - samller font
     // - y axis label on left
     // - flexability on where in the pane
     // - auto y scale
+
+----
+
+clean up ut, and gen
+
+start program to plot the gen output
 

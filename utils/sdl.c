@@ -2307,8 +2307,8 @@ void sdl_plot(rect_t *pane, int idx,
 
     // y axis
     sdl_render_line(pane, 
-                    x_origin, y_top,
-                    x_origin, y_bottom,
+                    x_origin-2, y_top,
+                    x_origin-2, y_bottom,
                     SDL_GREEN);
 
     sdl_render_printf(pane, 

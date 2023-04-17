@@ -69,7 +69,7 @@ int main(int argc, char **argv)
                 if (fabs(ig_q) > max_iq_q) max_iq_q = fabs(ig_q);
 
                 #define MAX_IQ_VALUE 10.0
-                #define CONVERT(x) nearbyint((128 / MAX_IQ_VALUE) * ((x) + MAX_IQ_VALUE))
+                #define CONVERT(x) nearbyint((128 / MAX_IQ_VALUE) * ((x) + MAX_IQ_VALUE))  // xxx check this
 
                 usb[2*j+0] = CONVERT(ig_i);
                 usb[2*j+1] = CONVERT(ig_q);

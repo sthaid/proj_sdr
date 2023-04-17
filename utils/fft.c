@@ -30,7 +30,7 @@
 #define DIR_STR(d) ((d) == FFTW_FORWARD ? "FWD" : "BACK")
 
 #define MAX_OUT_COMPLEX 20000000
-#define MAX_PLAN 20
+#define MAX_PLAN 100
 
 //
 // typedefs

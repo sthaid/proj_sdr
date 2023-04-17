@@ -1,6 +1,10 @@
-// xxx put tick marks on plot
-// - adjust the cutoff frequency
 // xxx comments
+// xxx put tick marks on plot
+// xxx better way to handle global args
+// xxx audio out
+// xxx add gen.c
+// xxx init_fft?
+// xxx move plot y axis to left by 1 pixel
 
 #include "common.h"
 
@@ -10,33 +14,26 @@
 
 #define MAX_TESTS (sizeof(tests)/sizeof(tests[0]))
 
-#define PLOT(_idx,_data,_n,_xvmin,_xvmax,_yvmin,_yvmax,_title) \
+#define PLOT(_idx,_is_complex,_data,_n,_xvmin,_xvmax,_yvmin,_yvmax,_title) \
     do { \
         plots_t *p = &plots[_idx]; \
-        p->data    = _data; \
-        p->n       = _n; \
-        p->xv_min  = _xvmin; \
-        p->xv_max  = _xvmax; \
-        p->yv_min  = _yvmin; \
-        p->yv_max  = _yvmax; \
-        p->title   = _title; \
-    } while (0)
-
-#define PLOT_COMPLEX(_idx,_data_complex,_n,_xvmin,_xvmax,_yvmin,_yvmax,_title) \
-    do { \
-        plots_t *p = &plots[_idx]; \
-        double *data = malloc(n*sizeof(double)); \
-        for (int i = 0; i < _n; i++) { \
-            data[i] = cabs(_data_complex[i]); \
+        pthread_mutex_lock(&mutex); \
+        if (!(_is_complex)) { \
+            memcpy(p->pd, _data, (_n)*sizeof(double)); \
+        } else { \
+            complex *data_complex = (complex*)(_data); \
+            for (int i = 0; i < (_n); i++) { \
+                p->pd[i] = cabs(data_complex[i]); \
+            } \
+            normalize(p->pd, _n, 0, 1); \
         } \
-        normalize(data, n, _yvmin, _yvmax); \
-        p->data    = data; \
         p->n       = _n; \
         p->xv_min  = _xvmin; \
         p->xv_max  = _xvmax; \
         p->yv_min  = _yvmin; \
         p->yv_max  = _yvmax; \
         p->title   = _title; \
+        pthread_mutex_unlock(&mutex); \
     } while (0)
 
 //
@@ -44,7 +41,7 @@
 //
 
 typedef struct {
-    double *data;
+    double  pd[250000];  //xxx
     int     n;
     double  xv_min;
     double  xv_max;
@@ -64,6 +61,8 @@ plots_t plots[MAX_PLOT];
 
 int test_param;
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 //
 // prototypes
 //
@@ -74,6 +73,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 void *plot_test(void *cx);
 void *lpf_test(void *cx);
 void *audio_test(void *cx);
+void *gen_test(void *cx);
 
 //
 // test table
@@ -83,9 +83,10 @@ static struct test_s {
     char *name;
     void *(*proc)(void *cx);
 } tests[] = {
-        { "plot", plot_test },
-        { "lpf",  lpf_test  },
-        { "audio",  audio_test  },
+        { "plot",   plot_test  },
+        { "lpf",    lpf_test   },
+        { "audio",  audio_test },
+        { "gen",    gen_test   },
                 };
 
 // -----------------  MAIN  --------------------------------
@@ -166,16 +167,18 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
+        pthread_mutex_lock(&mutex);
         for (int i = 0; i < MAX_PLOT; i++) {
             plots_t *p = &plots[i];
-            if (p->data) {
+            if (p->title) {
                 sdl_plot(pane, i,
-                        p->data, p->n,
+                        p->pd, p->n,
                         p->xv_min, p->xv_max,
                         p->yv_min, p->yv_max,
                         p->title);
             }
         }
+        pthread_mutex_unlock(&mutex);
 
         sdl_render_printf(pane, 
                           0, pane->h-ROW2Y(1,20), 20,
@@ -256,9 +259,9 @@ void *plot_test(void *cx)
 
     add_sine_wave(sample_rate, f, n, data);
 
-    PLOT(0, data, n,  0, 1,  -1, +1,  "SINE WAVE");
-    PLOT(1, data, n,  0, 1,  -0.5, +0.5,  "SINE WAVE");
-    PLOT(2, data, n,  0, 1,  0.5, +1.5,  "SINE WAVE");
+    PLOT(0, false, data, n,  0, 1,  -1, +1,  "SINE WAVE");
+    PLOT(1, false, data, n,  0, 1,  -0.5, +0.5,  "SINE WAVE");
+    PLOT(2, false, data, n,  0, 1,  0.5, +1.5,  "SINE WAVE");
 
     return NULL;
 }
@@ -301,22 +304,22 @@ void *lpf_test(void *cx)
     // perfrom fwd fft on 'in' to 'in_fft', and plot
     fft_fwd_r2r(in, in_fft, n);
     normalize(in_fft, n, 0, 1);
-    PLOT(0, in_fft, n,  0, n,  0, +1,  "IN_FFT");
+    PLOT(0, false, in_fft, n,  0, n,  0, +1,  "IN_FFT");
 
     // perform lpf on 'in' to 'lpf', and plot the fft
     fft_lpf_real(in, lpf, n, sample_rate, 1500);
     fft_fwd_r2r(lpf, lpf_fft, n);
     normalize(lpf_fft, n, 0, 1);
-    PLOT(1, lpf_fft, n,  0, n,  0, +1,  "LPF_FFT");
+    PLOT(1, false, lpf_fft, n,  0, n,  0, +1,  "LPF_FFT");
 
     // perfrom fwd fft on 'in_complex' to 'in_fft_complex', and plot
     fft_fwd_c2c(in_complex, in_fft_complex, n);
-    PLOT_COMPLEX(2, in_fft_complex, n,  0, n,  0, +1,  "IN_FFT_COMPLEX");
+    PLOT(2, true, in_fft_complex, n,  0, n,  0, +1,  "IN_FFT_COMPLEX");
 
     // perform lpf on 'in_complex' to 'lpf_complex' and plot the fft
     fft_lpf_complex(in_complex, lpf_complex, n, sample_rate, 1500);
     fft_fwd_c2c(lpf_complex, lpf_fft_complex, n);
-    PLOT_COMPLEX(3, lpf_fft_complex, n,  0, n,  0, +1,  "LPF_FFT_COMPLEX");
+    PLOT(3, true, lpf_fft_complex, n,  0, n,  0, +1,  "LPF_FFT_COMPLEX");
 
     return NULL;
 }
@@ -329,6 +332,7 @@ void *audio_test(void *cx)
     int ret, num_chan, num_items, sample_rate, n, idx;
 
     // read wav file
+//xxx make a routine for this
     ret = read_wav_file("super_critical.wav", &data, &num_chan, &num_items, &sample_rate);
     if (ret != 0 || num_chan != 1) {
         FATAL("audio_test ret=%d num_chan=%d\n", ret, num_chan);
@@ -370,7 +374,7 @@ void *audio_test(void *cx)
 
         fft_fwd_r2r(out, out_fft, n);
         normalize(out_fft, n, 0, 1);
-        PLOT(0, out_fft, n,  0, sample_rate,  0, 1, "XXX");
+        PLOT(0, false, out_fft, n,  0, sample_rate,  0, 1, "XXX");
 
         for (int i = 0; i < n; i++) {
             audio_out[i] = out[i];
@@ -382,5 +386,77 @@ void *audio_test(void *cx)
             idx = 0;
         }
     }
+}
+
+// -----------------  GEN TEST  -----------------------------
+
+#define SAMPLE_RATE  2400000   // 2.4 MS/sec
+#define F_SYNTH       600000   // 500 KHz
+
+#define F_LPF        (SAMPLE_RATE / 4)
+
+#define MAX_IQ       (SAMPLE_RATE / 10)   // 0.1 sec range
+#define DELTA_T      (1. / SAMPLE_RATE)
+#define W_SYNTH      (TWO_PI * F_SYNTH)
+
+void *gen_test(void *cx)
+{
+    double t, tmax, antenna, synth0, synth90;
+    double    ig_i, ig_q;
+    double    max_iq_i=0, max_iq_q=0;
+    int       i=0, j;
+
+    static complex       iq[MAX_IQ];
+    static complex       iq_fft[MAX_IQ];  // xxx alloc
+    static unsigned char usb[2*MAX_IQ];
+
+    tmax = 10;  // xxx arg, default is 60
+
+    init_antenna();
+
+    for (t = 0; t < tmax; t += DELTA_T) {
+        antenna = get_antenna(t, F_SYNTH);
+
+        synth0  = sin((W_SYNTH) * t);
+        synth90 = sin((W_SYNTH) * t + M_PI_2);
+
+        iq[i++] = antenna * (synth0 + I * synth90);
+
+        if (i == MAX_IQ) {
+            NOTICE("t %f\n", t);
+
+            fft_lpf_complex(iq, iq, MAX_IQ, SAMPLE_RATE, F_LPF);
+
+            fft_fwd_c2c(iq, iq_fft, MAX_IQ);
+            PLOT(0, true, iq_fft, MAX_IQ,  0, 999,  0, 1,  "ANTENNA");
+            PLOT(1, true, iq_fft, MAX_IQ/4,  0, 999,  0, 1,  "ANTENNA");
+
+            for (j = 0; j < MAX_IQ; j++) {
+                ig_i = creal(iq[j]);
+                ig_q = cimag(iq[j]);
+
+                if (fabs(ig_i) > max_iq_i) max_iq_i = fabs(ig_i);
+                if (fabs(ig_q) > max_iq_q) max_iq_q = fabs(ig_q);
+
+                #define MAX_IQ_VALUE 10.0
+                #define CONVERT(x) nearbyint(128 + 128 * ((double)(x) / MAX_IQ_VALUE))
+
+                usb[2*j+0] = CONVERT(ig_i);
+                usb[2*j+1] = CONVERT(ig_q);
+                //NOTICE("%u %u\n", usb[2*j+0], usb[2*j+1]);
+            }
+
+            //xxx fwrite(usb, sizeof(unsigned char), MAX_IQ*2, stdout);
+
+            i = 0;
+        }
+    }
+
+    NOTICE("max i=%f  q=%f  MAX_IQ_VALUE=%f\n", max_iq_i, max_iq_q, MAX_IQ_VALUE);
+    if (max_iq_i > MAX_IQ_VALUE || max_iq_q > MAX_IQ_VALUE) {
+        ERROR("exceeds MAX_IQ_VALUE %f\n", MAX_IQ_VALUE);
+    }
+
+    return 0;
 }
 
