@@ -1,3 +1,7 @@
+// xxx put tick marks on plot
+// - adjust the cutoff frequency
+// xxx comments
+
 #include "common.h"
 
 //
@@ -58,6 +62,8 @@ bool  debug;
 
 plots_t plots[MAX_PLOT];
 
+int test_param;
+
 //
 // prototypes
 //
@@ -84,7 +90,6 @@ static struct test_s {
 
 // -----------------  MAIN  --------------------------------
 
-// xxx comments
 int main(int argc, char **argv)
 {
     int i;
@@ -92,7 +97,7 @@ int main(int argc, char **argv)
     struct test_s *t;
     pthread_t tid;
 
-    init_fft();
+    init_fft();  // xxx is this needed
 
     if (argc == 1) {
         usage();
@@ -124,7 +129,7 @@ int main(int argc, char **argv)
         NULL,           // context
         NULL,           // called prior to pane handlers
         NULL,           // called after pane handlers
-        10000,          // 0=continuous, -1=never, else us
+        100000,          // 0=continuous, -1=never, else us
         1,              // number of pane handler varargs that follow
         pane_hndlr, NULL, 0, 0, win_width, win_height, PANE_BORDER_STYLE_NONE);
 
@@ -146,7 +151,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 {
     rect_t *pane = &pane_cx->pane;
 
-    #define SDL_EVENT_xxx  (SDL_EVENT_USER_DEFINED + 0)
+    #define SDL_EVENT_tbd  (SDL_EVENT_USER_DEFINED + 0)
 
     // ----------------------------
     // -------- INITIALIZE --------
@@ -172,6 +177,10 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
             }
         }
 
+        sdl_render_printf(pane, 
+                          0, pane->h-ROW2Y(1,20), 20,
+                          SDL_WHITE, SDL_BLACK, "<-  %d  ->", test_param);
+
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -181,7 +190,13 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
     if (request == PANE_HANDLER_REQ_EVENT) {
         switch (event->event_id) {
-        case SDL_EVENT_xxx:
+        case SDL_EVENT_KEY_LEFT_ARROW:
+            test_param -= 100;  // xxx step
+            break;
+        case SDL_EVENT_KEY_RIGHT_ARROW:
+            test_param += 100;
+            break;
+        case SDL_EVENT_tbd:
             break;
         default:
             break;
@@ -283,8 +298,6 @@ void *lpf_test(void *cx)
         in_complex[i] = in[i];
     }
 
-    // - -
-
     // perfrom fwd fft on 'in' to 'in_fft', and plot
     fft_fwd_r2r(in, in_fft, n);
     normalize(in_fft, n, 0, 1);
@@ -295,8 +308,6 @@ void *lpf_test(void *cx)
     fft_fwd_r2r(lpf, lpf_fft, n);
     normalize(lpf_fft, n, 0, 1);
     PLOT(1, lpf_fft, n,  0, n,  0, +1,  "LPF_FFT");
-
-    // - - 
 
     // perfrom fwd fft on 'in_complex' to 'in_fft_complex', and plot
     fft_fwd_c2c(in_complex, in_fft_complex, n);
@@ -324,6 +335,11 @@ void *audio_test(void *cx)
     }
     NOTICE("num_chan=%d num_items=%d sample_rate=%d\n", num_chan, num_items, sample_rate);
 
+    fft_lpf_real(data, data, num_items, sample_rate, 4000); // xxx ?
+    normalize(data, num_items, -1, 1);
+
+    test_param = 10000;
+
     n = sample_rate / 10;
     idx = 0;
 
@@ -336,14 +352,28 @@ void *audio_test(void *cx)
         float audio_out[n];
 
         memcpy(in, data+idx, n*sizeof(double));
-        fft_lpf_real(in, out, n, sample_rate, 2700);
+
+        int lpf_freq = test_param;
+        if (lpf_freq < 1000) lpf_freq = 1000;
+        if (lpf_freq > 10000) lpf_freq = 10000;
+        test_param = lpf_freq;
+
+        if (lpf_freq < 10000) {
+            fft_lpf_real(in, out, n, sample_rate, lpf_freq);
+            for (int i = 0; i < n; i++) {
+                out[i] /= n;
+            }
+        } else {
+            NOTICE("NO FILTERING\n");
+            memcpy(out, in, n*sizeof(double));
+        }
 
         fft_fwd_r2r(out, out_fft, n);
         normalize(out_fft, n, 0, 1);
         PLOT(0, out_fft, n,  0, sample_rate,  0, 1, "XXX");
 
         for (int i = 0; i < n; i++) {
-            audio_out[i] = out[i] / n;
+            audio_out[i] = out[i];
         }
         fwrite(audio_out, sizeof(float), n, stdout);
 
@@ -354,5 +384,3 @@ void *audio_test(void *cx)
     }
 }
 
-// xxx put tick marks on plot
-// - adjust the cutoff frequency
