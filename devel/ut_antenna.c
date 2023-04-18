@@ -3,13 +3,13 @@
 // xxx comments, format
 // -----------------  GET ANTENNA SIGNAL  ------------------------------
 
-#if 0
-#define MAX_AUDIO 5
-#define F_DELTA   20000
-#else
-#define MAX_AUDIO 12
+//#define MAX_AUDIO 5
+//#define F_DELTA   20000
+//#define MAX_AUDIO 12
+//#define F_DELTA   100000
+#define MAX_AUDIO 1
 #define F_DELTA   100000
-#endif
+
 #define F_LPF 4000
 
 static double get_audio(int id, double t);
@@ -36,6 +36,8 @@ double get_antenna(double t, double f_center)
 
 void init_antenna(void)
 {
+    init_audio_sine_wave(0, 300);
+
 #if 0
     init_audio_wav_file(0, "proud_mary.wav");
     init_audio_wav_file(1, "one_bourbon_one_scotch_one_beer.wav");
@@ -43,9 +45,9 @@ void init_antenna(void)
     init_audio_sine_wave(3, 300);
     init_audio_white_noise(4);
 #else
-    for (int i = 0; i < MAX_AUDIO; i++) {
-        init_audio_white_noise(i, 1);
-    }
+//  for (int i = 0; i < MAX_AUDIO; i++) {
+//      init_audio_white_noise(i, 1);
+//  }
 #endif
 }
 

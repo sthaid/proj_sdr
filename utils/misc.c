@@ -135,7 +135,7 @@ void normalize(double *v, int n, double min, double max)
     double vmin, vmax, vavg, vspan;
 
     average(v, n, &vmin, &vmax, &vavg);
-    NOTICE("min=%f  max=%f  avg=%f\n", vmin, vmax, vavg);
+    DEBUG("min=%f  max=%f  avg=%f\n", vmin, vmax, vavg);
     vspan = vmax - vmin;
 
     for (int i = 0; i < n; i++) {

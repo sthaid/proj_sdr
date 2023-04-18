@@ -183,7 +183,7 @@ void fft_lpf_complex(complex *in, complex *out, int n, double sample_rate, doubl
     fft_back_c2c(out_complex, out, n);
 
     // print elapsed time
-    NOTICE("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
+    DEBUG("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
 }
 
 void fft_lpf_real(double *in, double *out, int n, double sample_rate, double f)
@@ -202,5 +202,5 @@ void fft_lpf_real(double *in, double *out, int n, double sample_rate, double f)
     fft_back_c2r(out_complex, out, n);
 
     // print elapsed time
-    NOTICE("fft_lpf_real duration %ld ms\n", (microsec_timer()-start)/1000);
+    DEBUG("fft_lpf_real duration %ld ms\n", (microsec_timer()-start)/1000);
 }
