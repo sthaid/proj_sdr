@@ -443,10 +443,8 @@ void *audio_test(void *cx)
 
 // xxx dont use all these defines
 #define SAMPLE_RATE  2400000   // 2.4 MS/sec
-#define F_SYNTH       600000   // 500 KHz
-
+#define F_SYNTH       600000   // 600 KHz
 #define F_LPF        (SAMPLE_RATE / 4)
-
 #define MAX_IQ       (SAMPLE_RATE / 10)   // 0.1 sec range
 #define DELTA_T      (1. / SAMPLE_RATE)
 #define W_SYNTH      (TWO_PI * F_SYNTH)
@@ -455,18 +453,20 @@ void *gen_test(void *cx)
 {
     complex *iq, *iq_fft;
     double   t, max_iq_scaling, max_iq_measured=0;
+    double   *antenna, synth0, synth90;
     int      i=0, tmax;
     FILE    *fp;
 
     static unsigned char usb[2*MAX_IQ];
 
     tmax = (arg1 == -1 ? 10 : arg1);
-    max_iq_scaling = (arg2 <= 0 ? 100 : arg2);
+    max_iq_scaling = (arg2 <= 0 ? 500000 : arg2);
 
     init_antenna();
 
     iq     = fftw_alloc_complex(MAX_IQ);
     iq_fft = fftw_alloc_complex(MAX_IQ);
+    antenna = fftw_alloc_real(MAX_IQ);
 
     fp = fopen("gen.dat", "w");
     if (fp == NULL) {
@@ -476,32 +476,42 @@ void *gen_test(void *cx)
     NOTICE("generating %d secs of data, max_iq_scaling=%0.2f\n", tmax, max_iq_scaling);
 
     for (t = 0; t < tmax; t += DELTA_T) {
-        double antenna, synth0, synth90;
-
-        antenna = get_antenna(t, F_SYNTH);
-        synth0  = sin((W_SYNTH) * t);
-        synth90 = sin((W_SYNTH) * t + M_PI_2);
-        iq[i++] = antenna * (synth0 + I * synth90);
+        antenna[i] = get_antenna(t);
+        synth0     = sin((W_SYNTH) * t);
+        synth90    = sin((W_SYNTH) * t + M_PI_2);
+        iq[i]      = antenna[i] * (synth0 + I * synth90);
+        i++;
 
         if (i == MAX_IQ) {
             sprintf(tc.title, "gen %0.1f secs", t);
 
             fft_lpf_complex(iq, iq, MAX_IQ, SAMPLE_RATE, F_LPF);
 
+            // plots
+            PLOT(0, false, antenna, MAX_IQ,  0, 999,  -2, 2,  "ANTENNA");  // x scale
             fft_fwd_c2c(iq, iq_fft, MAX_IQ);
-            PLOT(0, true, iq_fft, MAX_IQ,  0, 999,  0, 1,  "ANTENNA");
+            PLOT(1, true, iq_fft, MAX_IQ,  0, 999,  0, 1,  "IQ_FFT");
+
+            int offset = MAX_IQ/12;
+            int span  = (long)24000 * MAX_IQ / SAMPLE_RATE;
+            PLOT(2, true, iq_fft+(offset-span/2), span,  0, 999,  0, 1,  "IQ_FFT");
 
             double scaling = 128. / max_iq_scaling;
             for (int j = 0; j < MAX_IQ; j++) {
-                double tmpr  = cabs(iq[j]);
-                if (tmpr > max_iq_measured) max_iq_measured = tmpr;
+                if (cabs(iq[j]) > max_iq_measured) max_iq_measured = cabs(iq[j]);
 
-                complex tmpc = iq[j] * scaling;
-                usb[2*j+0] = nearbyint(128 + scaling * creal(tmpc));
-                usb[2*j+1] = nearbyint(128 + scaling * cimag(tmpc));
+                int inphase    = nearbyint(128 + scaling * creal(iq[j]));
+                int quadrature = nearbyint(128 + scaling * cimag(iq[j]));
+                if (inphase < 0 || inphase > 255 || quadrature < 0 || quadrature > 255) {
+                    static int count=0;
+                    if (count++ < 10) {
+                        ERROR("iq val too large %d %d", inphase, quadrature);
+                    }
+                }
 
-                //NOTICE("%f %f %f\n", scaling, creal(tmpc), cimag(tmpc));
-                //NOTICE("%u %u\n", usb[2*j+0], usb[2*j+1]);
+                usb[2*j+0] = inphase;
+                usb[2*j+1] = quadrature;
+                DEBUG("%u %u\n", usb[2*j+0], usb[2*j+1]);
             }
 
             fwrite(usb, sizeof(unsigned char), MAX_IQ*2, fp);

@@ -1,80 +1,87 @@
 #include "common.h"
 
-// xxx comments, format
+//
+// defines
+//
+
+#define MAX_STATION 20
+#define F_LPF     4000
+
+//
+// variables
+//
+
+static int max_station;
+
+static struct station_s {
+    int     audio_n;
+    int     audio_sample_rate;
+    double *audio_data;
+    double  carrier_freq;
+    double  carrier_amp;
+} station[MAX_STATION];
+
+//
+// prototypes
+//
+
+static double get_station_signal(int id, double t);
+static void init_station_wav_file(double carrier_freq, double carrier_amp, char *filename);
+static void init_station_sine_wave(double carrier_freq, double carrier_amp, double sine_wave_freq);
+static void init_station_white_noise(double carrier_freq, double carrier_amp);
+
 // -----------------  GET ANTENNA SIGNAL  ------------------------------
 
-//#define MAX_AUDIO 5
-//#define F_DELTA   20000
-//#define MAX_AUDIO 12
-//#define F_DELTA   100000
-#define MAX_AUDIO 1
-#define F_DELTA   100000
-
-#define F_LPF 4000
-
-static double get_audio(int id, double t);
-static void init_audio_wav_file(int id, char *filename);
-static void init_audio_sine_wave(int id, int f);
-static void init_audio_white_noise(int id, double peak);
-
-double get_antenna(double t, double f_center)
+double get_antenna(double t)
 {
-    double f, y, A;
-    int i;
+    double y = 0;
 
-    y = 0;
-    f = f_center - F_DELTA * ((MAX_AUDIO/2.) - 0.5);
-
-    for (i = 0; i < MAX_AUDIO; i++) {
-        A = (double)(i + 1) / MAX_AUDIO;
-        y += (1 + get_audio(i,t)) * (A * sin(TWO_PI * f * t));
-        f += F_DELTA;
+    for (int i = 0; i < max_station; i++) {
+        y += get_station_signal(i, t);
     }
-
     return y;
 }
 
 void init_antenna(void)
 {
-    init_audio_sine_wave(0, 300);
+    init_station_sine_wave(400000, 0.75, 3700);  // xxx 300
+    init_station_sine_wave(800000, 1, 3700);  // xxx 300
 
 #if 0
-    init_audio_wav_file(0, "proud_mary.wav");
-    init_audio_wav_file(1, "one_bourbon_one_scotch_one_beer.wav");
-    init_audio_wav_file(2, "super_critical.wav");
-    init_audio_sine_wave(3, 300);
-    init_audio_white_noise(4);
-#else
-//  for (int i = 0; i < MAX_AUDIO; i++) {
-//      init_audio_white_noise(i, 1);
-//  }
+    init_station_wav_file(0, "proud_mary.wav");
+    init_station_wav_file(1, "one_bourbon_one_scotch_one_beer.wav");
+    init_station_wav_file(2, "super_critical.wav");
+    init_station_sine_wave(3, 300);
+    init_station_white_noise(4);
+#endif
+#if 0
+    for (int i = 0; i < 12; i++) {
+        init_station_white_noise(i, 1);
+    }
 #endif
 }
 
-// - - - - - - - - - - - - - - - - - - - - 
+// -----------------  GET STATION  -------------------------------------
 
-static struct audio_s {
-    int n;
-    int sample_rate;
-    double *data;
-} audio[MAX_AUDIO];
-
-static double get_audio(int id, double t)
+static double get_station_signal(int id, double t)
 {
-    int idx;
-    struct audio_s *a = &audio[id];
+    int audio_idx;
+    double signal;
+    struct station_s *a = &station[id];
 
-    idx = (unsigned long)nearbyint(t * a->sample_rate) % a->n;
-    return a->data[idx];
+    audio_idx = (unsigned long)nearbyint(t * a->audio_sample_rate) % a->audio_n;
+    signal = (1 + a->audio_data[audio_idx]) * (a->carrier_amp * sin(TWO_PI * a->carrier_freq * t));
+
+    return signal;
 }
 
-static void init_audio_wav_file(int id, char *filename)
+static void init_station_wav_file(double carrier_freq, double carrier_amp, char *filename)
 {
     int    ret, num_chan, num_items, sample_rate;
-    struct audio_s *a = &audio[id];
-    double *data;
+    struct station_s *a = &station[max_station++];
+    double *audio_data;
 
-    ret = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
+    ret = read_wav_file(filename, &audio_data, &num_chan, &num_items, &sample_rate);
     if (ret != 0) {
         ERROR("read_wav_file %s, %s\n", filename, strerror(errno));
         exit(1);
@@ -86,47 +93,56 @@ static void init_audio_wav_file(int id, char *filename)
         exit(1);
     }
 
-    a->n         = num_items;
-    a->sample_rate = sample_rate;
-    a->data        = data;
+    a->audio_n           = num_items;
+    a->audio_sample_rate = sample_rate;
+    a->audio_data        = audio_data;
+    a->carrier_freq      = carrier_freq;
+    a->carrier_amp       = carrier_amp;
 
-    fft_lpf_real(a->data, a->data, a->n, a->sample_rate, F_LPF);
-    normalize(a->data, a->n, -1, 1);
+    fft_lpf_real(a->audio_data, a->audio_data, a->audio_n, a->audio_sample_rate, F_LPF);
+    normalize(a->audio_data, a->audio_n, -1, 1);
 }
 
-static void init_audio_sine_wave(int id, int f)
+static void init_station_sine_wave(double carrier_freq, double carrier_amp, double sine_wave_freq)
 {
-    struct audio_s *a = &audio[id];
-    double          w = TWO_PI * f;
+    struct station_s *a = &station[max_station++];
+    double          w = TWO_PI * sine_wave_freq;
     double          t, dt;
     int             i;
 
-    a->n = 24000;
-    a->sample_rate = 24000;
-    a->data = (double*)calloc(a->n, sizeof(double));
+    a->audio_n           = 100000;
+    a->audio_sample_rate = 100000; //xxx also for white noise
+    a->audio_data        = (double*)calloc(a->audio_n, sizeof(double));
+    a->carrier_freq      = carrier_freq;
+    a->carrier_amp       = carrier_amp;
 
     t = 0;
-    dt = 1. / a->sample_rate;
+    dt = 1. / a->audio_sample_rate;
 
-    for (i = 0; i < a->n; i++) {
-        a->data[i] = sin(w * t);
+    for (i = 0; i < a->audio_n; i++) {
+        a->audio_data[i] = sin(w * t);
         t += dt;
     }
+
+    fft_lpf_real(a->audio_data, a->audio_data, a->audio_n, a->audio_sample_rate, F_LPF);
+    normalize(a->audio_data, a->audio_n, -1, 1);
 }
 
-static void init_audio_white_noise(int id, double peak)
+static void init_station_white_noise(double carrier_freq, double carrier_amp)
 {
-    struct audio_s *a = &audio[id];
+    struct station_s *a = &station[max_station++];
 
-    a->n = 24000;
-    a->sample_rate = 24000;
-    a->data = (double*)calloc(a->n, sizeof(double));
+    a->audio_n           = 100000;
+    a->audio_sample_rate = 100000;
+    a->audio_data        = (double*)calloc(a->audio_n, sizeof(double));
+    a->carrier_freq      = carrier_freq;
+    a->carrier_amp       = carrier_amp;
 
-    for (int i = 0; i < a->n; i++) {
-        a->data[i] =  ((double)random() / RAND_MAX) - 0.5;
+    for (int i = 0; i < a->audio_n; i++) {
+        a->audio_data[i] =  ((double)random() / RAND_MAX) - 0.5;
     }
 
-    fft_lpf_real(a->data, a->data, a->n, a->sample_rate, F_LPF);
-    normalize(a->data, a->n, -peak, peak);
+    fft_lpf_real(a->audio_data, a->audio_data, a->audio_n, a->audio_sample_rate, F_LPF);
+    normalize(a->audio_data, a->audio_n, -1, 1);
 }
 
