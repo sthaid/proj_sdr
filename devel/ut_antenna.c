@@ -44,9 +44,16 @@ double get_antenna(double t)
 
 void init_antenna(void)
 {
-    init_station_sine_wave(400000, 0.75, 3700);  // xxx 300
-    init_station_sine_wave(800000, 1, 3700);  // xxx 300
+    //init_station_sine_wave(400000, 0.75, 3700);
+    //init_station_sine_wave(600000, 1.00, 3700);
+    //init_station_sine_wave(800000, 1.00, 3700);
 
+    //init_station_sine_wave(600000, 1.00, 300);
+    init_station_wav_file( 600000, 1, "super_critical.wav");
+
+#if 0
+    init_station_wav_file( 800000, 1, "super_critical.wav");
+#endif
 #if 0
     init_station_wav_file(0, "proud_mary.wav");
     init_station_wav_file(1, "one_bourbon_one_scotch_one_beer.wav");

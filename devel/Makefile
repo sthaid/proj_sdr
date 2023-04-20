@@ -11,7 +11,8 @@ ut: ut.c ut_antenna.c $(UTILS)
 
 run: ut
 	#./ut audio | spkr
-	./ut gen
+	#./ut gen
+	./ut rx | spkr
 
 #################
 

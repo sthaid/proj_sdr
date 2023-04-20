@@ -95,7 +95,6 @@ double moving_avg(double v, int n, void **cx_arg)
     return cx->sum / n;
 }
 
-#if 0
 void average_float(float *v, int n, double *min_arg, double *max_arg, double *avg)
 {
     double sum = 0;
@@ -111,7 +110,6 @@ void average_float(float *v, int n, double *min_arg, double *max_arg, double *av
     *min_arg = min;
     *max_arg = max;
 }
-#endif
 
 void average(double *v, int n, double *min_arg, double *max_arg, double *avg)
 {

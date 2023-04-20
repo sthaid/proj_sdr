@@ -90,6 +90,7 @@ void *plot_test(void *cx);
 void *lpf_test(void *cx);
 void *audio_test(void *cx);
 void *gen_test(void *cx);
+void *rx_test(void *cx);
 
 //
 // test table
@@ -103,6 +104,7 @@ static struct test_s {
         { "lpf",    lpf_test   },
         { "audio",  audio_test },
         { "gen",    gen_test   },
+        { "rx",     rx_test    },
                 };
 
 // -----------------  MAIN  --------------------------------
@@ -393,7 +395,6 @@ void *audio_test(void *cx)
     int num_items, sample_rate, n, idx;
     double *in, *out, *out_fft;
 
-
     // read wav file
     read_and_filter_wav_file("super_critical.wav", &data, &num_items, &sample_rate, 4000);
 
@@ -437,6 +438,8 @@ void *audio_test(void *cx)
             idx = 0;
         }
     }
+
+    return NULL;
 }
 
 // -----------------  GEN TEST  -----------------------------
@@ -460,7 +463,7 @@ void *gen_test(void *cx)
     static unsigned char usb[2*MAX_IQ];
 
     tmax = (arg1 == -1 ? 10 : arg1);
-    max_iq_scaling = (arg2 <= 0 ? 500000 : arg2);
+    max_iq_scaling = (arg2 <= 0 ? 750000 : arg2);
 
     init_antenna();
 
@@ -495,6 +498,8 @@ void *gen_test(void *cx)
             int offset = MAX_IQ/12;
             int span  = (long)24000 * MAX_IQ / SAMPLE_RATE;
             PLOT(2, true, iq_fft+(offset-span/2), span,  0, 999,  0, 1,  "IQ_FFT");
+            // xxx ctr plot3
+            PLOT(3, true, iq_fft, span,  0, 999,  0, 1,  "IQ_FFT");
 
             double scaling = 128. / max_iq_scaling;
             for (int j = 0; j < MAX_IQ; j++) {
@@ -528,6 +533,179 @@ void *gen_test(void *cx)
         ERROR("max_iq_scaling is too small\n");
     }
 
-    return 0;
+    return NULL;
+}
+
+// -----------------  RX TEST  -----------------------------
+
+// reference sim/sim.c
+
+// xxx
+// - start / stop ctrls
+
+#define BLOCK_SIZE 262144
+#define MAX_DATA (4*BLOCK_SIZE)
+
+unsigned int sample_rate = 2400000;  // xxx make this private for each section
+
+unsigned long head;
+unsigned long tail;
+unsigned char data[MAX_DATA];  // xxx rename to Data ?
+
+void init_get_data(void);
+void *get_data_from_file_thread(void *cx);
+void audio_out(double yo);
+
+void *rx_test(void *cx)
+{
+    struct {
+        unsigned char i;
+        unsigned char q;
+    } *d;
+
+    complex *dc;
+    int n;
+    double yo=0, y;
+    int cnt=0;
+
+    init_get_data();
+
+    dc = fftw_alloc_complex(BLOCK_SIZE/2);
+
+    while (true) {
+        // wait for data
+        while (head == tail) {
+            usleep(1000);
+        }
+
+        d = (void*)&data[head%MAX_DATA];
+        n = BLOCK_SIZE/2;
+        //NOTICE("GOT DATA\n");
+
+        for (int i = 0; i < n; i++) {
+            dc[i] = ((d[i].i - 128) / 128.) + 
+                    ((d[i].q - 128) / 128.) * I;
+        }
+
+        // process the usb data ...
+
+        // low pass filter
+        //fft_lpf_complex(dc, dc, n, sample_rate, 4000);
+
+        for (int i = 0; i < n; i++) {
+            //y = creal(dc[i]) * 5e-5;
+            y = creal(dc[i]);
+
+            if (y > yo) {
+                yo = y;
+            }
+            yo = .9995 * yo;
+
+            if (cnt++ == (sample_rate / 22000)) {
+                audio_out(yo);
+                cnt = 0;
+            }
+        }
+
+        __sync_synchronize();
+        head += BLOCK_SIZE;
+        __sync_synchronize();
+    }
+}
+
+void audio_out(double yo)
+{
+    #define MAX_MA 1000
+    #define MAX_OUT 1000
+
+    static void *ma_cx;
+    static float out[MAX_OUT];
+    static int max;
+
+    double ma;
+
+    ma = moving_avg(yo, MAX_MA, &ma_cx);
+    out[max++] = yo - ma;
+
+    if (max == MAX_OUT) {
+        fwrite(out, sizeof(float), MAX_OUT, stdout);
+#if 1
+        double out_min, out_max, out_avg;
+        average_float(out, MAX_OUT, &out_min, &out_max, &out_avg);
+        fprintf(stderr, "min=%f max=%f avg=%f\n", out_min, out_max, out_avg);
+#endif
+        max = 0;
+    }
+}
+
+
+void init_get_data(void)
+{
+    pthread_t tid;
+
+    // will support getting data from:
+    // - file
+    // - tcp connection to rtl_sdr_server
+    // - directly from rtl_sdr device
+
+    // for now, get data from gen.dat
+    pthread_create(&tid, NULL, get_data_from_file_thread, NULL);
+}
+
+void *get_data_from_file_thread(void *cx)
+{
+    int fd;
+    unsigned long t_read, t_next_read, t_delay;;
+    struct stat statbuf;
+    size_t file_size, file_offset, len;
+
+    //unsigned long t_start, total=0;
+
+    fd = open("gen.dat", O_RDONLY);
+    if (fd < 0) {
+        FATAL("failed open gen.dat, %s\n", strerror(errno));
+    }
+
+    fstat(fd, &statbuf);
+    file_size = statbuf.st_size;
+    file_offset = 0;
+
+    //t_start = microsec_timer();
+
+    t_read = microsec_timer();
+    while (true) {
+        // if there is room in data buffer then read from file
+        if ((MAX_DATA - (tail - head)) >= BLOCK_SIZE) {
+            len = pread(fd, data+(tail%MAX_DATA), BLOCK_SIZE, file_offset);
+            if (len != BLOCK_SIZE) {
+                FATAL("read gen.dat, len=%ld, %s\n", len, strerror(errno));
+            }
+
+            //NOTICE("put data\n");
+
+            __sync_synchronize();
+            tail += BLOCK_SIZE;
+            __sync_synchronize();
+
+            file_offset += BLOCK_SIZE;
+            if (file_offset + BLOCK_SIZE > file_size) {
+                file_offset = 0;
+            }
+        } else {
+            ERROR("discarding\n");
+        }
+
+        // wait for time to do next read
+        t_next_read = t_read + ((double)(BLOCK_SIZE/2) / sample_rate) * 1000000;
+        t_delay = t_next_read - microsec_timer();
+        if (t_delay > 0) {
+            usleep(t_delay);
+        }
+        t_read = t_next_read;
+
+        // debug print the read rate
+        //total += BLOCK_SIZE;
+        //NOTICE("rate = %e\n", (double)total/(microsec_timer() - t_start));
+    }
 }
 
