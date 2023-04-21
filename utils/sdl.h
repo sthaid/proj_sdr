@@ -257,10 +257,11 @@ void sdl_update_iyuv_texture(texture_t texture, uint8_t *y_plane, int y_pitch,
 
 // plot
 #define MAX_PLOT 6
+#define SDL_PLOT_FLAG_BARS 1
 void sdl_plot(rect_t *pane, int idx,
               double *data, int n,
               double xv_min, double xv_max,
               double yv_min, double yv_max,
-              char *title);
+              unsigned int flags, char *title, char *x_units);
 
 #endif

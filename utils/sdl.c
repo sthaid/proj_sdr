@@ -2208,10 +2208,11 @@ void sdl_plot(rect_t *pane, int idx,
               double *data, int n, 
               double xv_min, double xv_max, 
               double yv_min, double yv_max,
-              char *title)
+              unsigned int flags,
+              char *title, char *x_units)
 {
     #define MAX_YV 4000
-    #define PLOT_FONTSZ 14
+    #define PLOT_FONTSZ 16
 
     struct {
         double min;
@@ -2258,6 +2259,21 @@ void sdl_plot(rect_t *pane, int idx,
         if (y < yv[x].min) yv[x].min = y;
     }
 
+    // handle xxx
+    if (flags & SDL_PLOT_FLAG_BARS) {
+        for (x = 0; x < x_span; x++) {
+            if (yv[x].max == -1e99) {
+                continue;
+            }
+            if (yv[x].max > 0 && yv[x].min > 0) {
+                yv[x].min = 0;
+            }
+            if (yv[x].max < 0 && yv[x].min < 0) {
+                yv[x].max = 0;
+            }
+        }
+    }
+
     // limit yv to caller supplied min/max
     for (x = 0; x < x_span; x++) {
         if (yv[x].max == -1e99) {
@@ -2283,34 +2299,46 @@ void sdl_plot(rect_t *pane, int idx,
                         SDL_WHITE);
     }
 
-    // x axis
-    sprintf(s, "%0.2f", xv_min);
-    sdl_render_printf(pane, 
-                    x_origin, y_bottom,
-                    PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
-    sprintf(s, "%0.2f", xv_max);
-    sdl_render_printf(pane, 
-                      x_end-COL2X(strlen(s),PLOT_FONTSZ), y_bottom,
-                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
-
-    x_title = (x_end + x_origin) / 2 - COL2X(strlen(title),PLOT_FONTSZ) / 2;
-    sdl_render_printf(pane, 
-                      x_title, y_bottom,
-                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", title);
-
+    // x axis: line, and ticks
     if (y_origin <= y_bottom && y_origin >= y_top) {
         sdl_render_line(pane, 
                         x_origin, y_origin, 
                         x_origin + x_span, y_origin,
                         SDL_GREEN);
+
+        for (int i = 0; i <= 10; i++) {
+            int x_tick = x_origin + (i / 10.) * x_span;
+            sdl_render_line(pane, 
+                            x_tick, y_origin-5,
+                            x_tick, y_origin+5,
+                            SDL_GREEN);
+        }
     }
 
-    // y axis
+    // x axis: min, max
+    sprintf(s, "%0.2f", xv_min);
+    sdl_render_printf(pane, 
+                    x_origin, y_bottom+2,
+                    PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
+    sprintf(s, "%0.2f", xv_max);
+    sdl_render_printf(pane, 
+                      x_end-COL2X(strlen(s),PLOT_FONTSZ), y_bottom+2,
+                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
+
+    // x axis: title
+    sprintf(s, "%s - TICK=%g %s", title, (xv_max-xv_min)/10., x_units);
+    x_title = (x_end + x_origin) / 2 - COL2X(strlen(s),PLOT_FONTSZ) / 2;
+    sdl_render_printf(pane, 
+                      x_title, y_bottom+2,
+                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
+
+    // y axis: line
     sdl_render_line(pane, 
                     x_origin-2, y_top,
                     x_origin-2, y_bottom,
                     SDL_GREEN);
 
+    // y axis: limits
     sdl_render_printf(pane, 
                       0, y_top, 
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_max);

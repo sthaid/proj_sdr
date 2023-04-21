@@ -1,11 +1,10 @@
-// xxx comments
-// xxx put tick marks on plot
-// xxx better way to handle global args
-// xxx audio out
-// xxx add gen.c
+// xxx later
+// - comments
+// - exit pgm
+// - better way to handle global args
+
+// xxx improve filter quality
 // xxx init_fft?
-// xxx move plot y axis to left by 1 pixel
-// xxx exit pgm
 
 #include "common.h"
 
@@ -13,22 +12,27 @@
 // defines
 //
 
+#define min(a,b) ((a) < (b) ? (a) : (b))
+
 #define MAX_TESTS (sizeof(tests)/sizeof(tests[0]))
 
 // xxx yv min/max for complex
 //    maybe new PLOT_COMPLEX
+
+// xxx new plot for FFT
+// xxx use routine not macro
 #define PLOT(_idx,_is_complex,_data,_n,_xvmin,_xvmax,_yvmin,_yvmax,_title) \
     do { \
         plots_t *p = &plots[_idx]; \
         pthread_mutex_lock(&mutex); \
         if (!(_is_complex)) { \
-            memcpy(p->pd, _data, (_n)*sizeof(double)); \
+            memcpy(p->data, _data, (_n)*sizeof(double)); \
         } else { \
             complex *data_complex = (complex*)(_data); \
             for (int i = 0; i < (_n); i++) { \
-                p->pd[i] = cabs(data_complex[i]); \
+                p->data[i] = cabs(data_complex[i]); \
             } \
-            normalize(p->pd, _n, 0, 1); \
+            normalize(p->data, _n, 0, 1); \
         } \
         p->n       = _n; \
         p->xv_min  = _xvmin; \
@@ -43,14 +47,18 @@
 // typedefs
 //
 
+#define MAX_PLOT_DATA  250000
+
 typedef struct {
-    double  pd[250000];  //xxx make sure this is enough
+    double  data[MAX_PLOT_DATA];
     int     n;
     double  xv_min;
     double  xv_max;
     double  yv_min;
     double  yv_max;
+    unsigned int flags;
     char   *title;
+    char   *x_units;
 } plots_t;
 
 typedef struct {
@@ -87,6 +95,7 @@ void usage(void);
 int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
 
 void *plot_test(void *cx);
+void *bpf_test(void *cx);
 void *lpf_test(void *cx);
 void *audio_test(void *cx);
 void *gen_test(void *cx);
@@ -101,11 +110,17 @@ static struct test_s {
     void *(*proc)(void *cx);
 } tests[] = {
         { "plot",   plot_test  },
+        { "bpf",    bpf_test   },
         { "lpf",    lpf_test   },
         { "audio",  audio_test },
         { "gen",    gen_test   },
         { "rx",     rx_test    },
                 };
+// xxx
+// - rx sim
+// - rx rtlsdr file
+// - rx rtlsdr direct
+// - rx rtlsdr server
 
 // -----------------  MAIN  --------------------------------
 
@@ -194,10 +209,10 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
             plots_t *p = &plots[i];
             if (p->title) {
                 sdl_plot(pane, i,
-                        p->pd, p->n,
+                        p->data, p->n,
                         p->xv_min, p->xv_max,
                         p->yv_min, p->yv_max,
-                        p->title);
+                        p->flags, p->title, p->x_units);
             }
         }
         pthread_mutex_unlock(&mutex);  // sep mutex for each xxx
@@ -213,6 +228,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
         sdl_render_printf(pane, 
                           0, pane->h-ROW2Y(1,FONTSZ), FONTSZ,
                           SDL_WHITE, SDL_BLACK, "%s" , str);
+// xxx more controls and status display
 
         return PANE_HANDLER_RET_NO_ACTION;
     }
@@ -260,19 +276,6 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
 // -----------------  UTILS  -------------------------------
 
-void add_sine_wave(int sample_rate, int f, int n, double *data)
-{
-    double  w = TWO_PI * f;
-    double  t = 0;
-    double  dt = (1. / sample_rate);
-    int     i;
-
-    for (i = 0; i < n; i++) {
-        data[i] += sin(w * t);
-        t += dt;
-    }
-}
-
 void zero_real(double *data, int n)
 {
     memset(data, 0, n*sizeof(double));
@@ -282,6 +285,59 @@ void zero_complex(complex *data, int n)
 {
     memset(data, 0, n*sizeof(complex));
 }
+
+void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate)
+{
+    int f;
+
+    zero_real(sw,n);
+    for (f = freq_first; f <= freq_last; f+= freq_step) {
+        double  w = TWO_PI * f;
+        double  t = 0;
+        double  dt = (1. / sample_rate);
+
+        for (int i = 0; i < n; i++) {
+            sw[i] += sin(w * t);
+            t += dt;
+        }
+
+        if (freq_step == 0) break;
+    }
+}
+
+void init_using_white_noise(double *wn, int n)
+{
+    for (int i = 0; i < n; i++) {
+        wn[i] = ((double)random() / RAND_MAX) - 0.5;
+    }
+}
+
+void init_using_wav_file(double *wav, int n, char *filename)
+{
+    int ret, num_chan, num_items, sample_rate;
+    double *data;
+
+    ret = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
+    if (ret != 0 || num_chan != 1) {
+        FATAL("read_wav_file ret=%d num_chan=%d\n", ret, num_chan);
+    }
+    // xxx also fatal on sample rate
+
+    zero_real(wav,n);
+    for (int i = 0; i < min(n,num_items); i++) {
+        wav[i] = data[i];
+    }
+
+    free(data);
+}
+
+#if 0
+// xxx used?
+void add_sine_wave(int sample_rate, int f, int n, double *data)
+{
+}
+
+#endif
 
 // xxx support multiple chan
 void read_and_filter_wav_file(char *filename, double **data_arg, int *num_items_arg, int *sample_rate_arg, int lpf_freq)
@@ -304,35 +360,191 @@ void read_and_filter_wav_file(char *filename, double **data_arg, int *num_items_
     *sample_rate_arg = sample_rate;
 }
 
+void plot_real(int idx, double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax, char *title)
+{
+    plots_t *p = &plots[idx];
+
+    if (n > MAX_PLOT_DATA) {
+        FATAL("plot n=%d\n", n);
+    }
+
+    pthread_mutex_lock(&mutex);
+    for (int i = 0; i < n; i++) {
+        p->data[i] = data[i];
+    }
+    p->n       = n;
+    p->xv_min  = xvmin;
+    p->xv_max  = xvmax;
+    p->yv_min  = yvmin;
+    p->yv_max  = yvmax;
+    p->title   = title;
+    pthread_mutex_unlock(&mutex);
+}
+
+void plot_complex(int idx, complex *data, int n, double xvmin, double xvmax, double yvmin, double yvmax, 
+                  char *title, char *x_units)
+{
+    plots_t *p = &plots[idx];
+
+    if (n > MAX_PLOT_DATA) {
+        FATAL("plot n=%d\n", n);
+    }
+
+    pthread_mutex_lock(&mutex);
+    for (int i = 0; i < n; i++) {
+        p->data[i] = creal(data[i]);
+    }
+    p->n       = n;
+    p->xv_min  = xvmin;
+    p->xv_max  = xvmax;
+    p->yv_min  = yvmin;
+    p->yv_max  = yvmax;
+    p->flags   = 0;
+    p->x_units = x_units;
+    p->title   = title;
+    pthread_mutex_unlock(&mutex);
+}
+
+// xxx ctr on the frequency
+void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *x_units)
+{
+    plots_t *p = &plots[idx];
+
+    if (n > MAX_PLOT_DATA) {
+        FATAL("plot n=%d\n", n);
+    }
+
+    pthread_mutex_lock(&mutex);
+    for (int i = 0; i < n; i++) {
+        p->data[i] = cabs(fft[i]);
+    }
+    normalize(p->data, n, 0, 1);
+    p->n       = n;
+    p->xv_min  = 0;
+    p->xv_max  = max_freq;
+    p->yv_min  = 0;
+    p->yv_max  = 1;
+    p->flags   = SDL_PLOT_FLAG_BARS;
+    p->x_units = x_units;
+    p->title   = title;
+    pthread_mutex_unlock(&mutex);
+}
+
 // -----------------  PLOT TEST  ---------------------------
 
 void *plot_test(void *cx)
 {
     int sample_rate, f, n;
-    double *data;
+    double *sw;
 
     #define SECS 1
 
-    sample_rate = 24000;
+    sample_rate = 24000;  // xxx use 22000
     f = 10;
     n = SECS * sample_rate;
-    data = fftw_alloc_real(n);
-    zero_real(data, n);
+    sw = fftw_alloc_real(n);
 
-    add_sine_wave(sample_rate, f, n, data);
+    init_using_sine_waves(sw, n, f, f, 0, sample_rate);
 
-    PLOT(0, false, data, n,  0, 1,  -1, +1,  "SINE WAVE");
-    PLOT(1, false, data, n,  0, 1,  -0.5, +0.5,  "SINE WAVE");
-    PLOT(2, false, data, n,  0, 1,  0.5, +1.5,  "SINE WAVE");
+    plot_real(0, sw, n,  0, 1,  -1, +1,  "SINE WAVE");
+    plot_real(1, sw, n,  0, 1,  -0.5, +0.5,  "SINE WAVE");
+    plot_real(2, sw, n,  0, 1,  0.5, +1.5,  "SINE WAVE");
 
     return NULL;
 }
 
 // -----------------  LPF TEST  ---------------------------
 
+void audio_out(double yo); // xxx move this to utils section above
+
+void *bpf_test(void *cx)
+{
+    double *in_real;
+    complex *in, *fft;
+    int current_mode;
+
+    int sample_rate = 22000;
+    int max = 60 * sample_rate;
+    int total = 0;
+
+    #define SINE_WAVES  0
+    #define WHITE_NOISE 1
+    #define WAV_FILE    2
+
+    // init ctrls
+    tc.int_name = "SELECT";
+    tc.int_val  = 0;
+    tc.int_step = 1;
+    tc.int_min  = 0;
+    tc.int_max  = 2;
+
+    // alloc buffers
+    in_real = fftw_alloc_real(max);
+    in = fftw_alloc_complex(max);
+    fft = fftw_alloc_complex(max);
+
+    while (true) {
+        // construct in buff from either:
+        // - sine waves
+        // - white noise
+        // - wav file
+        current_mode = tc.int_val;
+        switch (current_mode) {
+        case SINE_WAVES:
+            //init_using_sine_waves(in_real, max, 500, 11500, 1000, sample_rate);
+            init_using_sine_waves(in_real, max, 1000, 1000, 0, sample_rate);
+            break;
+        case WHITE_NOISE:
+            init_using_white_noise(in_real, max);
+            break;
+        case WAV_FILE:
+            init_using_wav_file(in_real, max, "super_critical.wav");
+            break;
+        default:
+            break;
+        }
+
+        // xx
+        normalize(in_real, max, -1, 1);
+
+        while (current_mode == tc.int_val) {
+            // copy .01 secs of data from in_real to in buff
+            int n = .01 * sample_rate;
+            for (int i = 0; i < n; i++) {
+                in[i] = in_real[(total+i)%max];
+            }
+            total += n;
+
+            // plot the in buff
+            plot_complex(0, in, n, 0, .01, -1, 1, "SINE_WAVES", "SECS");
+
+            // plot fft
+            fft_fwd_c2c(in, fft, n);
+            plot_fft(1, fft, n, n/.01, "FFT", "HZ");
+
+/*
+            apply filter
+
+            plot(filtered)
+            plot_fft(filtered)
+
+*/
+            // play the filtered audio
+            for (int i = 0; i < n; i++) {
+                audio_out(in[i]);  // xxx not yet filtered
+            }
+        }
+    }        
+}
+
+// xxx bandpass filter test too
+// xxx filter choices
+// - sine waves
+// - white noise
+// - audio file
 void *lpf_test(void *cx)
 {
-    int sample_rate, f, n;
+    int sample_rate, n;
     double *in, *in_fft;
     double *lpf, *lpf_fft;
     complex *in_complex, *in_fft_complex;
@@ -355,10 +567,7 @@ void *lpf_test(void *cx)
     lpf_fft_complex = fftw_alloc_complex(n);
 
     // create sum of sine waves, to 'in' and 'in_complex' buffs
-    zero_real(in, n);
-    for (f = 990; f <= 12000; f += 1000) {
-        add_sine_wave(sample_rate, f, n, in);
-    }
+    init_using_sine_waves(in, n, 990, 12000, 1000, sample_rate);
     normalize(in, n, -1, 1);
     for (int i = 0; i < n; i++) {
         in_complex[i] = in[i];
@@ -389,6 +598,7 @@ void *lpf_test(void *cx)
 
 // -----------------  AUDIO TEST  ---------------------------
 
+// xxx combine with prior
 void *audio_test(void *cx)
 {
     double *data;
@@ -428,6 +638,7 @@ void *audio_test(void *cx)
         normalize(out_fft, n, 0, 1);
         PLOT(0, false, out_fft, n,  0, sample_rate,  0, 1, "XXX");
 
+        // xxx call routine
         for (int i = 0; i < n; i++) {
             audio_out[i] = out[i];
         }
@@ -443,6 +654,8 @@ void *audio_test(void *cx)
 }
 
 // -----------------  GEN TEST  -----------------------------
+
+// xxx won't be needed, I hope
 
 // xxx dont use all these defines
 #define SAMPLE_RATE  2400000   // 2.4 MS/sec
@@ -543,6 +756,12 @@ void *gen_test(void *cx)
 // xxx
 // - start / stop ctrls
 
+// xxx new data block format
+// - hdr
+//   - maic, freq, gain, ...
+// - data
+//   - complex array
+
 #define BLOCK_SIZE 262144
 #define MAX_DATA (4*BLOCK_SIZE)
 
@@ -554,7 +773,6 @@ unsigned char data[MAX_DATA];  // xxx rename to Data ?
 
 void init_get_data(void);
 void *get_data_from_file_thread(void *cx);
-void audio_out(double yo);
 
 void *rx_test(void *cx)
 {
@@ -588,6 +806,7 @@ void *rx_test(void *cx)
         n = BLOCK_SIZE/2;
         //NOTICE("GOT DATA\n");
 
+// xxx not needed
         for (int i = 0; i < n; i++) {
             dc[i] = ((d[i].i - 128) / 128.) + 
                     ((d[i].q - 128) / 128.) * I;
@@ -647,6 +866,7 @@ void audio_out(double yo)
     }
 }
 
+// xxx handle the differnet modes
 
 void init_get_data(void)
 {
@@ -660,6 +880,8 @@ void init_get_data(void)
     // for now, get data from gen.dat
     pthread_create(&tid, NULL, get_data_from_file_thread, NULL);
 }
+
+// xxx this won't be from file, it will just construct the data on the fly
 
 void *get_data_from_file_thread(void *cx)
 {
