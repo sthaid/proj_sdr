@@ -44,9 +44,11 @@ double get_antenna(double t)
 
 void init_antenna(void)
 {
-    init_station_wav_file( 400000, 1, "one_bourbon_one_scotch_one_beer.wav");
-    init_station_wav_file( 600000, 1, "super_critical.wav");
-    init_station_wav_file( 800000, 1, "proud_mary.wav");
+    init_station_white_noise(500000, 1);
+    init_station_wav_file(   550000, 1, "one_bourbon_one_scotch_one_beer.wav");
+    init_station_wav_file(   600000, 1, "super_critical.wav");
+    init_station_wav_file(   650000, 1, "proud_mary.wav");
+    init_station_sine_wave(  700000, 1, 500);
 
 #if 0
     init_station_wav_file( 800000, 1, "super_critical.wav");
@@ -55,8 +57,6 @@ void init_antenna(void)
     init_station_wav_file(0, "proud_mary.wav");
     init_station_wav_file(1, "one_bourbon_one_scotch_one_beer.wav");
     init_station_wav_file(2, "super_critical.wav");
-    init_station_sine_wave(3, 300);
-    init_station_white_noise(4);
 #endif
 #if 0
     for (int i = 0; i < 12; i++) {

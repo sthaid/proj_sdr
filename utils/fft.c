@@ -164,6 +164,8 @@ void fft_back_c2c(complex *in, complex *out, int n)
 }
 
 // -----------------  LOW PASS FILTERS  -------------------------------
+//xxx use just one complex band pass filter
+//xxx smooth the edges
 
 void fft_lpf_complex(complex *in, complex *out, int n, double sample_rate, double f)
 {
@@ -198,16 +200,22 @@ void fft_bpf_complex(complex *in, complex *out, int n, double sample_rate, doubl
     fft_fwd_c2c(in, out_complex, n);
     ix1 = n / sample_rate * f_low;
     ix2 = n / sample_rate * f_high;
-    if (ix1 < 0) ix1 += n;
-    if (ix2 < 0) ix2 += n;
-    NOTICE("ix1,2 = %d %d\n", ix1, ix2);
+    //if (ix1 < 0) ix1 += n;
+    //if (ix2 < 0) ix2 += n;
+    //NOTICE("ix1,2 = %d %d\n", ix1, ix2);
     //for (i = ix1; i < ix2; i++) {
         //out_complex[i] = 0;
     //}
-    for (i = 0; i < n; i++) {
-        if (i < ix1 || i > ix2) {
-            out_complex[i] = 0;
-        }
+    //for (i = 0; i < n; i++) {
+        //if (i < ix1 || i > ix2) {
+            //out_complex[i] = 0;
+        //}
+    //}
+    for (i = 0; i < n - (ix2-ix1); i++) {
+        int xx = i + ix2;
+        if (xx < 0) xx += n;
+        else if (xx >= n) xx -= n;
+        out_complex[xx] = 0;
     }
     fft_back_c2c(out_complex, out, n);
 
