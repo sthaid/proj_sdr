@@ -462,7 +462,7 @@ void *gen_test(void *cx)
 
     static unsigned char usb[2*MAX_IQ];
 
-    tmax = (arg1 == -1 ? 10 : arg1);
+    tmax = (arg1 == -1 ? 30 : arg1);
     max_iq_scaling = (arg2 <= 0 ? 750000 : arg2);
 
     init_antenna();
@@ -572,6 +572,12 @@ void *rx_test(void *cx)
 
     dc = fftw_alloc_complex(BLOCK_SIZE/2);
 
+    tc.int_name = "FREQ";
+    tc.int_val  = -200000;
+    tc.int_step = 1000;
+    tc.int_min  = -500000;
+    tc.int_max  = +500000;
+
     while (true) {
         // wait for data
         while (head == tail) {
@@ -589,12 +595,15 @@ void *rx_test(void *cx)
 
         // process the usb data ...
 
+        int freq = tc.int_val;
         // low pass filter
         //fft_lpf_complex(dc, dc, n, sample_rate, 4000);
+        //fft_bpf_complex(dc, dc, n, sample_rate, 200000-5000, 200000+5000);
+        fft_bpf_complex(dc, dc, n, sample_rate, freq-5000, freq+5000);
 
         for (int i = 0; i < n; i++) {
             //y = creal(dc[i]) * 5e-5;
-            y = creal(dc[i]);
+            y = creal(dc[i]) / 5000;
 
             if (y > yo) {
                 yo = y;
