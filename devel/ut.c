@@ -409,19 +409,26 @@ void plot_complex(int idx, complex *data, int n, double xvmin, double xvmax, dou
 void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *x_units)
 {
     plots_t *p = &plots[idx];
+    int j=0;
 
     if (n > MAX_PLOT_DATA) {
         FATAL("plot n=%d\n", n);
     }
 
     pthread_mutex_lock(&mutex);
-    for (int i = 0; i < n; i++) {
-        p->data[i] = cabs(fft[i]);
+    for (int i = n/2; i < n; i++) {
+        p->data[j++] = cabs(fft[i]);
+    }
+    for (int i = 0; i < n/2; i++) {
+        p->data[j++] = cabs(fft[i]);
+    }
+    if (j != n) {
+        FATAL("n=%d j=%d\n", n, j);
     }
     normalize(p->data, n, 0, 1);
     p->n       = n;
-    p->xv_min  = 0;
-    p->xv_max  = max_freq;
+    p->xv_min  = -max_freq/2;
+    p->xv_max  = max_freq/2;
     p->yv_min  = 0;
     p->yv_max  = 1;
     p->flags   = SDL_PLOT_FLAG_BARS;
@@ -467,16 +474,17 @@ void *bpf_test(void *cx)
     int max = 60 * sample_rate;
     int total = 0;
 
-    #define SINE_WAVES  0
-    #define WHITE_NOISE 1
-    #define WAV_FILE    2
+    #define SINE_WAVE   0
+    #define SINE_WAVES  1
+    #define WHITE_NOISE 2
+    #define WAV_FILE    3
 
     // init ctrls
     tc.int_name = "SELECT";
-    tc.int_val  = 0;
+    tc.int_val  = SINE_WAVE;
     tc.int_step = 1;
     tc.int_min  = 0;
-    tc.int_max  = 2;
+    tc.int_max  = WAV_FILE;
 
     // alloc buffers
     in_real = fftw_alloc_real(max);
@@ -490,9 +498,11 @@ void *bpf_test(void *cx)
         // - wav file
         current_mode = tc.int_val;
         switch (current_mode) {
-        case SINE_WAVES:
-            //init_using_sine_waves(in_real, max, 500, 11500, 1000, sample_rate);
+        case SINE_WAVE:
             init_using_sine_waves(in_real, max, 1000, 1000, 0, sample_rate);
+            break;
+        case SINE_WAVES:
+            init_using_sine_waves(in_real, max, 1000, 10000, 1000, sample_rate);
             break;
         case WHITE_NOISE:
             init_using_white_noise(in_real, max);
@@ -515,15 +525,20 @@ void *bpf_test(void *cx)
             }
             total += n;
 
-            // plot the in buff
-            plot_complex(0, in, n, 0, .01, -1, 1, "SINE_WAVES", "SECS");
-
-            // plot fft
+            // plot the in buff, and fft of in buff
+            plot_complex(0, in, n, 0, .01, -1, 1, "SINE_WAVES", "SECS");  // xxx title and units?
             fft_fwd_c2c(in, fft, n);
             plot_fft(1, fft, n, n/.01, "FFT", "HZ");
 
+            // apply filter to in buff
+            fft_bpf_complex(in, in, n, sample_rate, -1000, 1000);
+
+
+            // plot the filtered in buff, and fft of the filtered in buff
+            plot_complex(2, in, n, 0, .01, -1, 1, "SINE_WAVES", "SECS");  // xxx title and units?
+            fft_fwd_c2c(in, fft, n);
+            plot_fft(3, fft, n, n/.01, "FFT", "HZ");
 /*
-            apply filter
 
             plot(filtered)
             plot_fft(filtered)

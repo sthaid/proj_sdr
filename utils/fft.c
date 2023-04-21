@@ -188,6 +188,7 @@ void fft_lpf_complex(complex *in, complex *out, int n, double sample_rate, doubl
     DEBUG("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
 }
 
+// xxx don't need out_complex
 void fft_bpf_complex(complex *in, complex *out, int n, double sample_rate, double f_low, double f_high)
 {
     unsigned long start=microsec_timer();
@@ -218,6 +219,10 @@ void fft_bpf_complex(complex *in, complex *out, int n, double sample_rate, doubl
         out_complex[xx] = 0;
     }
     fft_back_c2c(out_complex, out, n);
+
+    for (i = 0; i < n; i++) {
+        out[i] /= n;
+    }
 
     // print elapsed time
     DEBUG("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
