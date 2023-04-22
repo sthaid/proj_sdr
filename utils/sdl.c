@@ -2223,7 +2223,7 @@ void sdl_plot(rect_t *pane, int idx,
     int y_top, y_bottom, y_span, y_origin;
     int x_title;
     int x, i;
-    char s[100];
+    char s[100], *p;
 
     // init
     yv_span  = yv_max - yv_min;
@@ -2326,7 +2326,11 @@ void sdl_plot(rect_t *pane, int idx,
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
 
     // x axis: title
-    sprintf(s, "%s - TICK=%g %s", title, (xv_max-xv_min)/10., x_units);
+    p = s;
+    p += sprintf(p, "%s - TICK=%g", title, (xv_max-xv_min)/10);
+    if (x_units) {
+        p += sprintf(p, " %s", x_units);
+    }
     x_title = (x_end + x_origin) / 2 - COL2X(strlen(s),PLOT_FONTSZ) / 2;
     sdl_render_printf(pane, 
                       x_title, y_bottom+2,

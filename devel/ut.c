@@ -6,6 +6,12 @@
 // xxx improve filter quality
 // xxx init_fft?
 
+// xxx
+// - rx sim
+// - rx rtlsdr file
+// - rx rtlsdr direct
+// - rx rtlsdr server
+
 #include "common.h"
 
 //
@@ -15,33 +21,6 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 
 #define MAX_TESTS (sizeof(tests)/sizeof(tests[0]))
-
-// xxx yv min/max for complex
-//    maybe new PLOT_COMPLEX
-
-// xxx new plot for FFT
-// xxx use routine not macro
-#define PLOT(_idx,_is_complex,_data,_n,_xvmin,_xvmax,_yvmin,_yvmax,_title) \
-    do { \
-        plots_t *p = &plots[_idx]; \
-        pthread_mutex_lock(&mutex); \
-        if (!(_is_complex)) { \
-            memcpy(p->data, _data, (_n)*sizeof(double)); \
-        } else { \
-            complex *data_complex = (complex*)(_data); \
-            for (int i = 0; i < (_n); i++) { \
-                p->data[i] = cabs(data_complex[i]); \
-            } \
-            normalize(p->data, _n, 0, 1); \
-        } \
-        p->n       = _n; \
-        p->xv_min  = _xvmin; \
-        p->xv_max  = _xvmax; \
-        p->yv_min  = _yvmin; \
-        p->yv_max  = _yvmax; \
-        p->title   = _title; \
-        pthread_mutex_unlock(&mutex); \
-    } while (0)
 
 //
 // typedefs
@@ -80,6 +59,7 @@ typedef struct {
 
 char *progname = "ut";
 
+// xxx maybe these are not used
 char *arg1_str, *arg2_str, *arg3_str;
 int   arg1=-1, arg2=-1, arg3=-1;
 
@@ -98,8 +78,6 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
 void *plot_test(void *cx);
 void *bpf_test(void *cx);
-void *lpf_test(void *cx);
-void *audio_test(void *cx);
 void *gen_test(void *cx);
 void *rx_test(void *cx);
 
@@ -113,16 +91,9 @@ static struct test_s {
 } tests[] = {
         { "plot",   plot_test  },
         { "bpf",    bpf_test   },
-        { "lpf",    lpf_test   },
-        { "audio",  audio_test },
         //{ "gen",    gen_test   },
         //{ "rx",     rx_test    },
                 };
-// xxx
-// - rx sim
-// - rx rtlsdr file
-// - rx rtlsdr direct
-// - rx rtlsdr server
 
 // -----------------  MAIN  --------------------------------
 
@@ -220,10 +191,13 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
         }
         pthread_mutex_unlock(&mutex);  // sep mutex for each xxx
 
+        str[0] = '\0';
         p = str;
-        p += sprintf(p, "%s", tc.name);
-        if (tc.info[0] != '\0') {
-            p += sprintf(p, " - %s\n", tc.info);
+        if (tc.name != NULL) {
+            p += sprintf(p, "%s", tc.name);
+        }
+        if (tc.info != NULL) {
+            p += sprintf(p, " - %s", tc.info);
         }
         sdl_render_printf(pane, 
                           0, pane->h-ROW2Y(4,FONTSZ), FONTSZ,
@@ -233,6 +207,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
             struct test_ctrl_s *x = &tc.ctrl[i];
             if (x->val == NULL) continue;
 
+            str[0] = '\0';
             p = str;
             if (x->name) {
                 p += sprintf(p, "%s ", x->name);
@@ -267,6 +242,8 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                 sprintf(str, "<- ->");
             } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_LEFT_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_RIGHT_ARROW) {
                 sprintf(str, "SHIFT <- ->");
+            } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_UP_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_DOWN_ARROW) {
+                sprintf(str, "SHIFT ^ v");
             } //xxx add SHIFT and CTRL and ALT
 
             sdl_render_printf(pane, 
@@ -333,7 +310,6 @@ void zero_complex(complex *data, int n)
     memset(data, 0, n*sizeof(complex));
 }
 
-// xxx allow 0 hz
 void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate)
 {
     int f;
@@ -377,35 +353,6 @@ void init_using_wav_file(double *wav, int n, char *filename)
     }
 
     free(data);
-}
-
-#if 0
-// xxx used?
-void add_sine_wave(int sample_rate, int f, int n, double *data)
-{
-}
-
-#endif
-
-// xxx support multiple chan
-void read_and_filter_wav_file(char *filename, double **data_arg, int *num_items_arg, int *sample_rate_arg, int lpf_freq)
-{
-    int ret;
-    double *data;
-    int num_items, sample_rate, num_chan;
-
-    ret = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
-    if (ret != 0 || num_chan != 1) {
-        FATAL("read_wav_file ret=%d num_chan=%d\n", ret, num_chan);
-    }
-    NOTICE("read_wav_file num_chan=%d num_items=%d sample_rate=%d\n", num_chan, num_items, sample_rate);
-
-    fft_lpf_real(data, data, num_items, sample_rate, lpf_freq);
-    normalize(data, num_items, -1, 1);
-
-    *data_arg        = data;
-    *num_items_arg   = num_items;
-    *sample_rate_arg = sample_rate;
 }
 
 void plot_real(int idx, double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax, char *title)
@@ -453,7 +400,6 @@ void plot_complex(int idx, complex *data, int n, double xvmin, double xvmax, dou
     pthread_mutex_unlock(&mutex);
 }
 
-// xxx ctr on the frequency
 void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *x_units)
 {
     plots_t *p = &plots[idx];
@@ -485,6 +431,41 @@ void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *
     pthread_mutex_unlock(&mutex);
 }
 
+void audio_out(double yo)
+{
+#if 0
+    #define MAX_MA 1000
+    #define MAX_OUT 1000
+
+    static void *ma_cx;
+    static float out[MAX_OUT];
+    static int max;
+
+    double ma;
+
+    ma = moving_avg(yo, MAX_MA, &ma_cx);
+    out[max++] = yo - ma;
+
+    if (max == MAX_OUT) {
+        fwrite(out, sizeof(float), MAX_OUT, stdout);
+        //double out_min, out_max, out_avg;
+        //average_float(out, MAX_OUT, &out_min, &out_max, &out_avg);
+        //fprintf(stderr, "min=%f max=%f avg=%f\n", out_min, out_max, out_avg);
+        max = 0;
+    }
+#else
+    #define MAX_OUT 1000
+    static float out[MAX_OUT];
+    static int max;
+
+    out[max++] = yo;
+    if (max == MAX_OUT) {
+        fwrite(out, sizeof(float), MAX_OUT, stdout);
+        max = 0;
+    }
+#endif
+}
+
 // -----------------  PLOT TEST  ---------------------------
 
 void *plot_test(void *cx)
@@ -494,7 +475,10 @@ void *plot_test(void *cx)
 
     #define SECS 1
 
-    sample_rate = 24000;  // xxx use 22000
+    tc.name = "PLOT";
+    tc.info = "Hello World";
+
+    sample_rate = 20000;
     f = 10;
     n = SECS * sample_rate;
     sw = fftw_alloc_real(n);
@@ -508,9 +492,7 @@ void *plot_test(void *cx)
     return NULL;
 }
 
-// -----------------  LPF TEST  ---------------------------
-
-void audio_out(double yo); // xxx move this to utils section above
+// -----------------  BAND PASS FILTER TEST  --------------
 
 void *bpf_test(void *cx)
 {
@@ -519,7 +501,7 @@ void *bpf_test(void *cx)
     int current_mode;
 
     int sample_rate = 20000;
-    int max = 60 * sample_rate;
+    int max = 120 * sample_rate;
     int total = 0;
 
     #define SINE_WAVE   0
@@ -527,10 +509,14 @@ void *bpf_test(void *cx)
     #define WHITE_NOISE 2
     #define WAV_FILE    3
 
+    #define DEFAULT_CTR 2000
+    #define DEFAULT_WIDTH 4000
+
     static char tc_info[100];
-    static double tc_mode;
-    static double tc_ctr;
-    static double tc_width = 3000;
+    static double tc_mode = SINE_WAVE;
+    static double tc_reset = 0;
+    static double tc_ctr = DEFAULT_CTR;
+    static double tc_width = DEFAULT_WIDTH;
 
     // init test controls
     tc.name = "BPF";
@@ -547,6 +533,10 @@ void *bpf_test(void *cx)
                  {"WIDTH", &tc_width, 1000, 10000, 100,
                   {}, "HZ", 
                   SDL_EVENT_KEY_SHIFT_LEFT_ARROW, SDL_EVENT_KEY_SHIFT_RIGHT_ARROW};
+    tc.ctrl[3] = (struct test_ctrl_s) // xxx improve
+                 {"RESET", &tc_reset, 0, 1, 1,
+                  {}, NULL, 
+                  SDL_EVENT_KEY_SHIFT_UP_ARROW, SDL_EVENT_KEY_SHIFT_DOWN_ARROW};
 
     // alloc buffers
     in_real = fftw_alloc_real(max);
@@ -580,6 +570,12 @@ void *bpf_test(void *cx)
         //normalize(in_real, max, -1, 1);
 
         while (current_mode == tc_mode) {
+            if (tc_reset) {
+                tc_reset = 0;
+                tc_ctr = DEFAULT_CTR;
+                tc_width = DEFAULT_WIDTH;
+            }
+
             // copy .01 secs of data from in_real to in buff
             int n = .01 * sample_rate;
             for (int i = 0; i < n; i++) {
@@ -606,124 +602,6 @@ void *bpf_test(void *cx)
             }
         }
     }        
-}
-
-// xxx bandpass filter test too
-// xxx filter choices
-// - sine waves
-// - white noise
-// - audio file
-void *lpf_test(void *cx)
-{
-    int sample_rate, n;
-    double *in, *in_fft;
-    double *lpf, *lpf_fft;
-    complex *in_complex, *in_fft_complex;
-    complex *lpf_complex, *lpf_fft_complex;
-
-    #define SECS 1
-
-    sample_rate = 24000;
-    n = SECS * sample_rate;
-
-    // allocate buffers
-    in      = fftw_alloc_real(n);
-    in_fft  = fftw_alloc_real(n);
-    lpf     = fftw_alloc_real(n);
-    lpf_fft = fftw_alloc_real(n);
-
-    in_complex = fftw_alloc_complex(n);
-    in_fft_complex = fftw_alloc_complex(n);
-    lpf_complex = fftw_alloc_complex(n);
-    lpf_fft_complex = fftw_alloc_complex(n);
-
-    // create sum of sine waves, to 'in' and 'in_complex' buffs
-    init_using_sine_waves(in, n, 990, 12000, 1000, sample_rate);
-    normalize(in, n, -1, 1);
-    for (int i = 0; i < n; i++) {
-        in_complex[i] = in[i];
-    }
-
-    // perfrom fwd fft on 'in' to 'in_fft', and plot
-    fft_fwd_r2r(in, in_fft, n);
-    normalize(in_fft, n, 0, 1);
-    PLOT(0, false, in_fft, n,  0, n,  0, +1,  "IN_FFT");
-
-    // perform lpf on 'in' to 'lpf', and plot the fft
-    fft_lpf_real(in, lpf, n, sample_rate, 1500);
-    fft_fwd_r2r(lpf, lpf_fft, n);
-    normalize(lpf_fft, n, 0, 1);
-    PLOT(1, false, lpf_fft, n,  0, n,  0, +1,  "LPF_FFT");
-
-    // perfrom fwd fft on 'in_complex' to 'in_fft_complex', and plot
-    fft_fwd_c2c(in_complex, in_fft_complex, n);
-    PLOT(2, true, in_fft_complex, n,  0, n,  0, +1,  "IN_FFT_COMPLEX");
-
-    // perform lpf on 'in_complex' to 'lpf_complex' and plot the fft
-    fft_lpf_complex(in_complex, lpf_complex, n, sample_rate, 1500);
-    fft_fwd_c2c(lpf_complex, lpf_fft_complex, n);
-    PLOT(3, true, lpf_fft_complex, n,  0, n,  0, +1,  "LPF_FFT_COMPLEX");
-
-    return NULL;
-}
-
-// -----------------  AUDIO TEST  ---------------------------
-
-// xxx combine with prior
-void *audio_test(void *cx)
-{
-    double *data;
-    int num_items, sample_rate, n, idx;
-    double *in, *out, *out_fft;
-
-    // read wav file
-    read_and_filter_wav_file("super_critical.wav", &data, &num_items, &sample_rate, 4000);
-
-#if 0
-    // init lpf_freq control
-    tc.int_name = "LPF_FREQ";
-    tc.int_val  = 4000;
-    tc.int_step = 100;
-    tc.int_min  = 500;
-    tc.int_max  = 10000;
-#endif
-
-    // xxx
-    n = sample_rate / 10;
-    float audio_out[n];
-    idx = 0;
-
-    // alloc buffers
-    in = fftw_alloc_real(n);
-    out = fftw_alloc_real(n);
-    out_fft = fftw_alloc_real(n);
-
-    // loop forever, writing wav file audio to stdout
-    while (true) {
-        memcpy(in, data+idx, n*sizeof(double));
-
-        fft_lpf_real(in, out, n, sample_rate, 12345l);  //xxx
-        for (int i = 0; i < n; i++) {
-            out[i] /= n;
-        }
-
-        fft_fwd_r2r(out, out_fft, n);
-        normalize(out_fft, n, 0, 1);
-        PLOT(0, false, out_fft, n,  0, sample_rate,  0, 1, "XXX");
-
-        // xxx call routine
-        for (int i = 0; i < n; i++) {
-            audio_out[i] = out[i];
-        }
-        fwrite(audio_out, sizeof(float), n, stdout);
-
-        idx += n;
-        if (idx + n >= num_items) {
-            idx = 0;
-        }
-    }
-
-    return NULL;
 }
 
 #if 0
@@ -915,31 +793,6 @@ void *rx_test(void *cx)
     }
 }
 #endif
-
-void audio_out(double yo)
-{
-    #define MAX_MA 1000
-    #define MAX_OUT 1000
-
-    static void *ma_cx;
-    static float out[MAX_OUT];
-    static int max;
-
-    double ma;
-
-    ma = moving_avg(yo, MAX_MA, &ma_cx);
-    out[max++] = yo - ma;
-
-    if (max == MAX_OUT) {
-        fwrite(out, sizeof(float), MAX_OUT, stdout);
-#if 0
-        double out_min, out_max, out_avg;
-        average_float(out, MAX_OUT, &out_min, &out_max, &out_avg);
-        fprintf(stderr, "min=%f max=%f avg=%f\n", out_min, out_max, out_avg);
-#endif
-        max = 0;
-    }
-}
 
 // xxx handle the differnet modes
 
