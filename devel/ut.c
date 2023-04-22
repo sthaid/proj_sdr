@@ -62,14 +62,16 @@ typedef struct {
 } plots_t;
 
 typedef struct {
-    char  title[100];
-    char *bool_name;
-    bool  bool_val;
-    char *int_name;
-    int   int_val;
-    int   int_step;
-    int   int_min;
-    int   int_max;
+    char *name;
+    char *info;
+    struct test_ctrl_s {
+        char *name;
+        double *val, min, max, step;
+        char *val_enum_names[10];
+        char *units;
+        int decr_event;
+        int incr_event;
+    } ctrl[6];
 } test_ctrl_t;
 
 //
@@ -113,8 +115,8 @@ static struct test_s {
         { "bpf",    bpf_test   },
         { "lpf",    lpf_test   },
         { "audio",  audio_test },
-        { "gen",    gen_test   },
-        { "rx",     rx_test    },
+        //{ "gen",    gen_test   },
+        //{ "rx",     rx_test    },
                 };
 // xxx
 // - rx sim
@@ -153,7 +155,6 @@ int main(int argc, char **argv)
     }
 
     NOTICE("Running '%s' test\n", t->test_name);
-    strcpy(tc.title, test_name);
     pthread_create(&tid, NULL, t->proc, NULL);
 
     // init sdl
@@ -187,7 +188,6 @@ void usage(void)
 int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
 {
     rect_t *pane = &pane_cx->pane;
-    char str[200], *p;
 
     #define FONTSZ 20
 
@@ -196,6 +196,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
     // ----------------------------
 
     if (request == PANE_HANDLER_REQ_INITIALIZE) {
+        NOTICE("char width %d\n", COL2X(1,FONTSZ));
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -204,6 +205,8 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
+        char str[100], *p;
+
         pthread_mutex_lock(&mutex);
         for (int i = 0; i < MAX_PLOT; i++) {
             plots_t *p = &plots[i];
@@ -218,18 +221,59 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
         pthread_mutex_unlock(&mutex);  // sep mutex for each xxx
 
         p = str;
-        p += sprintf(p, "%s  ", tc.title);
-        if (tc.bool_name) {
-            p += sprintf(p, "%s=%s  ", tc.bool_name, tc.bool_val ? "TRUE" : "FALSE");
-        }
-        if (tc.int_name) {
-            p += sprintf(p, "%s=%d  ", tc.int_name, tc.int_val);
+        p += sprintf(p, "%s", tc.name);
+        if (tc.info[0] != '\0') {
+            p += sprintf(p, " - %s\n", tc.info);
         }
         sdl_render_printf(pane, 
-                          0, pane->h-ROW2Y(1,FONTSZ), FONTSZ,
+                          0, pane->h-ROW2Y(4,FONTSZ), FONTSZ,
                           SDL_WHITE, SDL_BLACK, "%s" , str);
-// xxx more controls and status display
 
+        for (int i = 0; i < 6; i++) {
+            struct test_ctrl_s *x = &tc.ctrl[i];
+            if (x->val == NULL) continue;
+
+            p = str;
+            if (x->name) {
+                p += sprintf(p, "%s ", x->name);
+            }
+            if (x->val_enum_names[0] != NULL) {
+                int tmp = nearbyint(*x->val);
+                if (tmp < 0 || tmp >= 10 || x->val_enum_names[tmp][0] == '\0') {  // xxx define for 10
+                    p += sprintf(p, "%d ", tmp);
+                } else {
+                    p += sprintf(p, "%s ", x->val_enum_names[tmp]);
+                }
+            } else {
+                p += sprintf(p, "%g ", *x->val);
+            }
+            if (x->units) {
+                p += sprintf(p, "%s", x->units);
+            }
+
+            sdl_render_printf(pane, 
+                              COL2X(20*i,FONTSZ), pane->h-ROW2Y(2,FONTSZ), FONTSZ,
+                              SDL_WHITE, SDL_BLACK, "%s" , str);
+        }
+
+        for (int i = 0; i < 6; i++) {
+            struct test_ctrl_s *x = &tc.ctrl[i];
+            if (x->val == NULL) continue;
+
+            str[0] = '\0';
+            if (x->decr_event == SDL_EVENT_KEY_UP_ARROW && x->incr_event == SDL_EVENT_KEY_DOWN_ARROW) {
+                sprintf(str, "^ v");
+            } else if (x->decr_event == SDL_EVENT_KEY_LEFT_ARROW && x->incr_event == SDL_EVENT_KEY_RIGHT_ARROW) {
+                sprintf(str, "<- ->");
+            } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_LEFT_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_RIGHT_ARROW) {
+                sprintf(str, "SHIFT <- ->");
+            } //xxx add SHIFT and CTRL and ALT
+
+            sdl_render_printf(pane, 
+                              COL2X(20*i,FONTSZ), pane->h-ROW2Y(1,FONTSZ), FONTSZ,
+                              SDL_WHITE, SDL_BLACK, "%s" , str);
+        }
+    
         return PANE_HANDLER_RET_NO_ACTION;
     }
 
@@ -238,23 +282,26 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
     // -----------------------
 
     if (request == PANE_HANDLER_REQ_EVENT) {
-        switch (event->event_id) {
-        case SDL_EVENT_KEY_LEFT_ARROW:
-        case SDL_EVENT_KEY_RIGHT_ARROW: {
-            int tmp;
-            if (tc.int_name == NULL) break;
-            tmp = tc.int_val + 
-                  (event->event_id == SDL_EVENT_KEY_LEFT_ARROW ? -tc.int_step : tc.int_step);
-            if (tmp < tc.int_min) tmp = tc.int_min;
-            if (tmp > tc.int_max) tmp = tc.int_max;
-            tc.int_val = tmp;
-            break; }
-        case ' ':
-            if (tc.bool_name == NULL) break;
-            tc.bool_val = !tc.bool_val;
-            break;
-        default:
-            break;
+        // loop over test controls to find matching event
+        for (int i = 0; i < 6; i++) {
+            struct test_ctrl_s *x = &tc.ctrl[i];
+            double tmp;
+
+            if (x->val == NULL) continue;
+
+            if (x->incr_event == event->event_id) {
+                tmp = *x->val + x->step;
+                if (tmp > x->max) tmp = x->min;
+                *x->val = tmp;
+                break;
+            }
+
+            if (x->decr_event == event->event_id) {
+                tmp = *x->val - x->step;
+                if (tmp < x->min) tmp = x->max;
+                *x->val = tmp;
+                break;
+            }
         }
 
         return PANE_HANDLER_RET_NO_ACTION;
@@ -286,6 +333,7 @@ void zero_complex(complex *data, int n)
     memset(data, 0, n*sizeof(complex));
 }
 
+// xxx allow 0 hz
 void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate)
 {
     int f;
@@ -297,7 +345,7 @@ void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int
         double  dt = (1. / sample_rate);
 
         for (int i = 0; i < n; i++) {
-            sw[i] += sin(w * t);
+            sw[i] += (w ? sin(w * t) : 0.5);
             t += dt;
         }
 
@@ -470,7 +518,7 @@ void *bpf_test(void *cx)
     complex *in, *fft;
     int current_mode;
 
-    int sample_rate = 22000;
+    int sample_rate = 20000;
     int max = 60 * sample_rate;
     int total = 0;
 
@@ -479,12 +527,26 @@ void *bpf_test(void *cx)
     #define WHITE_NOISE 2
     #define WAV_FILE    3
 
-    // init ctrls
-    tc.int_name = "SELECT";
-    tc.int_val  = SINE_WAVE;
-    tc.int_step = 1;
-    tc.int_min  = 0;
-    tc.int_max  = WAV_FILE;
+    static char tc_info[100];
+    static double tc_mode;
+    static double tc_ctr;
+    static double tc_width = 3000;
+
+    // init test controls
+    tc.name = "BPF";
+    tc.info = tc_info;
+    tc.ctrl[0] = (struct test_ctrl_s)
+                 {"MODE", &tc_mode, SINE_WAVE, WAV_FILE, 1, 
+                  {"SINE_WAVE", "SINE_WAVES", "WHITE_NOISE", "WAV_FILE"}, "", 
+                  SDL_EVENT_KEY_UP_ARROW, SDL_EVENT_KEY_DOWN_ARROW};
+    tc.ctrl[1] = (struct test_ctrl_s)
+                 {"CENTER", &tc_ctr, -10000, 10000, 100,
+                  {}, "HZ", 
+                  SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
+    tc.ctrl[2] = (struct test_ctrl_s)
+                 {"WIDTH", &tc_width, 1000, 10000, 100,
+                  {}, "HZ", 
+                  SDL_EVENT_KEY_SHIFT_LEFT_ARROW, SDL_EVENT_KEY_SHIFT_RIGHT_ARROW};
 
     // alloc buffers
     in_real = fftw_alloc_real(max);
@@ -496,13 +558,13 @@ void *bpf_test(void *cx)
         // - sine waves
         // - white noise
         // - wav file
-        current_mode = tc.int_val;
+        current_mode = tc_mode;
         switch (current_mode) {
         case SINE_WAVE:
             init_using_sine_waves(in_real, max, 1000, 1000, 0, sample_rate);
             break;
         case SINE_WAVES:
-            init_using_sine_waves(in_real, max, 1000, 10000, 1000, sample_rate);
+            init_using_sine_waves(in_real, max, 0, 10000, 1000, sample_rate);
             break;
         case WHITE_NOISE:
             init_using_white_noise(in_real, max);
@@ -515,9 +577,9 @@ void *bpf_test(void *cx)
         }
 
         // xx
-        normalize(in_real, max, -1, 1);
+        //normalize(in_real, max, -1, 1);
 
-        while (current_mode == tc.int_val) {
+        while (current_mode == tc_mode) {
             // copy .01 secs of data from in_real to in buff
             int n = .01 * sample_rate;
             for (int i = 0; i < n; i++) {
@@ -526,27 +588,21 @@ void *bpf_test(void *cx)
             total += n;
 
             // plot the in buff, and fft of in buff
-            plot_complex(0, in, n, 0, .01, -1, 1, "SINE_WAVES", "SECS");  // xxx title and units?
+            plot_complex(0, in, n, 0, .01, -2, 2, "SINE_WAVES", "SECS");  // xxx title and units?
             fft_fwd_c2c(in, fft, n);
             plot_fft(1, fft, n, n/.01, "FFT", "HZ");
 
             // apply filter to in buff
-            fft_bpf_complex(in, in, n, sample_rate, -1000, 1000);
-
+            fft_bpf_complex(in, in, n, sample_rate, tc_ctr-tc_width/2, tc_ctr+tc_width/2);
 
             // plot the filtered in buff, and fft of the filtered in buff
-            plot_complex(2, in, n, 0, .01, -1, 1, "SINE_WAVES", "SECS");  // xxx title and units?
+            plot_complex(2, in, n, 0, .01, -2, 2, "SINE_WAVES", "SECS");  // xxx title and units?
             fft_fwd_c2c(in, fft, n);
             plot_fft(3, fft, n, n/.01, "FFT", "HZ");
-/*
 
-            plot(filtered)
-            plot_fft(filtered)
-
-*/
             // play the filtered audio
             for (int i = 0; i < n; i++) {
-                audio_out(in[i]);  // xxx not yet filtered
+                audio_out(in[i]);
             }
         }
     }        
@@ -623,12 +679,14 @@ void *audio_test(void *cx)
     // read wav file
     read_and_filter_wav_file("super_critical.wav", &data, &num_items, &sample_rate, 4000);
 
+#if 0
     // init lpf_freq control
     tc.int_name = "LPF_FREQ";
     tc.int_val  = 4000;
     tc.int_step = 100;
     tc.int_min  = 500;
     tc.int_max  = 10000;
+#endif
 
     // xxx
     n = sample_rate / 10;
@@ -644,7 +702,7 @@ void *audio_test(void *cx)
     while (true) {
         memcpy(in, data+idx, n*sizeof(double));
 
-        fft_lpf_real(in, out, n, sample_rate, tc.int_val);
+        fft_lpf_real(in, out, n, sample_rate, 12345l);  //xxx
         for (int i = 0; i < n; i++) {
             out[i] /= n;
         }
@@ -668,6 +726,7 @@ void *audio_test(void *cx)
     return NULL;
 }
 
+#if 0
 // -----------------  GEN TEST  -----------------------------
 
 // xxx won't be needed, I hope
@@ -855,6 +914,7 @@ void *rx_test(void *cx)
         __sync_synchronize();
     }
 }
+#endif
 
 void audio_out(double yo)
 {
@@ -872,7 +932,7 @@ void audio_out(double yo)
 
     if (max == MAX_OUT) {
         fwrite(out, sizeof(float), MAX_OUT, stdout);
-#if 1
+#if 0
         double out_min, out_max, out_avg;
         average_float(out, MAX_OUT, &out_min, &out_max, &out_avg);
         fprintf(stderr, "min=%f max=%f avg=%f\n", out_min, out_max, out_avg);
@@ -883,6 +943,7 @@ void audio_out(double yo)
 
 // xxx handle the differnet modes
 
+#if 0
 void init_get_data(void)
 {
     pthread_t tid;
@@ -954,4 +1015,4 @@ void *get_data_from_file_thread(void *cx)
         //NOTICE("rate = %e\n", (double)total/(microsec_timer() - t_start));
     }
 }
-
+#endif
