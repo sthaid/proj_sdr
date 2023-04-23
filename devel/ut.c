@@ -245,12 +245,16 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                 sprintf(str, "SHIFT ^ v");
             } else if (x->decr_event == SDL_EVENT_KEY_UP_ARROW+CTRL && x->incr_event == SDL_EVENT_KEY_DOWN_ARROW+CTRL) {
                 sprintf(str, "CTRL ^ v");
+            } else if (x->decr_event == SDL_EVENT_KEY_UP_ARROW+ALT && x->incr_event == SDL_EVENT_KEY_DOWN_ARROW+ALT) {
+                sprintf(str, "ALT ^ v");
             } else if (x->decr_event == SDL_EVENT_KEY_LEFT_ARROW && x->incr_event == SDL_EVENT_KEY_RIGHT_ARROW) {
                 sprintf(str, "<- ->");
             } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_LEFT_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_RIGHT_ARROW) {
                 sprintf(str, "SHIFT <- ->");
             } else if (x->decr_event == SDL_EVENT_KEY_LEFT_ARROW+CTRL && x->incr_event == SDL_EVENT_KEY_RIGHT_ARROW+CTRL) {
                 sprintf(str, "CTRL <- ->");
+            } else if (x->decr_event == SDL_EVENT_KEY_LEFT_ARROW+ALT && x->incr_event == SDL_EVENT_KEY_RIGHT_ARROW+ALT) {
+                sprintf(str, "ALT <- ->");
             } else {
                 p = str;
                 if (isgraph(x->decr_event)) p += sprintf(p, "%c ", x->decr_event);
@@ -686,7 +690,8 @@ void *antenna_test(void *cx)
 #define DATA_BLOCK_DURATION  ((double)MAX_DATA / SAMPLE_RATE)
 
 #define DEFAULT_FREQ 500000
-#define DEFAULT_DETECTOR .9995
+#define DEFAULT_K1 .004
+#define DEFAULT_K2 10.0
 #define FREQ_OFFSET 300000
 #define BPF_WIDTH 8000
 
@@ -694,9 +699,10 @@ unsigned long Head;
 unsigned long Tail;
 complex      *Data[MAX_DATA_BLOCK];
 
-double        tc_freq     = DEFAULT_FREQ;
-double        tc_detector = DEFAULT_DETECTOR;
-double        tc_reset    = 0;
+double        tc_freq  = DEFAULT_FREQ;
+double        tc_k1    = DEFAULT_K1;
+double        tc_k2    = DEFAULT_K2;
+double        tc_reset = 0;
 
 void *get_data_thread(void *cx);
 
@@ -725,10 +731,14 @@ void *rx_test(void *cx)
                  {"F", &tc_freq, 0, 1000000, 1000, 
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
-    tc.ctrl[2] = (struct test_ctrl_s)
-                 {"K1", &tc_detector, .9, 1.0, .0001, 
+    tc.ctrl[1] = (struct test_ctrl_s)
+                 {"K1", &tc_k1, 0, 1.0, .0001, 
                   {}, NULL,
                   SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
+    tc.ctrl[2] = (struct test_ctrl_s)
+                 {"K2", &tc_k2, 1, 100, 1, 
+                  {}, NULL,
+                  SDL_EVENT_KEY_LEFT_ARROW+ALT, SDL_EVENT_KEY_RIGHT_ARROW+ALT};
     tc.ctrl[3] = (struct test_ctrl_s)
                  {"RESET", &tc_reset, 0, 1, 1,
                   {"", ""}, NULL, 
@@ -745,7 +755,8 @@ void *rx_test(void *cx)
         // xxx
         if (tc_reset) {
             tc_freq     = DEFAULT_FREQ;
-            tc_detector = DEFAULT_DETECTOR;
+            tc_k1       = DEFAULT_K1;
+            tc_k2       = DEFAULT_K2;
             tc_reset = 0;
         }
 
@@ -762,14 +773,21 @@ void *rx_test(void *cx)
         // AM detector, and audio output
         for (int i = 0; i < n; i++) {
             y = creal(data_filtered[i]);  // xxx scaling
+
+#if 0
             if (y > yo) {  // xxx improve this section
                 yo = y;
             }
-            yo = tc_detector * yo;
+            yo = tc_k1 * yo;
+#else
+            if (y > 0) {
+                yo = yo + (y - yo) * tc_k1;
+            }
+#endif
 
 
             if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-                audio_out(yo*10);  // xxx how to auto scale
+                audio_out(yo*tc_k2);  // xxx how to auto scale
                 cnt = 0;
             }
         }
