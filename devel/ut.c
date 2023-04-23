@@ -734,7 +734,7 @@ void *antenna_test(void *cx)
 
 #define DEFAULT_FREQ 500000   // 500 KHz
 #define DEFAULT_K1   0.004
-#define DEFAULT_K2   10.0
+#define DEFAULT_K2   4.0
 //#define FREQ_OFFSET  300000   // 300 KHz
 #define FREQ_OFFSET  0
 #define BPF_WIDTH    8000     // 8 KHz
@@ -790,6 +790,8 @@ void *rx_test(void *cx)
 
     pthread_create(&tid, NULL, get_data_thread, NULL);
 
+    //#define MY_DEBUG
+
     while (true) {
         // wait for data to be available
         while (Head == Tail) {
@@ -810,12 +812,38 @@ void *rx_test(void *cx)
                         FREQ_OFFSET-BPF_WIDTH/2, FREQ_OFFSET+BPF_WIDTH/2);
         plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");  // xxx define for .1
 
-#if 1
+#ifdef MY_DEBUG
         // debug
         fft_fwd_c2c(data_filtered, data_filtered_fft, n);
         plot_fft(1, data_filtered_fft, n, n/DATA_BLOCK_DURATION, "DATA_FILTERED_FFT", "HZ");  // xxx define for .1
 #endif
 
+        // shift data_filtered to 300 khz, and plot
+        // xxx make this a routine for AM detector
+        static double t;
+        static double delta_t = 1. / SAMPLE_RATE;
+        double w = 300000 * TWO_PI;
+        for (int i = 0; i < n; i++) {
+            data_filtered[i] = data_filtered[i] * cexp(I * w * t);  // xxx simd ?
+            t += delta_t;
+        }
+#ifdef MY_DEBUG
+        fft_fwd_c2c(data_filtered, data_filtered_fft, n);
+        plot_fft(2, data_filtered_fft, n, n/DATA_BLOCK_DURATION, "DATA_SHIFTED_FFT", "HZ");  // xxx define for .1
+#endif
+        for (int i = 0; i < n; i++) {
+            y = cabs(data_filtered[i]);  // xxx scaling
+            if (y > 0) {
+                yo = yo + (y - yo) * tc_k1;
+            }
+            if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
+                audio_out(yo*tc_k2);  // xxx how to auto scale
+                cnt = 0;
+            }
+        }
+
+
+#if 0
         // AM detector, and audio output
         for (int i = 0; i < n; i++) {
             y = cabs(data_filtered[i]);  // xxx scaling
@@ -838,6 +866,7 @@ void *rx_test(void *cx)
                 cnt = 0;
             }
         }
+#endif
 
         // done with this data block, so increment head
         __sync_synchronize();
@@ -854,7 +883,7 @@ void *get_data_thread(void *cx)
     struct stat statbuf;
     size_t file_offset, file_size, len;
     double t, delta_t, antenna[MAX_DATA], w;
-    complex *data, synth0, synth90;
+    complex *data;
 
     fd = open(ANTENNA_FILENAME, O_RDONLY);
     if (fd < 0) {
@@ -888,23 +917,12 @@ void *get_data_thread(void *cx)
         data = Data[Tail%MAX_DATA_BLOCK];
         w = TWO_PI * (tc_freq - FREQ_OFFSET);
         for (int i = 0; i < MAX_DATA; i++) {
-#if 0
-            synth0  = sin(w * t);                                    // cos is the I
-            synth90 = sin(w * t + M_PI_2);  // xxx or use cos        // sin i s the Q   imaginary
-            data[i] = antenna[i] * (synth0 + I * synth90);
-#endif
-#if 0
-            data[i] = antenna[i] * sin(w * t)  +     // I
-                      antenna[i] * cos(w * t) * I;   // Q
-#endif
-#if 1
             data[i] = antenna[i] * cexp(-I * w * t);
-#endif
-
             t += delta_t;
         }
 
         // increment Tail
+        // xxx is sync_syncrhonize  needed
         __sync_synchronize();
         Tail++;
         __sync_synchronize();
@@ -1124,7 +1142,7 @@ void *get_data_thread(void *cx)
 
 void *gen_test(void *cx)
 {
-    double   *antenna, t, synth0, synth90;
+    double   *antenna, t;
     complex  *antenna_fft, *iq, *iq_fft, *iq_filtered, *iq_filtered_fft;
     int      n=0, tmax;
     FILE    *fp;
