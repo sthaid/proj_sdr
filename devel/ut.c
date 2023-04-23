@@ -22,6 +22,9 @@
 
 #define MAX_TESTS (sizeof(tests)/sizeof(tests[0]))
 
+#define CTRL SDL_EVENT_KEY_CTRL
+#define ALT  SDL_EVENT_KEY_ALT
+
 //
 // typedefs
 //
@@ -214,7 +217,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
             }
             if (x->val_enum_names[0] != NULL) {
                 int tmp = nearbyint(*x->val);
-                if (tmp < 0 || tmp >= 10 || x->val_enum_names[tmp][0] == '\0') {  // xxx define for 10
+                if (tmp < 0 || tmp >= 10 || x->val_enum_names[tmp] == NULL) {  // xxx define for 10
                     p += sprintf(p, "%d ", tmp);
                 } else {
                     p += sprintf(p, "%s ", x->val_enum_names[tmp]);
@@ -238,13 +241,21 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
             str[0] = '\0';
             if (x->decr_event == SDL_EVENT_KEY_UP_ARROW && x->incr_event == SDL_EVENT_KEY_DOWN_ARROW) {
                 sprintf(str, "^ v");
+            } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_UP_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_DOWN_ARROW) {
+                sprintf(str, "SHIFT ^ v");
+            } else if (x->decr_event == SDL_EVENT_KEY_UP_ARROW+CTRL && x->incr_event == SDL_EVENT_KEY_DOWN_ARROW+CTRL) {
+                sprintf(str, "CTRL ^ v");
             } else if (x->decr_event == SDL_EVENT_KEY_LEFT_ARROW && x->incr_event == SDL_EVENT_KEY_RIGHT_ARROW) {
                 sprintf(str, "<- ->");
             } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_LEFT_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_RIGHT_ARROW) {
                 sprintf(str, "SHIFT <- ->");
-            } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_UP_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_DOWN_ARROW) {
-                sprintf(str, "SHIFT ^ v");
-            } //xxx add SHIFT and CTRL and ALT
+            } else if (x->decr_event == SDL_EVENT_KEY_LEFT_ARROW+CTRL && x->incr_event == SDL_EVENT_KEY_RIGHT_ARROW+CTRL) {
+                sprintf(str, "CTRL <- ->");
+            } else {
+                p = str;
+                if (isgraph(x->decr_event)) p += sprintf(p, "%c ", x->decr_event);
+                if (isgraph(x->incr_event)) p += sprintf(p, "%c ", x->incr_event);
+            }
 
             sdl_render_printf(pane, 
                               COL2X(20*i,FONTSZ), pane->h-ROW2Y(1,FONTSZ), FONTSZ,
@@ -259,6 +270,10 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
     // -----------------------
 
     if (request == PANE_HANDLER_REQ_EVENT) {
+        if (event->event_id == SDL_EVENT_NONE) {
+            return PANE_HANDLER_RET_NO_ACTION;
+        }
+
         // loop over test controls to find matching event
         for (int i = 0; i < 6; i++) {
             struct test_ctrl_s *x = &tc.ctrl[i];
@@ -268,14 +283,14 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
             if (x->incr_event == event->event_id) {
                 tmp = *x->val + x->step;
-                if (tmp > x->max) tmp = x->min;
+                if (tmp > x->max) tmp = x->max;
                 *x->val = tmp;
                 break;
             }
 
             if (x->decr_event == event->event_id) {
                 tmp = *x->val - x->step;
-                if (tmp < x->min) tmp = x->max;
+                if (tmp < x->min) tmp = x->min;
                 *x->val = tmp;
                 break;
             }
@@ -535,8 +550,8 @@ void *bpf_test(void *cx)
                   SDL_EVENT_KEY_SHIFT_LEFT_ARROW, SDL_EVENT_KEY_SHIFT_RIGHT_ARROW};
     tc.ctrl[3] = (struct test_ctrl_s) // xxx improve
                  {"RESET", &tc_reset, 0, 1, 1,
-                  {}, NULL, 
-                  SDL_EVENT_KEY_SHIFT_UP_ARROW, SDL_EVENT_KEY_SHIFT_DOWN_ARROW};
+                  {"", ""}, NULL, 
+                  SDL_EVENT_NONE, 'r'};
 
     // alloc buffers
     in_real = fftw_alloc_real(max);
