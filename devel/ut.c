@@ -826,6 +826,8 @@ void *rx_test(void *cx)
             //   https://en.wikipedia.org/wiki/Direct-conversion_receiver
             // xxx wikipedia sdr
             //   https://en.wikipedia.org/wiki/Software-defined_radio
+            // xxx qudrature mixers
+            //   https://www.youtube.com/watch?v=JuuKF1RFvBM
     
             if (y > 0) {
                 yo = yo + (y - yo) * tc_k1;
@@ -886,9 +888,19 @@ void *get_data_thread(void *cx)
         data = Data[Tail%MAX_DATA_BLOCK];
         w = TWO_PI * (tc_freq - FREQ_OFFSET);
         for (int i = 0; i < MAX_DATA; i++) {
-            synth0  = sin(w * t);
-            synth90 = sin(w * t + M_PI_2);
+#if 0
+            synth0  = sin(w * t);                                    // cos is the I
+            synth90 = sin(w * t + M_PI_2);  // xxx or use cos        // sin i s the Q   imaginary
             data[i] = antenna[i] * (synth0 + I * synth90);
+#endif
+#if 1
+            data[i] = antenna[i] * sin(w * t)  +     // I
+                      antenna[i] * cos(w * t) * I;   // Q
+#endif
+#if 0
+            data[i] = antenna[i] * cexp(-I * w * t);
+#endif
+
             t += delta_t;
         }
 
