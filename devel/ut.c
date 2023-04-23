@@ -25,6 +25,8 @@
 #define CTRL SDL_EVENT_KEY_CTRL
 #define ALT  SDL_EVENT_KEY_ALT
 
+#define USE_PA
+
 //
 // typedefs
 //
@@ -43,17 +45,19 @@ typedef struct {
     char   *x_units;
 } plots_t;
 
+#define MAX_CTRL_ENUM_NAMES 10
+#define MAX_CTRL 6
 typedef struct {
     char *name;
     char *info;
     struct test_ctrl_s {
         char *name;
         double *val, min, max, step;
-        char *val_enum_names[10];
+        char *val_enum_names[MAX_CTRL_ENUM_NAMES];
         char *units;
         int decr_event;
         int incr_event;
-    } ctrl[6];
+    } ctrl[MAX_CTRL];
 } test_ctrl_t;
 
 //
@@ -62,7 +66,6 @@ typedef struct {
 
 char *progname = "ut";
 
-// xxx maybe these are not used
 char *arg1_str, *arg2_str, *arg3_str;
 int   arg1=-1, arg2=-1, arg3=-1;
 
@@ -78,6 +81,10 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void usage(void);
 int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
+
+#ifdef USE_PA
+void *pa_play_thread(void*cx);
+#endif
 
 void *plot_test(void *cx);
 void *bpf_test(void *cx);
@@ -107,8 +114,6 @@ int main(int argc, char **argv)
     pthread_t tid;
     char *test_name;
 
-    init_fft();  // xxx is this needed, elim later
-
     if (argc == 1) {
         usage();
         return 1;
@@ -127,6 +132,12 @@ int main(int argc, char **argv)
     if (i == MAX_TESTS) {
         FATAL("test '%s' not found\n", test_name);
     }
+
+    init_fft();  // xxx is this needed, elim later
+#ifdef USE_PA
+    pa_init();
+    pthread_create(&tid, NULL, pa_play_thread, NULL);
+#endif
 
     NOTICE("Running '%s' test\n", t->test_name);
     pthread_create(&tid, NULL, t->proc, NULL);
@@ -206,7 +217,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                           0, pane->h-ROW2Y(4,FONTSZ), FONTSZ,
                           SDL_WHITE, SDL_BLACK, "%s" , str);
 
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < MAX_CTRL; i++) {
             struct test_ctrl_s *x = &tc.ctrl[i];
             if (x->val == NULL) continue;
 
@@ -217,7 +228,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
             }
             if (x->val_enum_names[0] != NULL) {
                 int tmp = nearbyint(*x->val);
-                if (tmp < 0 || tmp >= 10 || x->val_enum_names[tmp] == NULL) {  // xxx define for 10
+                if (tmp < 0 || tmp >= MAX_CTRL_ENUM_NAMES || x->val_enum_names[tmp] == NULL) {
                     p += sprintf(p, "%d ", tmp);
                 } else {
                     p += sprintf(p, "%s ", x->val_enum_names[tmp]);
@@ -234,7 +245,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                               SDL_WHITE, SDL_BLACK, "%s" , str);
         }
 
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < MAX_CTRL; i++) {
             struct test_ctrl_s *x = &tc.ctrl[i];
             if (x->val == NULL) continue;
 
@@ -279,7 +290,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
         }
 
         // loop over test controls to find matching event
-        for (int i = 0; i < 6; i++) {
+        for (int i = 0; i < MAX_CTRL; i++) {
             struct test_ctrl_s *x = &tc.ctrl[i];
             double tmp;
 
@@ -361,10 +372,9 @@ void init_using_wav_file(double *wav, int n, char *filename)
     double *data;
 
     ret = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
-    if (ret != 0 || num_chan != 1) {
-        FATAL("read_wav_file ret=%d num_chan=%d\n", ret, num_chan);
+    if (ret != 0 || num_chan != 1 || sample_rate < 21000 || sample_rate > 23000) {
+        FATAL("read_wav_file ret=%d num_chan=%d sample_rate=%d\n", ret, num_chan, sample_rate);
     }
-    // xxx also fatal on sample rate
 
     for (int i = 0; i < n; i++) {
         wav[i] = data[i%num_items];
@@ -418,7 +428,6 @@ void plot_complex(int idx, complex *data, int n, double xvmin, double xvmax, dou
     pthread_mutex_unlock(&mutex);
 }
 
-// xxx this can do the fft ?
 void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *x_units)
 {
     plots_t *p = &plots[idx];
@@ -450,9 +459,9 @@ void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *
     pthread_mutex_unlock(&mutex);
 }
 
+#ifndef USE_PA
 void audio_out(double yo)
 {
-#if 1
     #define MAX_MA 1000
     #define MAX_OUT 1000
 
@@ -472,18 +481,53 @@ void audio_out(double yo)
         //fprintf(stderr, "min=%f max=%f avg=%f\n", out_min, out_max, out_avg);
         max = 0;
     }
-#else
-    #define MAX_OUT 1000
-    static float out[MAX_OUT];
-    static int max;
-
-    out[max++] = yo;
-    if (max == MAX_OUT) {
-        fwrite(out, sizeof(float), MAX_OUT, stdout);
-        max = 0;
-    }
-#endif
 }
+#else
+#define MAX_AO_BUFF 2000
+double ao_buff[MAX_AO_BUFF];
+unsigned long ao_head;
+unsigned long ao_tail;
+
+void audio_out(double yo)
+{
+    #define MAX_MA 1000
+    static void *ma_cx;
+    double ma;
+
+    while (ao_tail - ao_head == MAX_AO_BUFF) {
+        usleep(1000);
+    }
+
+    ma = moving_avg(yo, MAX_MA, &ma_cx);
+    ao_buff[ao_tail%MAX_AO_BUFF] = yo - ma;
+    ao_tail++;
+}
+
+int pa_play_cb(void *data, void *cx_arg)
+{
+    while (ao_head == ao_tail) {
+        usleep(1000);
+    }
+
+    *(float*)data = ao_buff[ao_head%MAX_AO_BUFF];
+    ao_head++;
+    return 0;
+}
+
+void *pa_play_thread(void*cx)
+{
+    int ret;
+    int num_chan = 1;
+    int sample_rate = 22000;
+
+    ret = pa_play2(DEFAULT_OUTPUT_DEVICE, num_chan, sample_rate, PA_FLOAT32, pa_play_cb, NULL);
+    if (ret != 0) {
+        FATAL("pa_play2\n");
+    }
+
+    return NULL;
+}
+#endif
 
 // -----------------  PLOT TEST  ---------------------------
 
@@ -553,7 +597,7 @@ void *bpf_test(void *cx)
                  {"WIDTH", &tc_width, 1000, 10000, 100,
                   {}, "HZ", 
                   SDL_EVENT_KEY_SHIFT_LEFT_ARROW, SDL_EVENT_KEY_SHIFT_RIGHT_ARROW};
-    tc.ctrl[3] = (struct test_ctrl_s) // xxx improve
+    tc.ctrl[3] = (struct test_ctrl_s)
                  {"RESET", &tc_reset, 0, 1, 1,
                   {"", ""}, NULL, 
                   SDL_EVENT_NONE, 'r'};
@@ -632,7 +676,6 @@ void *bpf_test(void *cx)
 #define MAX_N        (SAMPLE_RATE / 10)   // 0.1 sec range
 #define DELTA_T      (1. / SAMPLE_RATE)
 
-// xxx name
 void *antenna_test(void *cx)
 {
     double  *antenna, t, tmax;
@@ -685,15 +728,16 @@ void *antenna_test(void *cx)
 // -----------------  RX TEST  -----------------------------
 
 #define SAMPLE_RATE  2400000              // 2.4 MS/sec
-#define MAX_DATA_BLOCK 8
+#define MAX_DATA_BLOCK 3
 #define MAX_DATA       131072
 #define DATA_BLOCK_DURATION  ((double)MAX_DATA / SAMPLE_RATE)
 
-#define DEFAULT_FREQ 500000
-#define DEFAULT_K1 .004
-#define DEFAULT_K2 10.0
-#define FREQ_OFFSET 300000
-#define BPF_WIDTH 8000
+#define DEFAULT_FREQ 500000   // 500 KHz
+#define DEFAULT_K1   0.004
+#define DEFAULT_K2   10.0
+//#define FREQ_OFFSET  300000   // 300 KHz
+#define FREQ_OFFSET  0
+#define BPF_WIDTH    8000     // 8 KHz
 
 unsigned long Head;
 unsigned long Tail;
@@ -764,16 +808,25 @@ void *rx_test(void *cx)
         data = Data[Head % MAX_DATA_BLOCK];
         fft_bpf_complex(data, data_filtered, data_fft, n, SAMPLE_RATE, 
                         FREQ_OFFSET-BPF_WIDTH/2, FREQ_OFFSET+BPF_WIDTH/2);
-
-        // debug
         plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");  // xxx define for .1
+
+#if 1
+        // debug
         fft_fwd_c2c(data_filtered, data_filtered_fft, n);
         plot_fft(1, data_filtered_fft, n, n/DATA_BLOCK_DURATION, "DATA_FILTERED_FFT", "HZ");  // xxx define for .1
+#endif
 
         // AM detector, and audio output
         for (int i = 0; i < n; i++) {
             y = creal(data_filtered[i]);  // xxx scaling
 
+            // xxx a product detector
+            //   https://en.wikipedia.org/wiki/Product_detector
+            // xxx this discusses quadrature detectors
+            //   https://en.wikipedia.org/wiki/Direct-conversion_receiver
+            // xxx wikipedia sdr
+            //   https://en.wikipedia.org/wiki/Software-defined_radio
+    
             if (y > 0) {
                 yo = yo + (y - yo) * tc_k1;
             }
@@ -828,7 +881,8 @@ void *get_data_thread(void *cx)
             file_offset = 0;
         }
 
-        // frequency shift the antenna data, and store result in Data[Tail]
+        // frequency shift the antenna data, and 
+        // store result in Data[Tail], which are complex values
         data = Data[Tail%MAX_DATA_BLOCK];
         w = TWO_PI * (tc_freq - FREQ_OFFSET);
         for (int i = 0; i < MAX_DATA; i++) {
@@ -886,9 +940,6 @@ void *get_data_thread(void *cx)
         //NOTICE("rate = %e\n", (double)total/(microsec_timer() - t_start));
     }
 }
-#endif
-
-#if 0
 
 // reference sim/sim.c
 
@@ -977,11 +1028,9 @@ void *rx_test(void *cx)
         __sync_synchronize();
     }
 }
-#endif
 
 // xxx handle the differnet modes
 
-#if 0
 void init_get_data(void)
 {
     pthread_t tid;
@@ -1053,13 +1102,7 @@ void *get_data_thread(void *cx)
         //NOTICE("rate = %e\n", (double)total/(microsec_timer() - t_start));
     }
 }
-#endif
 
-
-
-
-
-#if 0
 // xxx dont use all these defines
 #define SAMPLE_RATE  2000000              // 2.0 MS/sec
 #define W_SYNTH      (TWO_PI * 500000)    // 500 KHz
@@ -1137,9 +1180,7 @@ void *gen_test(void *cx)
 
     return NULL;
 }
-#endif
 
-#if 0
     complex *iq, *iq_fft;
     double   t, max_iq_scaling, max_iq_measured=0;
     double   *antenna, synth0, synth90;
@@ -1220,10 +1261,8 @@ void *gen_test(void *cx)
     }
 
     return NULL;
-#endif
 
 // -----------------  RX TEST  -----------------------------
-#if 0
 
 // reference sim/sim.c
 
@@ -1314,11 +1353,9 @@ void *rx_test(void *cx)
         __sync_synchronize();
     }
 }
-#endif
 
 // xxx handle the differnet modes
 
-#if 0
 void init_get_data(void)
 {
     pthread_t tid;
@@ -1390,4 +1427,27 @@ void *get_data_thread(void *cx)
         //NOTICE("rate = %e\n", (double)total/(microsec_timer() - t_start));
     }
 }
+
+int play_cb_test(void *data, void *cx_arg)
+{
+    static int idx;
+
+    if (idx && (idx%22000) == 0) sleep(1);
+
+    *(float*)data = ((float*)cx_arg)[idx++];
+    return 0;
+}
+    //pa_print_device_info_all();
+    //int idx = pa_find_device(DEFAULT_OUTPUT_DEVICE);
+    //NOTICE("XXX idx %d\n", idx);
+    float *data;
+    int ret, num_chan, num_items, sample_rate;
+    ret = read_wav_file_float("super_critical.wav", &data, &num_chan, &num_items, &sample_rate);
+    if (ret != 0) {
+        FATAL("read_wav_file_float\n");
+    }
+    ret = pa_play(DEFAULT_OUTPUT_DEVICE, num_chan, num_items, sample_rate, PA_FLOAT32, data);
+    if (ret != 0) {
+        FATAL("pa_play\n");
+    }
 #endif

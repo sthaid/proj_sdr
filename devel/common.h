@@ -19,6 +19,7 @@
 #include <png_rw.h>
 #include <wav.h>
 #include <fft.h>
+#include <pa.h>
 
 // ut_antenna.c
 void init_antenna(void);
