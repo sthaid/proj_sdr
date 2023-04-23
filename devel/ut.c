@@ -448,7 +448,7 @@ void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *
 
 void audio_out(double yo)
 {
-#if 0
+#if 1
     #define MAX_MA 1000
     #define MAX_OUT 1000
 
@@ -594,7 +594,7 @@ void *bpf_test(void *cx)
                 tc_width = DEFAULT_WIDTH;
             }
 
-            // copy .01 secs of data from in_real to in buff
+            // copy .1 secs of data from in_real to in buff
             for (int i = 0; i < n; i++) {
                 in[i] = in_real[(total+i)%max];
             }
@@ -683,28 +683,56 @@ void *antenna_test(void *cx)
 #define SAMPLE_RATE  2400000              // 2.4 MS/sec
 #define MAX_DATA_BLOCK 8
 #define MAX_DATA       131072
+#define DATA_BLOCK_DURATION  ((double)MAX_DATA / SAMPLE_RATE)
+
+#define DEFAULT_FREQ 500000
+#define DEFAULT_DETECTOR .9995
+#define FREQ_OFFSET 300000
+#define BPF_WIDTH 8000
 
 unsigned long Head;
 unsigned long Tail;
 complex      *Data[MAX_DATA_BLOCK];
 
+double        tc_freq     = DEFAULT_FREQ;
+double        tc_detector = DEFAULT_DETECTOR;
+double        tc_reset    = 0;
+
 void *get_data_thread(void *cx);
 
 void *rx_test(void *cx)
 {
-    complex  *data, *data_filtered, *data_fft;
+    complex  *data, *data_filtered, *data_fft, *data_filtered_fft;
     double    y, yo;
     int       cnt, n;
     pthread_t tid;
 
-    n             = MAX_DATA;;
-    data_filtered = fftw_alloc_complex(n);
-    data_fft      = fftw_alloc_complex(n);
+    static char tc_info[100];
+
+    n                 = MAX_DATA;;
+    data_filtered     = fftw_alloc_complex(n);
+    data_filtered_fft = fftw_alloc_complex(n);
+    data_fft          = fftw_alloc_complex(n);
     for (int i = 0; i < MAX_DATA_BLOCK; i++) {
         Data[i] = fftw_alloc_complex(n);
     }
     yo  = 0;
     cnt = 0;
+
+    tc.name = "RX";
+    tc.info = tc_info;
+    tc.ctrl[0] = (struct test_ctrl_s)
+                 {"F", &tc_freq, 0, 1000000, 1000, 
+                  {}, "HZ", 
+                  SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
+    tc.ctrl[2] = (struct test_ctrl_s)
+                 {"K1", &tc_detector, .9, 1.0, .0001, 
+                  {}, NULL,
+                  SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
+    tc.ctrl[3] = (struct test_ctrl_s)
+                 {"RESET", &tc_reset, 0, 1, 1,
+                  {"", ""}, NULL, 
+                  SDL_EVENT_NONE, 'r'};
 
     pthread_create(&tid, NULL, get_data_thread, NULL);
 
@@ -714,9 +742,22 @@ void *rx_test(void *cx)
             usleep(1000);
         }
 
+        // xxx
+        if (tc_reset) {
+            tc_freq     = DEFAULT_FREQ;
+            tc_detector = DEFAULT_DETECTOR;
+            tc_reset = 0;
+        }
+
         // low pass filter
         data = Data[Head % MAX_DATA_BLOCK];
-        fft_bpf_complex(data, data_filtered, data_fft, n, SAMPLE_RATE, 0, 4000);
+        fft_bpf_complex(data, data_filtered, data_fft, n, SAMPLE_RATE, 
+                        FREQ_OFFSET-BPF_WIDTH/2, FREQ_OFFSET+BPF_WIDTH/2);
+
+        // debug
+        plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");  // xxx define for .1
+        fft_fwd_c2c(data_filtered, data_filtered_fft, n);
+        plot_fft(1, data_filtered_fft, n, n/DATA_BLOCK_DURATION, "DATA_FILTERED_FFT", "HZ");  // xxx define for .1
 
         // AM detector, and audio output
         for (int i = 0; i < n; i++) {
@@ -724,10 +765,11 @@ void *rx_test(void *cx)
             if (y > yo) {  // xxx improve this section
                 yo = y;
             }
-            yo = .9995 * yo;
+            yo = tc_detector * yo;
+
 
             if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-                audio_out(yo);
+                audio_out(yo*10);  // xxx how to auto scale
                 cnt = 0;
             }
         }
@@ -746,11 +788,9 @@ void *get_data_thread(void *cx)
     int fd;
     struct stat statbuf;
     size_t file_offset, file_size, len;
-    double t, delta_t, antenna[MAX_DATA];
+    double t, delta_t, antenna[MAX_DATA], w;
     complex *data, synth0, synth90;
 
-    #define W_SYNTH (TWO_PI * 50000)
-    
     fd = open(ANTENNA_FILENAME, O_RDONLY);
     if (fd < 0) {
         FATAL("failed open gen.dat, %s\n", strerror(errno));
@@ -780,9 +820,10 @@ void *get_data_thread(void *cx)
 
         // frequency shift the antenna data, and store result in Data[Tail]
         data = Data[Tail%MAX_DATA_BLOCK];
+        w = TWO_PI * (tc_freq - FREQ_OFFSET);
         for (int i = 0; i < MAX_DATA; i++) {
-            synth0  = sin(W_SYNTH * t);
-            synth90 = sin(W_SYNTH * t + M_PI_2);
+            synth0  = sin(w * t);
+            synth90 = sin(w * t + M_PI_2);
             data[i] = antenna[i] * (synth0 + I * synth90);
             t += delta_t;
         }
