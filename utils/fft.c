@@ -120,6 +120,10 @@ void fft_fwd_r2c(double *in, complex *out, int n)
 
     p = get_plan(R2C, n, in, out, FFTW_FORWARD);
     fftw_execute(p);
+
+    for (int i = n/2+1; i < n; i++) {
+        out[i] = 0;
+    }
 }
 
 void fft_back_c2r(complex *in, double *out, int n)
@@ -133,6 +137,7 @@ void fft_back_c2r(complex *in, double *out, int n)
     fftw_execute(p);
 }
 
+#if 0
 void fft_fwd_r2r(double *in, double *out, int n)
 {
     fft_fwd_r2c(in, out_complex, n);
@@ -144,6 +149,7 @@ void fft_fwd_r2r(double *in, double *out, int n)
         out[i] = 0;
     }
 }
+#endif
 
 // - - - - - 
 
@@ -167,6 +173,7 @@ void fft_back_c2c(complex *in, complex *out, int n)
 //xxx use just one complex band pass filter
 //xxx smooth the edges
 
+#if 0
 void fft_lpf_complex(complex *in, complex *out, int n, double sample_rate, double f)
 {
     unsigned long start=microsec_timer();
@@ -187,9 +194,10 @@ void fft_lpf_complex(complex *in, complex *out, int n, double sample_rate, doubl
     // print elapsed time
     DEBUG("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
 }
+#endif
 
 // xxx don't need out_complex
-void fft_bpf_complex(complex *in, complex *out, int n, double sample_rate, double f_low, double f_high)
+void fft_bpf_complex(complex *in, complex *out, complex *fft, int n, double sample_rate, double f_low, double f_high)
 {
     unsigned long start=microsec_timer();
     int           i, ix1, ix2;
@@ -199,25 +207,21 @@ void fft_bpf_complex(complex *in, complex *out, int n, double sample_rate, doubl
     // perform backward fft
     // xxx could avoid using out_complex here
     fft_fwd_c2c(in, out_complex, n);
+
+    // copy fft to caller supplied buffer
+    if (fft) {
+        memcpy(fft, out_complex, n*sizeof(complex));  // xxx use copy macro
+    }
+
     ix1 = n / sample_rate * f_low;
     ix2 = n / sample_rate * f_high;
-    //if (ix1 < 0) ix1 += n;
-    //if (ix2 < 0) ix2 += n;
-    //NOTICE("ix1,2 = %d %d\n", ix1, ix2);
-    //for (i = ix1; i < ix2; i++) {
-        //out_complex[i] = 0;
-    //}
-    //for (i = 0; i < n; i++) {
-        //if (i < ix1 || i > ix2) {
-            //out_complex[i] = 0;
-        //}
-    //}
     for (i = 0; i < n - (ix2-ix1); i++) {
         int xx = i + ix2;
         if (xx < 0) xx += n;
         else if (xx >= n) xx -= n;
         out_complex[xx] = 0;
     }
+
     fft_back_c2c(out_complex, out, n);
 
     for (i = 0; i < n; i++) {
