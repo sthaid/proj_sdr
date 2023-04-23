@@ -818,7 +818,7 @@ void *rx_test(void *cx)
 
         // AM detector, and audio output
         for (int i = 0; i < n; i++) {
-            y = creal(data_filtered[i]);  // xxx scaling
+            y = cabs(data_filtered[i]);  // xxx scaling
 
             // xxx a product detector
             //   https://en.wikipedia.org/wiki/Product_detector
@@ -893,11 +893,11 @@ void *get_data_thread(void *cx)
             synth90 = sin(w * t + M_PI_2);  // xxx or use cos        // sin i s the Q   imaginary
             data[i] = antenna[i] * (synth0 + I * synth90);
 #endif
-#if 1
+#if 0
             data[i] = antenna[i] * sin(w * t)  +     // I
                       antenna[i] * cos(w * t) * I;   // Q
 #endif
-#if 0
+#if 1
             data[i] = antenna[i] * cexp(-I * w * t);
 #endif
 
