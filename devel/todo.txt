@@ -46,3 +46,13 @@ struct {
 } ctrls[6]
 
 DEF("MODE", &mode, 0, 3, 1, {"SINE", "WHITE", "WAV"}, "", '^', 'v')
+
+
+--------
+
+try smoothing the fft bpf edges
+try my low pass filter
+try just one station
+try just the upper half of bpf
+try OFFSET = 0
+try my audio out instead of aplayer

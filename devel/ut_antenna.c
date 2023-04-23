@@ -44,11 +44,11 @@ double get_antenna(double t)
 
 void init_antenna(void)
 {
-    init_station_white_noise(420000, .2);
-    init_station_wav_file(   460000, .4, "one_bourbon_one_scotch_one_beer.wav");
+    //init_station_white_noise(420000, .2);
+    //init_station_wav_file(   460000, .4, "one_bourbon_one_scotch_one_beer.wav");
     init_station_wav_file(   500000, .6, "super_critical.wav");
-    init_station_wav_file(   540000, .8, "proud_mary.wav");
-    init_station_sine_wave(  580000, 1, 500);
+    //init_station_wav_file(   540000, .8, "proud_mary.wav");
+    //init_station_sine_wave(  580000, 1, 500);
 
 #if 0
     init_station_wav_file( 800000, 1, "super_critical.wav");

@@ -774,17 +774,9 @@ void *rx_test(void *cx)
         for (int i = 0; i < n; i++) {
             y = creal(data_filtered[i]);  // xxx scaling
 
-#if 0
-            if (y > yo) {  // xxx improve this section
-                yo = y;
-            }
-            yo = tc_k1 * yo;
-#else
             if (y > 0) {
                 yo = yo + (y - yo) * tc_k1;
             }
-#endif
-
 
             if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
                 audio_out(yo*tc_k2);  // xxx how to auto scale
