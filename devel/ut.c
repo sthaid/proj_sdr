@@ -788,6 +788,7 @@ void am_demod(complex data_lpf);
 void display_fft(complex data, complex data_lpf);
 
 // xxx comments and cleanup
+// xxx still clicking when freq is changed
 void *rx_test(void *cx)
 {
     pthread_t tid;
@@ -877,10 +878,9 @@ void display_fft(complex data_arg, complex data_lpf_arg)
             fft_fwd_c2c(data, data_fft, n);
             plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
 
-#if 0
+            // xxx expand the plot
             fft_fwd_c2c(data_lpf, data_lpf_fft, n);
             plot_fft(1, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
-#endif
 
             tlast = tnow;
             n = 0;
@@ -890,21 +890,27 @@ void display_fft(complex data_arg, complex data_lpf_arg)
 
 void am_demod(complex data_lpf)
 {
-    static double t, yo;
+    double        y;
+    static double yo;
+    static int    cnt;
+
+#if 0
+    // xxx why is this not needed?
     static const double delta_t = 1. / SAMPLE_RATE;
     static const double w = 300000 * TWO_PI;  // xxx try 0
-    static int cnt;
+    static double t;
 
     data_lpf = data_lpf * cexp(I * w * t);
     t += delta_t;
+#endif
 
-    double y = cabs(data_lpf);
+    y = cabs(data_lpf);
     if (y > 0) {
         yo = yo + (y - yo) * tc_k1;
     }
 
     if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo*tc_k2);  // xxx how to auto scale:
+        audio_out(yo*tc_k2);  // xxx auto scale
         cnt = 0;
     }
 }
