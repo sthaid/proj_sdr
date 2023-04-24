@@ -20,6 +20,7 @@
 #include <wav.h>
 #include <fft.h>
 #include <pa.h>
+#include <filter.h>
 
 // ut_antenna.c
 void init_antenna(void);

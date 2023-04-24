@@ -330,6 +330,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
 // -----------------  UTILS  -------------------------------
 
+// xxx move to fft or misc
 void zero_real(double *data, int n)
 {
     memset(data, 0, n*sizeof(double));
@@ -340,6 +341,7 @@ void zero_complex(complex *data, int n)
     memset(data, 0, n*sizeof(complex));
 }
 
+// xxx move to section below
 void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate)
 {
     int f;
@@ -415,7 +417,7 @@ void plot_complex(int idx, complex *data, int n, double xvmin, double xvmax, dou
 
     pthread_mutex_lock(&mutex);
     for (int i = 0; i < n; i++) {
-        p->data[i] = creal(data[i]);
+        p->data[i] = cabsl(data[i]);  // xxx
     }
     p->n       = n;
     p->xv_min  = xvmin;
@@ -459,6 +461,7 @@ void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *
     pthread_mutex_unlock(&mutex);
 }
 
+// xxx move to audio section
 #ifndef USE_PA
 void audio_out(double yo)
 {
@@ -531,6 +534,7 @@ void *pa_play_thread(void*cx)
 
 // -----------------  PLOT TEST  ---------------------------
 
+// xxx make plot screen locations flexible
 void *plot_test(void *cx)
 {
     int sample_rate, f, n;
@@ -559,14 +563,14 @@ void *plot_test(void *cx)
 
 void *bpf_test(void *cx)
 {
-    double *in_real;
-    complex *in, *in_fft, *in_filtered, *in_filtered_fft;
+    //double *in_real;
+    //complex *in, *in_fft, *in_filtered, *in_filtered_fft;
     int current_mode;
 
     int sample_rate = 20000;
     int max = 120 * sample_rate;  // 120 secs of data
     int total = 0;
-    int n = .1 * sample_rate;
+    int n = .1 * sample_rate;     // .1 secs of data
 
     #define SINE_WAVE   0
     #define SINE_WAVES  1
@@ -603,11 +607,15 @@ void *bpf_test(void *cx)
                   SDL_EVENT_NONE, 'r'};
 
     // alloc buffers
-    in_real         = fftw_alloc_real(max);
-    in              = fftw_alloc_complex(n);
-    in_fft          = fftw_alloc_complex(n);
-    in_filtered     = fftw_alloc_complex(n);
-    in_filtered_fft = fftw_alloc_complex(n);
+// xxx do these zero?
+    double  *in_real         = fftw_alloc_real(max);
+    double  *in              = fftw_alloc_real(n);
+    double  *in_filtered     = fftw_alloc_real(n);
+    complex *in_fft          = fftw_alloc_complex(n);
+    complex *in_filtered_fft = fftw_alloc_complex(n);
+
+    BWLowPass* bw;
+    bw = create_bw_low_pass_filter(8, sample_rate, 4000);  // xxx make this adjustable
 
     while (true) {
         // construct in buff from either:
@@ -635,6 +643,8 @@ void *bpf_test(void *cx)
         // xx
         //normalize(in_real, max, -1, 1);
 
+        // xxx also plot Bodie plots
+
         while (current_mode == tc_mode) {
             if (tc_reset) {
                 tc_reset = 0;
@@ -642,6 +652,34 @@ void *bpf_test(void *cx)
                 tc_width = DEFAULT_WIDTH;
             }
 
+            // copy .1 secs of data from 'in_real' to 'in'
+            for (int i = 0; i < n; i++) {
+                in[i] = in_real[(total+i)%max];
+            }
+            total += n;
+
+            // filter 'in' to 'in_filtered'
+            for (int i = 0; i < n; i++) {
+                in_filtered[i] = bw_low_pass(bw, in[i]);
+            }
+
+            // plot fft of in and in_filtered
+            fft_fwd_r2c(in, in_fft, n);
+            fft_fwd_r2c(in_filtered, in_filtered_fft, n);
+
+            plot_fft(1, in_fft, n, n/.01, "FFT", "HZ");  // xxx define for .01
+            plot_fft(3, in_filtered_fft, n, n/.01, "FFT", "HZ");
+
+            // play the filtered audio
+            for (int i = 0; i < n; i++) {
+                audio_out(in_filtered[i]);
+            }
+        }
+    }        
+}
+
+#if 0
+// xxx use filter
             // copy .1 secs of data from in_real to in buff
             for (int i = 0; i < n; i++) {
                 in[i] = in_real[(total+i)%max];
@@ -665,9 +703,7 @@ void *bpf_test(void *cx)
             for (int i = 0; i < n; i++) {
                 audio_out(in_filtered[i]);
             }
-        }
-    }        
-}
+#endif
 
 // -----------------  ANTENNA TEST  -------------------------
 
@@ -676,6 +712,7 @@ void *bpf_test(void *cx)
 #define MAX_N        (SAMPLE_RATE / 10)   // 0.1 sec range
 #define DELTA_T      (1. / SAMPLE_RATE)
 
+// xxx check the fft code in ut_antenna.c
 void *antenna_test(void *cx)
 {
     double  *antenna, t, tmax;
@@ -752,7 +789,7 @@ void *get_data_thread(void *cx);
 
 void *rx_test(void *cx)
 {
-    complex  *data, *data_filtered, *data_fft, *data_filtered_fft;
+    complex  *data, *data_lpf, *data_fft, *data_lpf_fft;
     double    y, yo;
     int       cnt, n;
     pthread_t tid;
@@ -760,8 +797,8 @@ void *rx_test(void *cx)
     static char tc_info[100];
 
     n                 = MAX_DATA;;
-    data_filtered     = fftw_alloc_complex(n);
-    data_filtered_fft = fftw_alloc_complex(n);
+    data_lpf     = fftw_alloc_complex(n);
+    data_lpf_fft = fftw_alloc_complex(n);
     data_fft          = fftw_alloc_complex(n);
     for (int i = 0; i < MAX_DATA_BLOCK; i++) {
         Data[i] = fftw_alloc_complex(n);
@@ -790,7 +827,9 @@ void *rx_test(void *cx)
 
     pthread_create(&tid, NULL, get_data_thread, NULL);
 
-    //#define MY_DEBUG
+    BWLowPass *bwi, *bwq;
+    bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
+    bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
 
     while (true) {
         // wait for data to be available
@@ -808,45 +847,60 @@ void *rx_test(void *cx)
 
         // low pass filter
         data = Data[Head % MAX_DATA_BLOCK];
-        fft_bpf_complex(data, data_filtered, data_fft, n, SAMPLE_RATE, 
+
+        // make data_fft, and plot
+        fft_fwd_c2c(data, data_fft, n);
+        plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
+
+        // lpf
+        for (int i = 0; i < n; i++) {
+            data_lpf[i] = bw_low_pass(bwi, creal(data[i])) +
+                          bw_low_pass(bwq, cimag(data[i])) * I;
+        }
+
+        fft_fwd_c2c(data_lpf, data_lpf_fft, n);
+        plot_fft(1, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_FILTERED_FFT", "HZ");  // xxx define for .1
+
+#if 0
+        fft_bpf_complex(data, data_lpf, data_fft, n, SAMPLE_RATE, 
                         FREQ_OFFSET-BPF_WIDTH/2, FREQ_OFFSET+BPF_WIDTH/2);
         plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");  // xxx define for .1
 
-#ifdef MY_DEBUG
         // debug
-        fft_fwd_c2c(data_filtered, data_filtered_fft, n);
-        plot_fft(1, data_filtered_fft, n, n/DATA_BLOCK_DURATION, "DATA_FILTERED_FFT", "HZ");  // xxx define for .1
+        fft_fwd_c2c(data_lpf, data_lpf_fft, n);
+        plot_fft(1, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_FILTERED_FFT", "HZ");  // xxx define for .1
 #endif
 
-        // shift data_filtered to 300 khz, and plot
+        // shift data_lpf to 300 khz, and plot
         // xxx make this a routine for AM detector
         static double t;
         static double delta_t = 1. / SAMPLE_RATE;
         double w = 300000 * TWO_PI;
         for (int i = 0; i < n; i++) {
-            data_filtered[i] = data_filtered[i] * cexp(I * w * t);  // xxx simd ?
+            data_lpf[i] = data_lpf[i] * cexp(I * w * t);  // xxx simd ?
             t += delta_t;
         }
-#ifdef MY_DEBUG
-        fft_fwd_c2c(data_filtered, data_filtered_fft, n);
-        plot_fft(2, data_filtered_fft, n, n/DATA_BLOCK_DURATION, "DATA_SHIFTED_FFT", "HZ");  // xxx define for .1
-#endif
+
+        fft_fwd_c2c(data_lpf, data_lpf_fft, n);
+        plot_fft(2, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_SHIFTED_FFT", "HZ");  // xxx define for .1
+
         for (int i = 0; i < n; i++) {
-            y = cabs(data_filtered[i]);  // xxx scaling
+            y = cabs(data_lpf[i]);  // xxx scaling
             if (y > 0) {
                 yo = yo + (y - yo) * tc_k1;
             }
             if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-                audio_out(yo*tc_k2);  // xxx how to auto scale
+                audio_out(yo*tc_k2);  // xxx how to auto scale:
                 cnt = 0;
             }
         }
 
 
+// move the links to the notes file
 #if 0
         // AM detector, and audio output
         for (int i = 0; i < n; i++) {
-            y = cabs(data_filtered[i]);  // xxx scaling
+            y = cabs(data_lpf[i]);  // xxx scaling
 
             // xxx a product detector
             //   https://en.wikipedia.org/wiki/Product_detector
@@ -856,6 +910,14 @@ void *rx_test(void *cx)
             //   https://en.wikipedia.org/wiki/Software-defined_radio
             // xxx qudrature mixers
             //   https://www.youtube.com/watch?v=JuuKF1RFvBM
+
+            // lpf filter
+            // https://www.youtube.com/watch?v=HJ-C4Incgpw
+            // butterworth filter  4th order  or 50
+            //   https://github.com/adis300/filter-c/blob/master/filter.c
+            //   https://github.com/adis300/filter-c
+            // https://exstrom.com/journal/sigproc/dsigproc.html
+
     
             if (y > 0) {
                 yo = yo + (y - yo) * tc_k1;
@@ -931,553 +993,3 @@ void *get_data_thread(void *cx)
     return NULL;
 }
 
-#if 0
-    //t_start = microsec_timer();
-
-    t_read = microsec_timer();
-    while (true) {
-        // if there is room in data buffer then read from file
-        if ((MAX_DATA - (tail - head)) >= BLOCK_SIZE) {
-            len = pread(fd, data+(tail%MAX_DATA), BLOCK_SIZE, file_offset);
-            if (len != BLOCK_SIZE) {
-                FATAL("read gen.dat, len=%ld, %s\n", len, strerror(errno));
-            }
-
-            //NOTICE("put data\n");
-
-            __sync_synchronize();
-            tail += BLOCK_SIZE;
-            __sync_synchronize();
-
-            file_offset += BLOCK_SIZE;
-            if (file_offset + BLOCK_SIZE > file_size) {
-                file_offset = 0;
-            }
-        } else {
-            ERROR("discarding\n");
-        }
-
-        // wait for time to do next read
-        t_next_read = t_read + ((double)(BLOCK_SIZE/2) / sample_rate) * 1000000;
-        t_delay = t_next_read - microsec_timer();
-        if (t_delay > 0) {
-            usleep(t_delay);
-        }
-        t_read = t_next_read;
-
-        // debug print the read rate
-        //total += BLOCK_SIZE;
-        //NOTICE("rate = %e\n", (double)total/(microsec_timer() - t_start));
-    }
-}
-
-// reference sim/sim.c
-
-// xxx
-// - start / stop ctrls
-
-// xxx new data block format
-// - hdr
-//   - maic, freq, gain, ...
-// - data
-//   - complex array
-
-#define BLOCK_SIZE 262144
-#define MAX_DATA (4*BLOCK_SIZE)
-
-
-unsigned long head;
-unsigned long tail;
-unsigned char data[MAX_DATA];  // xxx rename to Data ?
-
-void *get_data_thread(void *cx);
-
-void *rx_test(void *cx)
-{
-    struct {
-        unsigned char i;
-        unsigned char q;
-    } *d;
-
-    complex *dc;
-    int n;
-    double yo=0, y;
-    int cnt=0;
-
-    init_get_data();
-
-    dc = fftw_alloc_complex(BLOCK_SIZE/2);
-
-    tc.int_name = "FREQ";
-    tc.int_val  = 0;
-    tc.int_step = 1000;
-    tc.int_min  = -220000;
-    tc.int_max  = +220000;
-
-    while (true) {
-        // wait for data
-        while (head == tail) {
-            usleep(1000);
-        }
-
-        d = (void*)&data[head%MAX_DATA];
-        n = BLOCK_SIZE/2;
-        //NOTICE("GOT DATA\n");
-
-// xxx not needed
-        for (int i = 0; i < n; i++) {
-            dc[i] = ((d[i].i - 128) / 128.) + 
-                    ((d[i].q - 128) / 128.) * I;
-        }
-
-        // process the usb data ...
-
-        int freq = tc.int_val;
-        // low pass filter
-        //fft_lpf_complex(dc, dc, n, sample_rate, 4000);
-        //fft_bpf_complex(dc, dc, n, sample_rate, 200000-5000, 200000+5000);
-        fft_bpf_complex(dc, dc, n, sample_rate, freq-4000, freq+4000);
-
-        for (int i = 0; i < n; i++) {
-            //y = creal(dc[i]) * 5e-5;
-            y = creal(dc[i]) / 5000;
-
-            if (y > yo) {
-                yo = y;
-            }
-            yo = .9995 * yo;
-
-            if (cnt++ == (sample_rate / 22000)) {
-                audio_out(yo);
-                cnt = 0;
-            }
-        }
-
-        __sync_synchronize();
-        head += BLOCK_SIZE;
-        __sync_synchronize();
-    }
-}
-
-// xxx handle the differnet modes
-
-void init_get_data(void)
-{
-    pthread_t tid;
-
-    // will support getting data from:
-    // - file
-    // - tcp connection to rtl_sdr_server
-    // - directly from rtl_sdr device
-
-    // for now, get data from gen.dat
-    pthread_create(&tid, NULL, get_data_thread, NULL);
-}
-
-// xxx this won't be from file, it will just construct the data on the fly
-
-void *get_data_thread(void *cx)
-{
-    int fd;
-    unsigned long t_read, t_next_read, t_delay;;
-    struct stat statbuf;
-    size_t file_size, file_offset, len;
-
-    //unsigned long t_start, total=0;
-
-    fd = open("gen.dat", O_RDONLY);
-    if (fd < 0) {
-        FATAL("failed open gen.dat, %s\n", strerror(errno));
-    }
-
-    fstat(fd, &statbuf);
-    file_size = statbuf.st_size;
-    file_offset = 0;
-
-    //t_start = microsec_timer();
-
-    t_read = microsec_timer();
-    while (true) {
-        // if there is room in data buffer then read from file
-        if ((MAX_DATA - (tail - head)) >= BLOCK_SIZE) {
-            len = pread(fd, data+(tail%MAX_DATA), BLOCK_SIZE, file_offset);
-            if (len != BLOCK_SIZE) {
-                FATAL("read gen.dat, len=%ld, %s\n", len, strerror(errno));
-            }
-
-            //NOTICE("put data\n");
-
-            __sync_synchronize();
-            tail += BLOCK_SIZE;
-            __sync_synchronize();
-
-            file_offset += BLOCK_SIZE;
-            if (file_offset + BLOCK_SIZE > file_size) {
-                file_offset = 0;
-            }
-        } else {
-            ERROR("discarding\n");
-        }
-
-        // wait for time to do next read
-        t_next_read = t_read + ((double)(BLOCK_SIZE/2) / sample_rate) * 1000000;
-        t_delay = t_next_read - microsec_timer();
-        if (t_delay > 0) {
-            usleep(t_delay);
-        }
-        t_read = t_next_read;
-
-        // debug print the read rate
-        //total += BLOCK_SIZE;
-        //NOTICE("rate = %e\n", (double)total/(microsec_timer() - t_start));
-    }
-}
-
-// xxx dont use all these defines
-#define SAMPLE_RATE  2000000              // 2.0 MS/sec
-#define W_SYNTH      (TWO_PI * 500000)    // 500 KHz
-#define MAX_IQ       (SAMPLE_RATE / 10)   // 0.1 sec range
-#define F_BPF        100000               // 100 KHz
-#define DELTA_T      (1. / SAMPLE_RATE)
-
-void *gen_test(void *cx)
-{
-    double   *antenna, t;
-    complex  *antenna_fft, *iq, *iq_fft, *iq_filtered, *iq_filtered_fft;
-    int      n=0, tmax;
-    FILE    *fp;
-
-    static char tc_info[100];
-
-    init_antenna();
-
-    antenna         = fftw_alloc_real(MAX_IQ);    // xxx not needed as an array
-    antenna_fft     = fftw_alloc_complex(MAX_IQ); // xxx not needed as an array
-    iq              = fftw_alloc_complex(MAX_IQ);
-    iq_fft          = fftw_alloc_complex(MAX_IQ);
-    iq_filtered     = fftw_alloc_complex(MAX_IQ);
-    iq_filtered_fft = fftw_alloc_complex(MAX_IQ);
-
-    // xxx
-    tmax = (arg1 == -1 ? 10 : arg1);
-
-    // init test controls
-    tc.name = "GEN";
-    tc.info = tc_info;
-
-    // xxx
-    fp = fopen("gen.dat", "w");
-    if (fp == NULL) {
-        FATAL("failed to create gen.dat\n");
-    }
-
-    // xxx
-    for (t = 0; t < tmax; t += DELTA_T) {
-        // xxx
-        antenna[n] = get_antenna(t);
-        synth0     = sin((W_SYNTH) * t);
-        synth90    = sin((W_SYNTH) * t + M_PI_2);
-        iq[n]      = antenna[n] * (synth0 + I * synth90);
-        n++;
-
-        // xxx
-        if (n == MAX_IQ) {
-            sprintf(tc_info, "%0.1f secs", t);
-
-            fft_fwd_r2c(antenna, antenna_fft, n);
-            fft_bpf_complex(iq, iq_filtered, iq_fft, n, SAMPLE_RATE, -F_BPF, +F_BPF);
-            fft_fwd_c2c(iq_filtered, iq_filtered_fft, n);
-
-            plot_fft(0, antenna_fft, n, n/.1, "ANTENNA_FFT", "HZ");  // xxx define for .1
-            plot_fft(1, iq_fft, n, n/.1, "IQ_FFT", "HZ");  // xxx define for .1
-            plot_fft(2, iq_filtered_fft, n, n/.1, "IQ_FILTERED_FFT", "HZ");  // xxx define for .1
-
-            fwrite(iq_filtered, sizeof(complex), n, fp);
-
-            n = 0;
-        }
-    }
-
-    fclose(fp);
-
-#if 0
-    // normalize the file
-    fd = open(FILENAME, O_RDWR);
-    if (fd < 0) {
-        FATAL("failed to open %s, ^s\n", FILENAME, strerror(errno));
-    }
-#endif
-
-    return NULL;
-}
-
-    complex *iq, *iq_fft;
-    double   t, max_iq_scaling, max_iq_measured=0;
-    double   *antenna, synth0, synth90;
-    int      i=0, tmax;
-    FILE    *fp;
-
-    static unsigned char usb[2*MAX_IQ];
-
-    tmax = (arg1 == -1 ? 30 : arg1);
-    max_iq_scaling = (arg2 <= 0 ? 1500000 : arg2);
-
-    init_antenna();
-
-    iq     = fftw_alloc_complex(MAX_IQ);
-    iq_fft = fftw_alloc_complex(MAX_IQ);
-    antenna = fftw_alloc_real(MAX_IQ);
-
-    fp = fopen("gen.dat", "w");
-    if (fp == NULL) {
-        FATAL("failed to create gen.dat\n");
-    }
-
-    NOTICE("generating %d secs of data, max_iq_scaling=%0.2f\n", tmax, max_iq_scaling);
-
-    for (t = 0; t < tmax; t += DELTA_T) {
-        antenna[i] = get_antenna(t);
-        synth0     = sin((W_SYNTH) * t);
-        synth90    = sin((W_SYNTH) * t + M_PI_2);
-        iq[i]      = antenna[i] * (synth0 + I * synth90);
-        i++;
-
-        if (i == MAX_IQ) {
-            sprintf(tc.title, "gen %0.1f secs", t);
-
-            fft_lpf_complex(iq, iq, MAX_IQ, SAMPLE_RATE, F_LPF);
-
-            // plots
-            PLOT(0, false, antenna, MAX_IQ,  0, 999,  -2, 2,  "ANTENNA");  // x scale
-            fft_fwd_c2c(iq, iq_fft, MAX_IQ);
-            PLOT(1, true, iq_fft, MAX_IQ,  0, 999,  0, 1,  "IQ_FFT");
-
-            int offset = MAX_IQ/12;
-            int span  = (long)24000 * MAX_IQ / SAMPLE_RATE;
-            PLOT(2, true, iq_fft+(offset-span/2), span,  0, 999,  0, 1,  "IQ_FFT");
-            // xxx ctr plot3
-            PLOT(3, true, iq_fft, span,  0, 999,  0, 1,  "IQ_FFT");
-
-            double scaling = 128. / max_iq_scaling;
-            for (int j = 0; j < MAX_IQ; j++) {
-                if (cabs(iq[j]) > max_iq_measured) max_iq_measured = cabs(iq[j]);
-
-                int inphase    = nearbyint(128 + scaling * creal(iq[j]));
-                int quadrature = nearbyint(128 + scaling * cimag(iq[j]));
-                if (inphase < 0 || inphase > 255 || quadrature < 0 || quadrature > 255) {
-                    static int count=0;
-                    if (count++ < 10) {
-                        ERROR("iq val too large %d %d", inphase, quadrature);
-                    }
-                }
-
-                usb[2*j+0] = inphase;
-                usb[2*j+1] = quadrature;
-                DEBUG("%u %u\n", usb[2*j+0], usb[2*j+1]);
-            }
-
-            fwrite(usb, sizeof(unsigned char), MAX_IQ*2, fp);
-
-            i = 0;
-        }
-    }
-
-    fclose(fp);
-
-    NOTICE("max_iq_measured = %f\n", max_iq_measured);
-    NOTICE("max_iq_scaling  = %f\n", max_iq_scaling);
-    if (max_iq_measured > max_iq_scaling) {
-        ERROR("max_iq_scaling is too small\n");
-    }
-
-    return NULL;
-
-// -----------------  RX TEST  -----------------------------
-
-// reference sim/sim.c
-
-// xxx
-// - start / stop ctrls
-
-// xxx new data block format
-// - hdr
-//   - maic, freq, gain, ...
-// - data
-//   - complex array
-
-#define BLOCK_SIZE 262144
-#define MAX_DATA (4*BLOCK_SIZE)
-
-unsigned int sample_rate = 2400000;  // xxx make this private for each section
-
-unsigned long head;
-unsigned long tail;
-unsigned char data[MAX_DATA];  // xxx rename to Data ?
-
-void init_get_data(void);
-void *get_data_thread(void *cx);
-
-void *rx_test(void *cx)
-{
-    struct {
-        unsigned char i;
-        unsigned char q;
-    } *d;
-
-    complex *dc;
-    int n;
-    double yo=0, y;
-    int cnt=0;
-
-    init_get_data();
-
-    dc = fftw_alloc_complex(BLOCK_SIZE/2);
-
-    tc.int_name = "FREQ";
-    tc.int_val  = 0;
-    tc.int_step = 1000;
-    tc.int_min  = -220000;
-    tc.int_max  = +220000;
-
-    while (true) {
-        // wait for data
-        while (head == tail) {
-            usleep(1000);
-        }
-
-        d = (void*)&data[head%MAX_DATA];
-        n = BLOCK_SIZE/2;
-        //NOTICE("GOT DATA\n");
-
-// xxx not needed
-        for (int i = 0; i < n; i++) {
-            dc[i] = ((d[i].i - 128) / 128.) + 
-                    ((d[i].q - 128) / 128.) * I;
-        }
-
-        // process the usb data ...
-
-        int freq = tc.int_val;
-        // low pass filter
-        //fft_lpf_complex(dc, dc, n, sample_rate, 4000);
-        //fft_bpf_complex(dc, dc, n, sample_rate, 200000-5000, 200000+5000);
-        fft_bpf_complex(dc, dc, n, sample_rate, freq-4000, freq+4000);
-
-        for (int i = 0; i < n; i++) {
-            //y = creal(dc[i]) * 5e-5;
-            y = creal(dc[i]) / 5000;
-
-            if (y > yo) {
-                yo = y;
-            }
-            yo = .9995 * yo;
-
-            if (cnt++ == (sample_rate / 22000)) {
-                audio_out(yo);
-                cnt = 0;
-            }
-        }
-
-        __sync_synchronize();
-        head += BLOCK_SIZE;
-        __sync_synchronize();
-    }
-}
-
-// xxx handle the differnet modes
-
-void init_get_data(void)
-{
-    pthread_t tid;
-
-    // will support getting data from:
-    // - file
-    // - tcp connection to rtl_sdr_server
-    // - directly from rtl_sdr device
-
-    // for now, get data from gen.dat
-    pthread_create(&tid, NULL, get_data_thread, NULL);
-}
-
-// xxx this won't be from file, it will just construct the data on the fly
-
-void *get_data_thread(void *cx)
-{
-    int fd;
-    unsigned long t_read, t_next_read, t_delay;;
-    struct stat statbuf;
-    size_t file_size, file_offset, len;
-
-    //unsigned long t_start, total=0;
-
-    fd = open("gen.dat", O_RDONLY);
-    if (fd < 0) {
-        FATAL("failed open gen.dat, %s\n", strerror(errno));
-    }
-
-    fstat(fd, &statbuf);
-    file_size = statbuf.st_size;
-    file_offset = 0;
-
-    //t_start = microsec_timer();
-
-    t_read = microsec_timer();
-    while (true) {
-        // if there is room in data buffer then read from file
-        if ((MAX_DATA - (tail - head)) >= BLOCK_SIZE) {
-            len = pread(fd, data+(tail%MAX_DATA), BLOCK_SIZE, file_offset);
-            if (len != BLOCK_SIZE) {
-                FATAL("read gen.dat, len=%ld, %s\n", len, strerror(errno));
-            }
-
-            //NOTICE("put data\n");
-
-            __sync_synchronize();
-            tail += BLOCK_SIZE;
-            __sync_synchronize();
-
-            file_offset += BLOCK_SIZE;
-            if (file_offset + BLOCK_SIZE > file_size) {
-                file_offset = 0;
-            }
-        } else {
-            ERROR("discarding\n");
-        }
-
-        // wait for time to do next read
-        t_next_read = t_read + ((double)(BLOCK_SIZE/2) / sample_rate) * 1000000;
-        t_delay = t_next_read - microsec_timer();
-        if (t_delay > 0) {
-            usleep(t_delay);
-        }
-        t_read = t_next_read;
-
-        // debug print the read rate
-        //total += BLOCK_SIZE;
-        //NOTICE("rate = %e\n", (double)total/(microsec_timer() - t_start));
-    }
-}
-
-int play_cb_test(void *data, void *cx_arg)
-{
-    static int idx;
-
-    if (idx && (idx%22000) == 0) sleep(1);
-
-    *(float*)data = ((float*)cx_arg)[idx++];
-    return 0;
-}
-    //pa_print_device_info_all();
-    //int idx = pa_find_device(DEFAULT_OUTPUT_DEVICE);
-    //NOTICE("XXX idx %d\n", idx);
-    float *data;
-    int ret, num_chan, num_items, sample_rate;
-    ret = read_wav_file_float("super_critical.wav", &data, &num_chan, &num_items, &sample_rate);
-    if (ret != 0) {
-        FATAL("read_wav_file_float\n");
-    }
-    ret = pa_play(DEFAULT_OUTPUT_DEVICE, num_chan, num_items, sample_rate, PA_FLOAT32, data);
-    if (ret != 0) {
-        FATAL("pa_play\n");
-    }
-#endif
