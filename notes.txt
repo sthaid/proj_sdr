@@ -69,6 +69,24 @@ https://rahsoft.com/2022/10/17/understanding-90%cb%9a-phase-shift-and-hilbert-tr
 
 https://github.com/adis300/filter-c/blob/master/filter.c
 
+
+            // xxx a product detector
+            //   https://en.wikipedia.org/wiki/Product_detector
+            // xxx this discusses quadrature detectors
+            //   https://en.wikipedia.org/wiki/Direct-conversion_receiver
+            // xxx wikipedia sdr
+            //   https://en.wikipedia.org/wiki/Software-defined_radio
+            // xxx qudrature mixers
+            //   https://www.youtube.com/watch?v=JuuKF1RFvBM
+
+            // lpf filter
+            // https://www.youtube.com/watch?v=HJ-C4Incgpw
+            // butterworth filter  4th order  or 50
+            //   https://github.com/adis300/filter-c/blob/master/filter.c
+            //   https://github.com/adis300/filter-c
+            // https://exstrom.com/journal/sigproc/dsigproc.html
+
+
 old examples found on web
 -------------------------
 https://github.com/lgeek/sdr-examples.git

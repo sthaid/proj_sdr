@@ -765,17 +765,13 @@ void *antenna_test(void *cx)
 
 // -----------------  RX TEST  -----------------------------
 
-#define SAMPLE_RATE  2400000              // 2.4 MS/sec
-//#define MAX_DATA_BLOCK 3
+#define SAMPLE_RATE     2400000  // 2.4 MS/sec
 #define MAX_DATA_CHUNK  131072
-#define MAX_DATA       (4*MAX_DATA_CHUNK)
-//#define DATA_BLOCK_DURATION  ((double)MAX_DATA / SAMPLE_RATE)
+#define MAX_DATA        (4*MAX_DATA_CHUNK)
 
 #define DEFAULT_FREQ 500000   // 500 KHz
 #define DEFAULT_K1   0.004
 #define DEFAULT_K2   4.0
-//#define FREQ_OFFSET  300000   // 300 KHz
-#define FREQ_OFFSET  0
 #define BPF_WIDTH    8000     // 8 KHz
 
 unsigned long Head;
@@ -789,28 +785,15 @@ double        tc_reset = 0;
 
 void *get_data_thread(void *cx);
 void am_demod(complex data_lpf);
-void do_fft(complex data, complex data_lpf);
+void display_fft(complex data, complex data_lpf);
 
+// xxx comments and cleanup
 void *rx_test(void *cx)
 {
-#if 0
-    complex  *data, *data_lpf, *data_fft, *data_lpf_fft;
-    double    y, yo;
-    int       cnt, n;
-
-    n                 = MAX_DATA;;
-    data_lpf     = fftw_alloc_complex(n);
-    data_lpf_fft = fftw_alloc_complex(n);
-    data_fft          = fftw_alloc_complex(n);
-    for (int i = 0; i < MAX_DATA_BLOCK; i++) {
-        Data[i] = fftw_alloc_complex(n);
-    }
-    yo  = 0;
-    cnt = 0;
-#endif
     pthread_t tid;
-
-    static char tc_info[100];
+    char tc_info[100] = "";
+    BWLowPass *bwi, *bwq;
+    complex data, data_lpf;
 
     tc.name = "RX";
     tc.info = tc_info;
@@ -831,42 +814,41 @@ void *rx_test(void *cx)
                   {"", ""}, NULL, 
                   SDL_EVENT_NONE, 'r'};
 
-    pthread_create(&tid, NULL, get_data_thread, NULL);
-
-    BWLowPass *bwi, *bwq;
     bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
     bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
 
-    complex data, data_lpf;
+    pthread_create(&tid, NULL, get_data_thread, NULL);
 
     while (true) {
-        // wait for data to be available
-        while (Head == Tail) {
+        if (tc_reset) {
+            tc_freq     = DEFAULT_FREQ;
+            tc_k1       = DEFAULT_K1;
+            tc_k2       = DEFAULT_K2;
+            tc_reset = 0;
+        }
+
+        if (Head == Tail) {
             usleep(1000);
+            continue;
         }
 
-        while (Head < Tail) {
-            data = Data[Head % MAX_DATA];
+        data = Data[Head % MAX_DATA];
 
-            data_lpf = bw_low_pass(bwi, creal(data)) +
-                       bw_low_pass(bwq, cimag(data)) * I;
+        data_lpf = bw_low_pass(bwi, creal(data)) +
+                   bw_low_pass(bwq, cimag(data)) * I;
 
-            do_fft(data, data_lpf);
+        display_fft(data, data_lpf);
 
-            am_demod(data_lpf);
+        am_demod(data_lpf);
 
-            //__sync_synchronize(); //xxx
-            Head++;
-            //__sync_synchronize();
-        }
+        Head++;
     }
 
     return NULL;
 }
 
-void do_fft(complex data_arg, complex data_lpf_arg)
+void display_fft(complex data_arg, complex data_lpf_arg)
 {
-    //#define N 131072
     #define N 65536
     #define DATA_BLOCK_DURATION  ((double)N / SAMPLE_RATE)
 
@@ -895,8 +877,10 @@ void do_fft(complex data_arg, complex data_lpf_arg)
             fft_fwd_c2c(data, data_fft, n);
             plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
 
-            //fft_fwd_c2c(data_lpf, data_lpf_fft, n);
-            //plot_fft(1, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
+#if 0
+            fft_fwd_c2c(data_lpf, data_lpf_fft, n);
+            plot_fft(1, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
+#endif
 
             tlast = tnow;
             n = 0;
@@ -908,7 +892,7 @@ void am_demod(complex data_lpf)
 {
     static double t, yo;
     static const double delta_t = 1. / SAMPLE_RATE;
-    static const double w = 300000 * TWO_PI;
+    static const double w = 300000 * TWO_PI;  // xxx try 0
     static int cnt;
 
     data_lpf = data_lpf * cexp(I * w * t);
@@ -924,107 +908,6 @@ void am_demod(complex data_lpf)
         cnt = 0;
     }
 }
-
-#if 0
-        // xxx
-        if (tc_reset) {
-            tc_freq     = DEFAULT_FREQ;
-            tc_k1       = DEFAULT_K1;
-            tc_k2       = DEFAULT_K2;
-            tc_reset = 0;
-        }
-
-        // low pass filter
-        data = Data[Head % MAX_DATA_BLOCK];
-
-        // make data_fft, and plot
-        fft_fwd_c2c(data, data_fft, n);
-        plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
-
-        // lpf
-        for (int i = 0; i < n; i++) {
-            data_lpf[i] = bw_low_pass(bwi, creal(data[i])) +
-                          bw_low_pass(bwq, cimag(data[i])) * I;
-        }
-
-        fft_fwd_c2c(data_lpf, data_lpf_fft, n);
-        plot_fft(1, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_FILTERED_FFT", "HZ");  // xxx define for .1
-
-#if 0
-        fft_bpf_complex(data, data_lpf, data_fft, n, SAMPLE_RATE, 
-                        FREQ_OFFSET-BPF_WIDTH/2, FREQ_OFFSET+BPF_WIDTH/2);
-        plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");  // xxx define for .1
-
-        // debug
-        fft_fwd_c2c(data_lpf, data_lpf_fft, n);
-        plot_fft(1, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_FILTERED_FFT", "HZ");  // xxx define for .1
-#endif
-
-        // shift data_lpf to 300 khz, and plot
-        // xxx make this a routine for AM detector
-        static double t;
-        static double delta_t = 1. / SAMPLE_RATE;
-        double w = 300000 * TWO_PI;
-        for (int i = 0; i < n; i++) {
-            data_lpf[i] = data_lpf[i] * cexp(I * w * t);  // xxx simd ?
-            t += delta_t;
-        }
-
-        fft_fwd_c2c(data_lpf, data_lpf_fft, n);
-        plot_fft(2, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_SHIFTED_FFT", "HZ");  // xxx define for .1
-
-        for (int i = 0; i < n; i++) {
-            y = cabs(data_lpf[i]);  // xxx scaling
-            if (y > 0) {
-                yo = yo + (y - yo) * tc_k1;
-            }
-            if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-                audio_out(yo*tc_k2);  // xxx how to auto scale:
-                cnt = 0;
-            }
-        }
-
-
-// move the links to the notes file
-#if 0
-        // AM detector, and audio output
-        for (int i = 0; i < n; i++) {
-            y = cabs(data_lpf[i]);  // xxx scaling
-
-            // xxx a product detector
-            //   https://en.wikipedia.org/wiki/Product_detector
-            // xxx this discusses quadrature detectors
-            //   https://en.wikipedia.org/wiki/Direct-conversion_receiver
-            // xxx wikipedia sdr
-            //   https://en.wikipedia.org/wiki/Software-defined_radio
-            // xxx qudrature mixers
-            //   https://www.youtube.com/watch?v=JuuKF1RFvBM
-
-            // lpf filter
-            // https://www.youtube.com/watch?v=HJ-C4Incgpw
-            // butterworth filter  4th order  or 50
-            //   https://github.com/adis300/filter-c/blob/master/filter.c
-            //   https://github.com/adis300/filter-c
-            // https://exstrom.com/journal/sigproc/dsigproc.html
-
-    
-            if (y > 0) {
-                yo = yo + (y - yo) * tc_k1;
-            }
-
-            if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-                audio_out(yo*tc_k2);  // xxx how to auto scale
-                cnt = 0;
-            }
-        }
-#endif
-
-        // done with this data block, so increment head
-        __sync_synchronize();
-        Head++;
-        __sync_synchronize();
-    }
-#endif
 
 void *get_data_thread(void *cx)
 {
@@ -1047,7 +930,7 @@ void *get_data_thread(void *cx)
 
     while (true) {
         // wait for space to be available in Data array, 
-        // always in xxx chunds
+        // always in xxx chunks
         while (MAX_DATA - (Tail - Head) < MAX_DATA_CHUNK) {
             usleep(1000);
         }
@@ -1065,7 +948,7 @@ void *get_data_thread(void *cx)
         // frequency shift the antenna data, and 
         // store result in Data[Tail], these are complex values
         data = &Data[Tail % MAX_DATA];
-        w = TWO_PI * (tc_freq - FREQ_OFFSET);
+        w = TWO_PI * tc_freq;
         for (int i = 0; i < MAX_DATA_CHUNK; i++) {
             data[i] = antenna[i] * cexp(-I * w * t);
             t += delta_t;
