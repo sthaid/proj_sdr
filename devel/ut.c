@@ -5,6 +5,7 @@
 
 // xxx improve filter quality
 // xxx init_fft?
+// xxx are the _sync_cynchronize needed
 
 // xxx
 // - rx sim
@@ -765,9 +766,10 @@ void *antenna_test(void *cx)
 // -----------------  RX TEST  -----------------------------
 
 #define SAMPLE_RATE  2400000              // 2.4 MS/sec
-#define MAX_DATA_BLOCK 3
-#define MAX_DATA       131072
-#define DATA_BLOCK_DURATION  ((double)MAX_DATA / SAMPLE_RATE)
+//#define MAX_DATA_BLOCK 3
+#define MAX_DATA_CHUNK  131072
+#define MAX_DATA       (4*MAX_DATA_CHUNK)
+//#define DATA_BLOCK_DURATION  ((double)MAX_DATA / SAMPLE_RATE)
 
 #define DEFAULT_FREQ 500000   // 500 KHz
 #define DEFAULT_K1   0.004
@@ -778,7 +780,7 @@ void *antenna_test(void *cx)
 
 unsigned long Head;
 unsigned long Tail;
-complex      *Data[MAX_DATA_BLOCK];
+complex       Data[MAX_DATA];
 
 double        tc_freq  = DEFAULT_FREQ;
 double        tc_k1    = DEFAULT_K1;
@@ -786,15 +788,15 @@ double        tc_k2    = DEFAULT_K2;
 double        tc_reset = 0;
 
 void *get_data_thread(void *cx);
+void am_demod(complex data_lpf);
+void do_fft(complex data, complex data_lpf);
 
 void *rx_test(void *cx)
 {
+#if 0
     complex  *data, *data_lpf, *data_fft, *data_lpf_fft;
     double    y, yo;
     int       cnt, n;
-    pthread_t tid;
-
-    static char tc_info[100];
 
     n                 = MAX_DATA;;
     data_lpf     = fftw_alloc_complex(n);
@@ -805,6 +807,10 @@ void *rx_test(void *cx)
     }
     yo  = 0;
     cnt = 0;
+#endif
+    pthread_t tid;
+
+    static char tc_info[100];
 
     tc.name = "RX";
     tc.info = tc_info;
@@ -831,12 +837,95 @@ void *rx_test(void *cx)
     bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
     bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
 
+    complex data, data_lpf;
+
     while (true) {
         // wait for data to be available
         while (Head == Tail) {
             usleep(1000);
         }
 
+        while (Head < Tail) {
+            data = Data[Head % MAX_DATA];
+
+            data_lpf = bw_low_pass(bwi, creal(data)) +
+                       bw_low_pass(bwq, cimag(data)) * I;
+
+            do_fft(data, data_lpf);
+
+            am_demod(data_lpf);
+
+            //__sync_synchronize(); //xxx
+            Head++;
+            //__sync_synchronize();
+        }
+    }
+
+    return NULL;
+}
+
+void do_fft(complex data_arg, complex data_lpf_arg)
+{
+    //#define N 131072
+    #define N 65536
+    #define DATA_BLOCK_DURATION  ((double)N / SAMPLE_RATE)
+
+    static unsigned long tlast;
+    static int n;
+    static complex *data, *data_fft, *data_lpf, *data_lpf_fft;
+
+    unsigned long tnow;
+
+    if (data_fft == NULL) {
+        data         = fftw_alloc_complex(N);
+        data_fft     = fftw_alloc_complex(N);
+        data_lpf     = fftw_alloc_complex(N);
+        data_lpf_fft = fftw_alloc_complex(N);
+    }
+
+    if (n < N) {
+        data[n] = data_arg;
+        data_lpf[n] = data_lpf_arg;
+        n++;
+    }
+
+    if (n == N) {
+        tnow = microsec_timer();
+        if (tnow - tlast > 1000000) {
+            fft_fwd_c2c(data, data_fft, n);
+            plot_fft(0, data_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
+
+            //fft_fwd_c2c(data_lpf, data_lpf_fft, n);
+            //plot_fft(1, data_lpf_fft, n, n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
+
+            tlast = tnow;
+            n = 0;
+        }
+    }
+}
+
+void am_demod(complex data_lpf)
+{
+    static double t, yo;
+    static const double delta_t = 1. / SAMPLE_RATE;
+    static const double w = 300000 * TWO_PI;
+    static int cnt;
+
+    data_lpf = data_lpf * cexp(I * w * t);
+    t += delta_t;
+
+    double y = cabs(data_lpf);
+    if (y > 0) {
+        yo = yo + (y - yo) * tc_k1;
+    }
+
+    if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
+        audio_out(yo*tc_k2);  // xxx how to auto scale:
+        cnt = 0;
+    }
+}
+
+#if 0
         // xxx
         if (tc_reset) {
             tc_freq     = DEFAULT_FREQ;
@@ -935,9 +1024,7 @@ void *rx_test(void *cx)
         Head++;
         __sync_synchronize();
     }
-
-    return NULL;
-}
+#endif
 
 void *get_data_thread(void *cx)
 {
@@ -959,14 +1046,15 @@ void *get_data_thread(void *cx)
     delta_t = (1. / SAMPLE_RATE);
 
     while (true) {
-        // wait for a data block to be available
-        while (Tail - Head == MAX_DATA_BLOCK) {
+        // wait for space to be available in Data array, 
+        // always in xxx chunds
+        while (MAX_DATA - (Tail - Head) < MAX_DATA_CHUNK) {
             usleep(1000);
         }
 
         // read MAX_DATA values from antenna file, these are real values
-        len = pread(fd, antenna, MAX_DATA*sizeof(double), file_offset);
-        if (len != MAX_DATA*sizeof(double)) {
+        len = pread(fd, antenna, MAX_DATA_CHUNK*sizeof(double), file_offset);
+        if (len != MAX_DATA_CHUNK*sizeof(double)) {
             FATAL("read gen.dat, len=%ld, %s\n", len, strerror(errno));
         }
         file_offset += len;
@@ -975,18 +1063,17 @@ void *get_data_thread(void *cx)
         }
 
         // frequency shift the antenna data, and 
-        // store result in Data[Tail], which are complex values
-        data = Data[Tail%MAX_DATA_BLOCK];
+        // store result in Data[Tail], these are complex values
+        data = &Data[Tail % MAX_DATA];
         w = TWO_PI * (tc_freq - FREQ_OFFSET);
-        for (int i = 0; i < MAX_DATA; i++) {
+        for (int i = 0; i < MAX_DATA_CHUNK; i++) {
             data[i] = antenna[i] * cexp(-I * w * t);
             t += delta_t;
         }
 
         // increment Tail
-        // xxx is sync_syncrhonize  needed
         __sync_synchronize();
-        Tail++;
+        Tail += MAX_DATA_CHUNK;
         __sync_synchronize();
     }
 
