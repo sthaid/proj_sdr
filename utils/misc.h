@@ -1,5 +1,6 @@
 #include <stdarg.h>
 #include <stdbool.h>
+#include <complex.h>
 
 #define TWO_PI (2*M_PI)
 
@@ -20,17 +21,15 @@ void log_msg(char *lvl, char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 unsigned long microsec_timer(void);
 unsigned long get_real_time_us(void);
 
-#if 0
-// -----------------  FAST SINE WAVE  -------------
-
-void init_sine_wave(void);
-double sine_wave(double f, double t);
-#endif
-
 // -----------------  DATA SET OPS  ---------------
 
 double moving_avg(double v, int n, void **cx_arg);
 void average_float(float *v, int n, double *min_arg, double *max_arg, double *avg);
 void average(double *v, int n, double *min_arg, double *max_arg, double *avg);
 void normalize(double *v, int n, double min, double max);
+
+// -----------------  MISC  ----------------------------
+
+void zero_real(double *data, int n);
+void zero_complex(complex *data, int n);
 

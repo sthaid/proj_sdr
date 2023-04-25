@@ -44,34 +44,6 @@ unsigned long get_real_time_us(void)
     return ((unsigned long)ts.tv_sec * 1000000) + ((unsigned long)ts.tv_nsec / 1000);
 }
 
-#if 0
-// -----------------  FAST SINE WAVE  ------------------
-
-#define MAX_SINE_WAVE 4096
-
-static double sine[MAX_SINE_WAVE];
-
-void init_sine_wave(void)
-{
-    for (int i = 0; i < MAX_SINE_WAVE; i++) {
-        sine[i] = sin((TWO_PI / MAX_SINE_WAVE) * i);
-    }
-}
-
-double sine_wave(double f, double t)
-{
-    double iptr;
-    int idx;
-
-    idx = modf(f*t, &iptr) * MAX_SINE_WAVE;
-    if (idx < 0 || idx >= MAX_SINE_WAVE) {
-        ERROR("sine_wave idx %d\n", idx);
-        exit(1);
-    }
-    return sine[idx];
-}
-#endif
-
 // -----------------  DATA SET OPS ---------------------
 
 double moving_avg(double v, int n, void **cx_arg)
@@ -139,5 +111,17 @@ void normalize(double *v, int n, double min, double max)
     for (int i = 0; i < n; i++) {
         v[i] = (v[i] - vmin) * (span / vspan) + min;
     }
+}
+
+// -----------------  MISC  ----------------------------
+
+void zero_real(double *data, int n)
+{
+    memset(data, 0, n*sizeof(double));
+}
+
+void zero_complex(complex *data, int n)
+{
+    memset(data, 0, n*sizeof(complex));
 }
 

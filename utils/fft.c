@@ -1,9 +1,7 @@
 // xxx 
 // - work on lpf_complex
 // - these are not thread safe, for now
-// - check for MAX_OUT_COMPLEX whereever out_complex is used
 // - save the in array and restore it when creating the plan, or comment about it not needed
-// - change how out_complex is used
 
 #include <stdlib.h>
 #include <string.h>
@@ -29,7 +27,6 @@
 
 #define DIR_STR(d) ((d) == FFTW_FORWARD ? "FWD" : "BACK")
 
-#define MAX_OUT_COMPLEX 20000000
 #define MAX_PLAN 100
 
 //
@@ -49,16 +46,7 @@ typedef struct {
 // variables
 //
 
-static plan_t   Plan[MAX_PLAN];
-static complex *out_complex;
-
-// -----------------  INIT  -------------------------------------------
-
-void init_fft(void)
-{
-    out_complex = fftw_alloc_complex(MAX_OUT_COMPLEX);
-    // xxx zero
-}
+static plan_t Plan[MAX_PLAN];
 
 // -----------------  GET PLAN  ---------------------------------------
 
@@ -111,12 +99,13 @@ static fftw_plan get_plan(int type, int n, void *in, void *out, int dir)
 
 // -----------------  EXECUTE FFT  ------------------------------------
 
+// note that for fft_fwd_r2c and fft_back_ctr:
+// - real array has n elements
+// - complex array has n/2+1 elements
+
 void fft_fwd_r2c(double *in, complex *out, int n)
 {
     fftw_plan p;
-
-    // real array has n elements
-    // complex array has n/2+1 elements
 
     p = get_plan(R2C, n, in, out, FFTW_FORWARD);
     fftw_execute(p);
@@ -130,28 +119,9 @@ void fft_back_c2r(complex *in, double *out, int n)
 {
     fftw_plan p;
 
-    // complex array has n/2+1 elements
-    // real array has n elements
-
     p = get_plan(C2R, n, in, out, FFTW_BACKWARD);
     fftw_execute(p);
 }
-
-#if 0
-void fft_fwd_r2r(double *in, double *out, int n)
-{
-    fft_fwd_r2c(in, out_complex, n);
-
-    for (int i = 0; i < n/2+1; i++) {
-        out[i] = cabs(out_complex[i]);
-    }
-    for (int i = n/2+1; i < n; i++) {
-        out[i] = 0;
-    }
-}
-#endif
-
-// - - - - - 
 
 void fft_fwd_c2c(complex *in, complex *out, int n)
 {
@@ -169,64 +139,33 @@ void fft_back_c2c(complex *in, complex *out, int n)
     fftw_execute(p);
 }
 
-// -----------------  LOW PASS FILTERS  -------------------------------
-//xxx use just one complex band pass filter
-//xxx smooth the edges
+// -----------------  FILTERS  ----------------------------------------
 
-#if 0
-void fft_lpf_complex(complex *in, complex *out, int n, double sample_rate, double f)
-{
-    unsigned long start=microsec_timer();
-    int           i, ix;
-
-    // perform forward fft,
-    // apply filter,
-    // perform backward fft
-    // xxx could avoid using out_complex here
-    fft_fwd_c2c(in, out_complex, n);
-    ix = n / sample_rate * f;
-    for (i = ix; i < n/2+1; i++) {
-        out_complex[i] = 0;
-        out_complex[n-i-1] = 0;
-    }
-    fft_back_c2c(out_complex, out, n);
-
-    // print elapsed time
-    DEBUG("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
-}
-#endif
-
-// xxx don't need out_complex
 void fft_bpf_complex(complex *in, complex *out, complex *fft, int n, double sample_rate, double f_low, double f_high)
 {
     unsigned long start=microsec_timer();
     int           i, ix1, ix2;
 
-    // perform forward fft,
-    // apply filter,
-    // perform backward fft
-    // xxx could avoid using out_complex here
-    fft_fwd_c2c(in, out_complex, n);
+    // perform forward fft
+    fft_fwd_c2c(in, out, n);
 
     // copy fft to caller supplied buffer
     if (fft) {
-        memcpy(fft, out_complex, n*sizeof(complex));  // xxx use copy macro
+        memcpy(fft, out, n*sizeof(complex));  // xxx use copy macro
     }
 
+    // apply filter
     ix1 = n / sample_rate * f_low;
     ix2 = n / sample_rate * f_high;
     for (i = 0; i < n - (ix2-ix1); i++) {
         int xx = i + ix2;
         if (xx < 0) xx += n;
         else if (xx >= n) xx -= n;
-        out_complex[xx] = 0;
+        out[xx] = 0;
     }
 
-    fft_back_c2c(out_complex, out, n);
-
-    for (i = 0; i < n; i++) {
-        out[i] /= n;
-    }
+    // perform backward fft
+    fft_back_c2c(out, out, n);
 
     // print elapsed time
     DEBUG("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
@@ -234,18 +173,26 @@ void fft_bpf_complex(complex *in, complex *out, complex *fft, int n, double samp
 
 void fft_lpf_real(double *in, double *out, int n, double sample_rate, double f)
 {
-    unsigned long start=microsec_timer();
-    int           i, ix;
+    unsigned long   start = microsec_timer();
+    int             i, ix;
+    static complex *tmp;
 
-    // perform forward fft,
-    // apply filter,
-    // perform backward fft
-    fft_fwd_r2c(in, out_complex, n);
+    // alloc tmp buffer, if not already done so
+    if (tmp == NULL) {
+        tmp = fftw_alloc_complex(n/2+1);
+    }
+
+    // perform forward fft
+    fft_fwd_r2c(in, tmp, n);
+
+    // apply filter
     ix = n / sample_rate * f;
     for (i = ix; i < n/2+1; i++) {
-        out_complex[i] = 0;
+        tmp[i] = 0;
     }
-    fft_back_c2r(out_complex, out, n);
+
+    // perform backward fft
+    fft_back_c2r(tmp, out, n);
 
     // print elapsed time
     DEBUG("fft_lpf_real duration %ld ms\n", (microsec_timer()-start)/1000);
