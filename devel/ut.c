@@ -381,33 +381,39 @@ void plot_complex(int idx, complex *data, int n, double xvmin, double xvmax, dou
     pthread_mutex_unlock(&mutex);
 }
 
-void plot_fft(int idx, complex *fft, int n, double max_freq, char *title, char *x_units)
+// xxx check all calls for sample_rate arg
+void plot_fft(int idx, complex *fft, int n, double sample_rate, bool half_flag, char *title)
 {
     plots_t *p = &plots[idx];
-    int j=0;
 
     if (n > MAX_PLOT_DATA) {
         FATAL("plot n=%d\n", n);
     }
 
     pthread_mutex_lock(&mutex);
-    for (int i = n/2; i < n; i++) {
-        p->data[j++] = cabs(fft[i]);
-    }
-    for (int i = 0; i < n/2; i++) {
-        p->data[j++] = cabs(fft[i]);
-    }
-    if (j != n) {
-        FATAL("n=%d j=%d\n", n, j);
+    if (!half_flag) {
+        int j=0;
+        for (int i = n/2; i < n; i++) {
+            p->data[j++] = cabs(fft[i]);
+        }
+        for (int i = 0; i < n/2; i++) {
+            p->data[j++] = cabs(fft[i]);
+        }
+        if (j != n) FATAL("n=%d j=%d\n", n, j);
+    } else {
+        n /= 2;
+        for (int i = 0; i < n; i++) {
+            p->data[i] = cabs(fft[i]);
+        }
     }
     normalize(p->data, n, 0, 1);
     p->n       = n;
-    p->xv_min  = -max_freq/2;
-    p->xv_max  = max_freq/2;
+    p->xv_min  = (!half_flag ? -sample_rate/2 : 0);
+    p->xv_max  = sample_rate/2;
     p->yv_min  = 0;
     p->yv_max  = 1;
     p->flags   = SDL_PLOT_FLAG_BARS;
-    p->x_units = x_units;
+    p->x_units = "HZ";
     p->title   = title;
     pthread_mutex_unlock(&mutex);
 }
@@ -549,6 +555,7 @@ void *filter_test(void *cx)
     #define WAV_FILE    3
 
     #define DEFAULT_CUTOFF 4000
+    #define DEFAULT_ORDER  8
 
     int        sample_rate = 20000;               // 20 KS/s
     int        max         = 120 * sample_rate;   // 120 total secs of data
@@ -558,6 +565,7 @@ void *filter_test(void *cx)
     char       tc_info[100];
     double     tc_mode = SINE_WAVES;
     double     tc_cutoff = DEFAULT_CUTOFF;
+    double     tc_order  = DEFAULT_ORDER;
     double     tc_reset = 0;
 
     double    *in_real         = fftw_alloc_real(max);
@@ -568,6 +576,7 @@ void *filter_test(void *cx)
 
     BWLowPass *bwlpf = NULL;
     int        bwlpf_cutoff = 0;
+    int        bwlpf_order  = 0;
     int        current_mode;
 
     // init test controls
@@ -582,6 +591,10 @@ void *filter_test(void *cx)
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
     tc.ctrl[2] = (struct test_ctrl_s)
+                 {"ORDER", &tc_order, 1, 20, 1,
+                  {}, NULL, 
+                  SDL_EVENT_KEY_SHIFT_LEFT_ARROW, SDL_EVENT_KEY_SHIFT_RIGHT_ARROW};
+    tc.ctrl[3] = (struct test_ctrl_s)
                  {"RESET", &tc_reset, 0, 1, 1,
                   {"", ""}, NULL, 
                   SDL_EVENT_NONE, 'r'};
@@ -597,7 +610,9 @@ void *filter_test(void *cx)
             init_using_sine_waves(in_real, max, 1000, 1000, 0, sample_rate);
             break;
         case SINE_WAVES:
-            init_using_sine_waves(in_real, max, 0, 10000, 1000, sample_rate);
+// xxx more of them
+            //init_using_sine_waves(in_real, max, 0, 10000, 1000, sample_rate);
+            init_using_sine_waves(in_real, max, 0, 10000, 500, sample_rate);
             break;
         case WHITE_NOISE:
             init_using_white_noise(in_real, max);
@@ -609,31 +624,26 @@ void *filter_test(void *cx)
             break;
         }
 
-#if 0
-        // normalize 'in_real', except for SINE_WAVES case which
-        // is designed to include a 0 frequency sine wave (DC component)
-        if (current_mode != SINE_WAVES) {
-            normalize(in_real, max, -1, 1);
-        }
-#endif
-
         // loop until test-ctrl mode changes
         while (current_mode == tc_mode) {
             // reset ctrls when requested
             if (tc_reset) {
                 tc_reset = 0;
                 tc_cutoff = DEFAULT_CUTOFF;
+                tc_order  = DEFAULT_ORDER;
             }
 
             // if test ctrl cutoff freq has changed then 
             // free and recreate the butterworth lpf
-            if (tc_cutoff != bwlpf_cutoff) {
+            if (tc_cutoff != bwlpf_cutoff || tc_order != bwlpf_order) {
                 if (bwlpf != NULL) {
                     free_bw_low_pass(bwlpf);
                 }
-                NOTICE("xxx recreating\n");
-                bwlpf = create_bw_low_pass_filter(8, sample_rate, tc_cutoff);
+                //NOTICE("xxx recreating\n");
+// xxx change order
+                bwlpf = create_bw_low_pass_filter(tc_order, sample_rate, tc_cutoff);
                 bwlpf_cutoff = tc_cutoff;
+                bwlpf_order  = tc_order;
             }
 
             // copy .1 secs of data from 'in_real' to 'in'
@@ -647,13 +657,15 @@ void *filter_test(void *cx)
                 in_filtered[i] = bw_low_pass(bwlpf, in[i]);
             }
 
+// xxx plot position on screen
             // plot fft of 'in'
             fft_fwd_r2c(in, in_fft, n);
-            plot_fft(0, in_fft, n, n/.01, "FFT", "HZ");  // xxx define for .01
+            plot_fft(0, in_fft, n, sample_rate, true, "FFT");  // xxx define for .01   OR .1
 
             // plot fft of 'in_filtered'
             fft_fwd_r2c(in_filtered, in_filtered_fft, n);
-            plot_fft(1, in_filtered_fft, n, n/.01, "FFT", "HZ");
+            plot_fft(1, in_filtered_fft, n, sample_rate, true, "FFT");
+
 // xxx plot_fft normalizes,  
 // xxx put back the / n in fft.c
 // xxx glitch when changing filters
@@ -754,7 +766,7 @@ void *antenna_test(void *cx)
         if (n == MAX_N) {
             sprintf(tc_info, "Generating simulated antenna data: %0.1f secs", t);
             fft_fwd_r2c(antenna, antenna_fft, n);
-            plot_fft(0, antenna_fft, n, n/.1, "ANTENNA_FFT", "HZ");  // xxx define for .1
+            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, "ANTENNA_FFT");
             fwrite(antenna, sizeof(double), n, fp);
             n = 0;
         }
@@ -914,11 +926,11 @@ void *rx_fft_thread(void *cx)
         }
 
         fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
-        plot_fft(0, fft.data_fft, fft.n, fft.n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
+        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, "DATA_FFT");
 
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-        plot_fft(1, fft.data_lpf_fft, fft.n, fft.n/DATA_BLOCK_DURATION, "DATA_FFT", "HZ");
+        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, "DATA_FFT");
 
         tlast = tnow;
         fft.n = 0;
