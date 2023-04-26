@@ -83,7 +83,7 @@ static void init_station_wav_file(double carrier_freq, double carrier_amp, char 
 {
     int    ret, num_chan, num_items, sample_rate;
     struct station_s *a = &station[max_station++];
-    double *audio_data;
+    double *audio_data, *audio_data2;
 
     ret = read_wav_file(filename, &audio_data, &num_chan, &num_items, &sample_rate);
     if (ret != 0) {
@@ -97,9 +97,13 @@ static void init_station_wav_file(double carrier_freq, double carrier_amp, char 
         exit(1);
     }
 
+    audio_data2 = fftw_alloc_real(num_items);
+    memcpy(audio_data2, audio_data, num_items*sizeof(double));
+    free(audio_data);
+
     a->audio_n           = num_items;
     a->audio_sample_rate = sample_rate;
-    a->audio_data        = audio_data;
+    a->audio_data        = audio_data2;
     a->carrier_freq      = carrier_freq;
     a->carrier_amp       = carrier_amp;
 
@@ -114,9 +118,9 @@ static void init_station_sine_wave(double carrier_freq, double carrier_amp, doub
     double          t, dt;
     int             i;
 
-    a->audio_n           = 100000;
-    a->audio_sample_rate = 100000; //xxx also for white noise
-    a->audio_data        = (double*)calloc(a->audio_n, sizeof(double));
+    a->audio_n           = 22000;
+    a->audio_sample_rate = 22000;
+    a->audio_data        = fftw_alloc_real(a->audio_n);
     a->carrier_freq      = carrier_freq;
     a->carrier_amp       = carrier_amp;
 
@@ -136,9 +140,9 @@ static void init_station_white_noise(double carrier_freq, double carrier_amp)
 {
     struct station_s *a = &station[max_station++];
 
-    a->audio_n           = 100000;
-    a->audio_sample_rate = 100000;
-    a->audio_data        = (double*)calloc(a->audio_n, sizeof(double));
+    a->audio_n           = 10*22000;
+    a->audio_sample_rate = 22000;;
+    a->audio_data        = fftw_alloc_real(a->audio_n);
     a->carrier_freq      = carrier_freq;
     a->carrier_amp       = carrier_amp;
 

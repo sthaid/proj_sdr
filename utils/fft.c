@@ -177,9 +177,17 @@ void fft_lpf_real(double *in, double *out, int n, double sample_rate, double f)
     int             i, ix;
     static complex *tmp;
 
+    // xxx could have different size tmp buffers
+
+    #define MAX_TMP 10000000
+
+    if (n/2+1 > MAX_TMP) {
+        FATAL("fft_lpf_real n=%d\n", n);
+    }
+
     // alloc tmp buffer, if not already done so
     if (tmp == NULL) {
-        tmp = fftw_alloc_complex(n/2+1);
+        tmp = fftw_alloc_complex(MAX_TMP);
     }
 
     // perform forward fft

@@ -256,9 +256,9 @@ void sdl_update_iyuv_texture(texture_t texture, uint8_t *y_plane, int y_pitch,
             uint8_t *u_plane, int u_pitch, uint8_t *v_plane, int v_pitch);
 
 // plot
-#define MAX_PLOT 6
 #define SDL_PLOT_FLAG_BARS 1
-void sdl_plot(rect_t *pane, int idx,
+void sdl_plot(rect_t *pane,
+              int x_pos, int y_pos, int x_width, int y_height,  // 0 - 100 percent
               double *data, int n,
               double xv_min, double xv_max,
               double yv_min, double yv_max,

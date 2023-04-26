@@ -10,8 +10,9 @@ ut: ut.c ut_antenna.c $(UTILS)
 	gcc -g -O2 -Wall $(INCLUDE) -o $@ $^ $(LIBS)
 
 run: ut
-	#./ut antenna
-	./ut filter
+	#./ut plot
+	./ut antenna
+	#./ut filter
 	#./ut rx
 
 #################

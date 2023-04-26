@@ -24,20 +24,22 @@
 // defines
 //
 
-#define min(a,b) ((a) < (b) ? (a) : (b))
-
-#define MAX_TESTS (sizeof(tests)/sizeof(tests[0]))
+#define USE_PA
 
 #define CTRL SDL_EVENT_KEY_CTRL
 #define ALT  SDL_EVENT_KEY_ALT
 
-#define USE_PA
+#define MAX_PLOT       10
+#define MAX_PLOT_DATA  250000
+
+#define MAX_CTRL            6
+#define MAX_CTRL_ENUM_NAMES 10
+
+#define min(a,b) ((a) < (b) ? (a) : (b))
 
 //
 // typedefs
 //
-
-#define MAX_PLOT_DATA  250000
 
 typedef struct {
     double  data[MAX_PLOT_DATA];
@@ -49,10 +51,12 @@ typedef struct {
     unsigned int flags;
     char   *title;
     char   *x_units;
+    int    x_pos;
+    int    y_pos;
+    int    x_width;
+    int    y_height;
 } plots_t;
 
-#define MAX_CTRL 6
-#define MAX_CTRL_ENUM_NAMES 10
 typedef struct {
     char *name;
     char *info;
@@ -80,6 +84,8 @@ test_ctrl_t tc;
 plots_t plots[MAX_PLOT];
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+bool program_terminating;
 
 //
 // prototypes
@@ -117,6 +123,8 @@ int main(int argc, char **argv)
     struct test_s *t;
     pthread_t tid;
     char *test_name;
+
+    #define MAX_TESTS (sizeof(tests)/sizeof(tests[0]))
 
     // parse cmdline args
     // - argv[1] is the test_name
@@ -162,6 +170,9 @@ int main(int argc, char **argv)
         100000,          // 0=continuous, -1=never, else us
         1,              // number of pane handler varargs that follow
         pane_hndlr, NULL, 0, 0, win_width, win_height, PANE_BORDER_STYLE_NONE);
+
+    // xxx
+    program_terminating = true;
 }
 
 void usage(void)
@@ -202,11 +213,12 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
         for (int i = 0; i < MAX_PLOT; i++) {
             plots_t *p = &plots[i];
             if (p->title) {
-                sdl_plot(pane, i,
-                        p->data, p->n,
-                        p->xv_min, p->xv_max,
-                        p->yv_min, p->yv_max,
-                        p->flags, p->title, p->x_units);
+                sdl_plot(pane,
+                         p->x_pos, p->y_pos, p->x_width, p->y_height,
+                         p->data, p->n,
+                         p->xv_min, p->xv_max,
+                         p->yv_min, p->yv_max,
+                         p->flags, p->title, p->x_units);
             }
         }
         pthread_mutex_unlock(&mutex);  // sep mutex for each xxx
@@ -336,7 +348,10 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
 // -----------------  PLOT HELPERS  ------------------------
 
-void plot_real(int idx, double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax, char *title)
+void plot_real(int idx, 
+               double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax, 
+               char *title, char *x_units,
+               int x_pos, int y_pos, int x_width, int y_height)
 {
     plots_t *p = &plots[idx];
 
@@ -353,36 +368,20 @@ void plot_real(int idx, double *data, int n, double xvmin, double xvmax, double 
     p->xv_max  = xvmax;
     p->yv_min  = yvmin;
     p->yv_max  = yvmax;
-    p->title   = title;
-    pthread_mutex_unlock(&mutex);
-}
-
-void plot_complex(int idx, complex *data, int n, double xvmin, double xvmax, double yvmin, double yvmax, 
-                  char *title, char *x_units)
-{
-    plots_t *p = &plots[idx];
-
-    if (n > MAX_PLOT_DATA) {
-        FATAL("plot n=%d\n", n);
-    }
-
-    pthread_mutex_lock(&mutex);
-    for (int i = 0; i < n; i++) {
-        p->data[i] = cabsl(data[i]);
-    }
-    p->n       = n;
-    p->xv_min  = xvmin;
-    p->xv_max  = xvmax;
-    p->yv_min  = yvmin;
-    p->yv_max  = yvmax;
     p->flags   = 0;
-    p->x_units = x_units;
     p->title   = title;
+    p->x_units = x_units;
+    p->x_pos   = x_pos;
+    p->y_pos   = y_pos;
+    p->x_width = x_width;
+    p->y_height= y_height;
     pthread_mutex_unlock(&mutex);
 }
 
-// xxx check all calls for sample_rate arg
-void plot_fft(int idx, complex *fft, int n, double sample_rate, bool half_flag, char *title)
+void plot_fft(int idx, 
+              complex *fft, int n, double sample_rate, bool half_flag, 
+              char *title,
+              int x_pos, int y_pos, int x_width, int y_height)
 {
     plots_t *p = &plots[idx];
 
@@ -413,8 +412,12 @@ void plot_fft(int idx, complex *fft, int n, double sample_rate, bool half_flag, 
     p->yv_min  = 0;
     p->yv_max  = 1;
     p->flags   = SDL_PLOT_FLAG_BARS;
-    p->x_units = "HZ";
     p->title   = title;
+    p->x_units = "HZ";
+    p->x_pos   = x_pos;
+    p->y_pos   = y_pos;
+    p->x_width = x_width;
+    p->y_height= y_height;
     pthread_mutex_unlock(&mutex);
 }
 
@@ -486,6 +489,9 @@ void audio_out(double yo)
 int pa_play_cb(void *data, void *cx_arg)
 {
     while (ao_head == ao_tail) {
+        if (program_terminating) {
+            return -1;
+        }
         usleep(1000);
     }
 
@@ -534,9 +540,9 @@ void *plot_test(void *cx)
         t += dt;
     }
 
-    plot_real(0, sw, n,  0, 1,  -1, +1,  "SINE WAVE");
-    plot_real(1, sw, n,  0, 1,  -0.5, +0.5,  "SINE WAVE");
-    plot_real(2, sw, n,  0, 1,  0.5, +1.5,  "SINE WAVE");
+    plot_real(0, sw, n,  0, 1,  -1, +1,     "SINE WAVE", NULL,  0,  0, 50, 25);
+    plot_real(1, sw, n,  0, 1,  -0.5, +0.5, "SINE WAVE", NULL,  0, 25, 50, 25);;
+    plot_real(2, sw, n,  0, 1,  0.5, +1.5,  "SINE WAVE", NULL,  0, 50, 50, 25);;
 
     return NULL;
 }
@@ -547,6 +553,9 @@ void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int
 void init_using_white_noise(double *wn, int n);
 void init_using_wav_file(double *wav, int n, char *filename);
 
+// xxx plot_fft normalizes,  
+// xxx put back the / n in fft.c  ??
+// xxx glitch when changing filters
 void *filter_test(void *cx)
 {
     #define SINE_WAVE   0
@@ -610,8 +619,6 @@ void *filter_test(void *cx)
             init_using_sine_waves(in_real, max, 1000, 1000, 0, sample_rate);
             break;
         case SINE_WAVES:
-// xxx more of them
-            //init_using_sine_waves(in_real, max, 0, 10000, 1000, sample_rate);
             init_using_sine_waves(in_real, max, 0, 10000, 500, sample_rate);
             break;
         case WHITE_NOISE:
@@ -639,8 +646,6 @@ void *filter_test(void *cx)
                 if (bwlpf != NULL) {
                     free_bw_low_pass(bwlpf);
                 }
-                //NOTICE("xxx recreating\n");
-// xxx change order
                 bwlpf = create_bw_low_pass_filter(tc_order, sample_rate, tc_cutoff);
                 bwlpf_cutoff = tc_cutoff;
                 bwlpf_order  = tc_order;
@@ -657,18 +662,13 @@ void *filter_test(void *cx)
                 in_filtered[i] = bw_low_pass(bwlpf, in[i]);
             }
 
-// xxx plot position on screen
             // plot fft of 'in'
             fft_fwd_r2c(in, in_fft, n);
-            plot_fft(0, in_fft, n, sample_rate, true, "FFT");  // xxx define for .01   OR .1
+            plot_fft(0, in_fft, n, sample_rate, true, "FFT", 0, 0, 50, 25);
 
             // plot fft of 'in_filtered'
             fft_fwd_r2c(in_filtered, in_filtered_fft, n);
-            plot_fft(1, in_filtered_fft, n, sample_rate, true, "FFT");
-
-// xxx plot_fft normalizes,  
-// xxx put back the / n in fft.c
-// xxx glitch when changing filters
+            plot_fft(1, in_filtered_fft, n, sample_rate, true, "FFT", 0, 25, 50, 25);
 
             // play the filtered audio
             for (int i = 0; i < n; i++) {
@@ -766,7 +766,7 @@ void *antenna_test(void *cx)
         if (n == MAX_N) {
             sprintf(tc_info, "Generating simulated antenna data: %0.1f secs", t);
             fft_fwd_r2c(antenna, antenna_fft, n);
-            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, "ANTENNA_FFT");
+            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, "ANTENNA_FFT", 0, 0, 50, 50);
             fwrite(antenna, sizeof(double), n, fp);
             n = 0;
         }
@@ -926,11 +926,11 @@ void *rx_fft_thread(void *cx)
         }
 
         fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
-        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, "DATA_FFT");
+        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, "DATA_FFT", 0, 0, 100, 30);
 
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, "DATA_FFT");
+        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, "DATA_LPF_FFT", 0, 30, 100, 30);
 
         tlast = tnow;
         fft.n = 0;

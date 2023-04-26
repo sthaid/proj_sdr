@@ -2204,7 +2204,8 @@ void sdl_update_iyuv_texture(texture_t texture,
 
 // -----------------  RENDER PLOTS  ------------------------------------- 
 
-void sdl_plot(rect_t *pane, int idx, 
+void sdl_plot(rect_t *pane, 
+              int x_pos, int y_pos, int x_width, int y_height,  // 0 - 100 percent
               double *data, int n, 
               double xv_min, double xv_max, 
               double yv_min, double yv_max,
@@ -2219,30 +2220,40 @@ void sdl_plot(rect_t *pane, int idx,
         double max;
     } yv[MAX_YV];
     double yv_span, y, y_min, y_max;
-    int x_origin, x_end, x_span;
-    int y_top, y_bottom, y_span, y_origin;
+
+    int x_l, x_r, y_t, y_b;
+    int x_left, x_right, y_top, y_bottom;
+    int x_span, y_span;
+    int x_origin, y_origin;
+
     int x_title;
     int x, i;
     char s[100], *p;
 
-    // init
+    // init y value span
     yv_span  = yv_max - yv_min;
 
-    x_origin = COL2X(6,PLOT_FONTSZ);
-    x_end    = pane->w - 20;
-    x_span   = x_end - x_origin;
-
-    y_top    = idx * pane->h / MAX_PLOT;
-    y_bottom = (idx + 1) * pane->h / MAX_PLOT - 40;
+    // init pixel coords
+    // - full display area for this plot (pixel units)
+    x_l = nearbyint((x_pos / 100.) * pane->w);
+    x_r = nearbyint(x_l + (x_width / 100.) * pane->w);
+    y_t = nearbyint((y_pos / 100.) * pane->h);
+    y_b = nearbyint(y_t + (y_height / 100.) * pane->h);
+    // - the actual area of the plot graph (within this plot's full display area) (pixel units)
+    x_left   = x_l + COL2X(6,PLOT_FONTSZ);
+    x_right  = x_r - 20;
+    y_top    = y_t;
+    y_bottom = y_b - 40;
+    // - the span of the plot graph (pixel units)
+    x_span   = x_right - x_left;
     y_span   = y_bottom - y_top;
+    // - the x,y origin (pixel units)
+    x_origin = x_left;
     y_origin = y_top + (yv_max / yv_span) * y_span;
 
     // sanity checks
     if (x_span >= MAX_YV) {
         FATAL("x_span = %d too large\n", x_span);
-    }
-    if (idx < 0 || idx >= MAX_PLOT) {
-        FATAL("sdl_plot invalid idx %d\n", idx);
     }
 
     // init yv array
@@ -2299,20 +2310,21 @@ void sdl_plot(rect_t *pane, int idx,
                         SDL_WHITE);
     }
 
-    // x axis: line, and ticks
+    // x axis: line
     if (y_origin <= y_bottom && y_origin >= y_top) {
         sdl_render_line(pane, 
                         x_origin, y_origin, 
                         x_origin + x_span, y_origin,
                         SDL_GREEN);
+    }
 
-        for (int i = 0; i <= 10; i++) {
-            int x_tick = x_origin + (i / 10.) * x_span;
-            sdl_render_line(pane, 
-                            x_tick, y_origin-5,
-                            x_tick, y_origin+5,
-                            SDL_GREEN);
-        }
+    // x axis: ticks
+    int y_tick = (y_origin <= y_bottom && y_origin >= y_top) ? y_origin : y_bottom;
+    for (int i = 0; i <= 10; i++) {
+        int x_tick = x_origin + (i / 10.) * x_span;
+        sdl_render_line(pane, x_tick, y_tick-5, x_tick, y_tick+5, SDL_GREEN);
+        sdl_render_line(pane, x_tick-1, y_tick-5, x_tick-1, y_tick+5, SDL_GREEN);
+        sdl_render_line(pane, x_tick+1, y_tick-5, x_tick+1, y_tick+5, SDL_GREEN);
     }
 
     // x axis: min, max
@@ -2322,7 +2334,7 @@ void sdl_plot(rect_t *pane, int idx,
                     PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
     sprintf(s, "%0.2f", xv_max);
     sdl_render_printf(pane, 
-                      x_end-COL2X(strlen(s),PLOT_FONTSZ), y_bottom+2,
+                      x_right-COL2X(strlen(s),PLOT_FONTSZ), y_bottom+2,
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
 
     // x axis: title
@@ -2331,7 +2343,7 @@ void sdl_plot(rect_t *pane, int idx,
     if (x_units) {
         p += sprintf(p, " %s", x_units);
     }
-    x_title = (x_end + x_origin) / 2 - COL2X(strlen(s),PLOT_FONTSZ) / 2;
+    x_title = (x_right + x_origin) / 2 - COL2X(strlen(s),PLOT_FONTSZ) / 2;
     sdl_render_printf(pane, 
                       x_title, y_bottom+2,
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
