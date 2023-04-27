@@ -764,7 +764,7 @@ void *antenna_test(void *cx)
     // xxx
     fp = fopen(ANTENNA_FILENAME, "w");
     if (fp == NULL) {
-        FATAL("failed to create gen.dat\n");
+        FATAL("failed to create %s\n", ANTENNA_FILENAME);
     }
 
     // xxx
@@ -839,6 +839,7 @@ void *rx_fft_thread(void *cx);
 void rx_demod_am(complex data_lpf);
 
 void *rx_sim_thread(void *cx);
+void *rx_sim_thread2(void *cx);
 
 // - - - - - - - - -  RX TEST - - - - - - - - - - - 
 
@@ -854,7 +855,8 @@ void *rx_test(void *cx)
     bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
     bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
 
-    pthread_create(&tid, NULL, rx_sim_thread, NULL);
+    //xxx pthread_create(&tid, NULL, rx_sim_thread, NULL);
+    pthread_create(&tid, NULL, rx_sim_thread2, NULL);
     pthread_create(&tid, NULL, rx_fft_thread, NULL);
 
     while (true) {
@@ -986,18 +988,19 @@ void rx_demod_am(complex data_lpf)
             tc_reset = 0;
         }
 #endif
+
 void *rx_sim_thread(void *cx)
 {
     int fd;
     struct stat statbuf;
     size_t file_offset, file_size, len;
-    double t, delta_t, antenna[MAX_DATA], w;
+    double t, delta_t, antenna[MAX_DATA_CHUNK], w;
     complex *data;
 
     // open ANTENNA_FILENAME
     fd = open(ANTENNA_FILENAME, O_RDONLY);
     if (fd < 0) {
-        FATAL("failed open gen.dat, %s\n", strerror(errno));
+        FATAL("failed open %s, %s\n", ANTENNA_FILENAME, strerror(errno));
     }
 
     // get size of ANTENNA_FILENAME
@@ -1017,10 +1020,10 @@ void *rx_sim_thread(void *cx)
             usleep(1000);
         }
 
-        // read MAX_DATA values from antenna file, these are real values
+        // read values from antenna file, these are real values
         len = pread(fd, antenna, MAX_DATA_CHUNK*sizeof(double), file_offset);
         if (len != MAX_DATA_CHUNK*sizeof(double)) {
-            FATAL("read gen.dat, len=%ld, %s\n", len, strerror(errno));
+            FATAL("read %s, len=%ld, %s\n", ANTENNA_FILENAME, len, strerror(errno));
         }
         file_offset += len;
         if (file_offset + len > file_size) {
@@ -1043,3 +1046,53 @@ void *rx_sim_thread(void *cx)
     return NULL;
 }
 
+void *rx_sim_thread2(void *cx)
+{
+    int fd;
+    struct stat statbuf;
+    size_t file_offset, file_size, len;
+    unsigned char iq[2*MAX_DATA_CHUNK];
+
+    // open BUF0
+    fd = open("buf0", O_RDONLY);
+    if (fd < 0) {
+        FATAL("failed open buf0, %s\n", strerror(errno));
+    }
+
+    // get size of BUF0
+    fstat(fd, &statbuf);
+    file_size = statbuf.st_size;
+    file_offset = 0;
+
+    // loop forever, 
+    // when end of file is reached start over from file begining
+    while (true) {
+        // wait for space to be available in Data array, 
+        while (MAX_DATA - (Tail - Head) < MAX_DATA_CHUNK) {
+            usleep(1000);
+        }
+
+        // read values from buf0 file, these are IQ bytes
+        len = pread(fd, iq, MAX_DATA_CHUNK*2, file_offset);
+        if (len != MAX_DATA_CHUNK*2) {
+            FATAL("read %s, len=%ld, %s\n", "buf0", len, strerror(errno));
+        }
+        file_offset += len;
+        if (file_offset + len > file_size) {
+            file_offset = 0;
+        }
+
+        // convert the iq bytes to complex Data values
+        complex *data = &Data[Tail % MAX_DATA];
+        for (int i = 0; i < MAX_DATA_CHUNK; i++) {
+            data[i] = (iq[2*i+0] - 128) +
+                      (iq[2*i+1] - 128) * I;
+            data[i] /= 128;
+        }
+
+        // increment Tail
+        Tail += MAX_DATA_CHUNK;
+    }
+
+    return NULL;
+}

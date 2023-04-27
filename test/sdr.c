@@ -223,6 +223,7 @@ int main(int argc, char **argv)
     NOTICE("closing\n");
     rtlsdr_close(dev);
     return 0;
+}
 
     // NOTES FOLLOW ...
 
@@ -300,7 +301,3 @@ RLSDR_API int rtlsdr_get_freq_correction(rtlsdr_dev_t *dev);
     // Flush the buffer
     rtlsdr_reset_buffer(device);
 **/
-    NOTICE("closing\n");
-    rtlsdr_close(dev);
-    return 0;
-}

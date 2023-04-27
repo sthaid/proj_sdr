@@ -12,14 +12,14 @@ ut: ut.c ut_antenna.c $(UTILS)
 sdr: sdr.c ../utils/misc.c
 	gcc -g -O2 -Wall $(INCLUDE) -o $@ $^ -lrtlsdr
 
-run: sdr
+run_sdr: sdr
 	sdr
 
 run_ut: ut
 	#./ut plot
 	#./ut antenna
-	./ut filter
-	#./ut rx
+	#./ut filter
+	./ut rx
 
 #################
 
