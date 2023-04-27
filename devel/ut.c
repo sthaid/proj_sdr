@@ -634,7 +634,7 @@ void *filter_test(void *cx)
             yv_max = 30;
             break;
         case WAV_FILE:
-            init_using_wav_file(in_real, max, "super_critical.wav");
+            init_using_wav_file(in_real, max, "wav_files/super_critical.wav");
             yv_max = 15;
             break;
         default:
