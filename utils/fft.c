@@ -111,12 +111,18 @@ void fft_fwd_r2c(double *in, complex *out, int n)
     fftw_execute(p);
 }
 
-void fft_back_c2r(complex *in, double *out, int n)
+void fft_back_c2r(complex *in, double *out, int n, bool normalize)
 {
     fftw_plan p;
 
     p = get_plan(C2R, n, in, out, FFTW_BACKWARD);
     fftw_execute(p);
+
+    if (normalize) {
+        for (int i = 0; i < n; i++) {
+            out[i] /= n;
+        }
+    }
 }
 
 void fft_fwd_c2c(complex *in, complex *out, int n)
@@ -127,12 +133,18 @@ void fft_fwd_c2c(complex *in, complex *out, int n)
     fftw_execute(p);
 }
 
-void fft_back_c2c(complex *in, complex *out, int n)
+void fft_back_c2c(complex *in, complex *out, int n, bool normalize)
 {
     fftw_plan p;
 
     p = get_plan(C2C, n, in, out, FFTW_BACKWARD);
     fftw_execute(p);
+
+    if (normalize) {
+        for (int i = 0; i < n; i++) {
+            out[i] /= n;
+        }
+    }
 }
 
 // -----------------  FILTERS  ----------------------------------------
@@ -155,8 +167,8 @@ void fft_bpf_complex(complex *in, complex *out, int n, double sample_rate, doubl
         out[xx] = 0;
     }
 
-    // perform backward fft
-    fft_back_c2c(out, out, n);
+    // perform backward fft, and normalize
+    fft_back_c2c(out, out, n, true);
 
     // print elapsed time
     DEBUG("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
@@ -178,8 +190,8 @@ void fft_lpf_real(double *in, double *out, int n, double sample_rate, double f_c
         out_complex[i] = 0;
     }
 
-    // perform backward fft
-    fft_back_c2r(out_complex, out, n);
+    // perform backward fft, and normalize
+    fft_back_c2r(out_complex, out, n, true);
 
     // print elapsed time
     DEBUG("fft_lpf_real duration %ld ms\n", (microsec_timer()-start)/1000);

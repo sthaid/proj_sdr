@@ -11,8 +11,8 @@ ut: ut.c ut_antenna.c $(UTILS)
 
 run: ut
 	#./ut plot
-	./ut antenna
-	#./ut filter
+	#./ut antenna
+	./ut filter
 	#./ut rx
 
 #################

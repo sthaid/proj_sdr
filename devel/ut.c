@@ -378,8 +378,9 @@ void plot_real(int idx,
     pthread_mutex_unlock(&mutex);
 }
 
+// to auto scale use max=0
 void plot_fft(int idx, 
-              complex *fft, int n, double sample_rate, bool half_flag, 
+              complex *fft, int n, double sample_rate, bool half_flag, double yv_max,
               char *title,
               int x_pos, int y_pos, int x_width, int y_height)
 {
@@ -405,12 +406,15 @@ void plot_fft(int idx,
             p->data[i] = cabs(fft[i]);
         }
     }
-    normalize(p->data, n, 0, 1);
+    if (yv_max == 0) {
+        normalize(p->data, n, 0, 1);
+        yv_max = 1;
+    }
     p->n       = n;
     p->xv_min  = (!half_flag ? -sample_rate/2 : 0);
     p->xv_max  = sample_rate/2;
     p->yv_min  = 0;
-    p->yv_max  = 1;
+    p->yv_max  = yv_max;
     p->flags   = SDL_PLOT_FLAG_BARS;
     p->title   = title;
     p->x_units = "HZ";
@@ -588,6 +592,8 @@ void *filter_test(void *cx)
     int        bwlpf_order  = 0;
     int        current_mode;
 
+    double     yv_max;
+
     // init test controls
     tc.name = "BPF";
     tc.info = tc_info;
@@ -617,17 +623,22 @@ void *filter_test(void *cx)
         switch (current_mode) {
         case SINE_WAVE:
             init_using_sine_waves(in_real, max, 1000, 1000, 0, sample_rate);
+            yv_max = 1000;
             break;
         case SINE_WAVES:
             init_using_sine_waves(in_real, max, 0, 10000, 500, sample_rate);
+            yv_max = 1000;
             break;
         case WHITE_NOISE:
             init_using_white_noise(in_real, max);
+            yv_max = 30;
             break;
         case WAV_FILE:
             init_using_wav_file(in_real, max, "super_critical.wav");
+            yv_max = 15;
             break;
         default:
+            FATAL("invalid current_mode %d\n", current_mode);
             break;
         }
 
@@ -664,11 +675,11 @@ void *filter_test(void *cx)
 
             // plot fft of 'in'
             fft_fwd_r2c(in, in_fft, n);
-            plot_fft(0, in_fft, n, sample_rate, true, "FFT", 0, 0, 50, 25);
+            plot_fft(0, in_fft, n, sample_rate, true, yv_max, "FFT", 0, 0, 50, 25);
 
             // plot fft of 'in_filtered'
             fft_fwd_r2c(in_filtered, in_filtered_fft, n);
-            plot_fft(1, in_filtered_fft, n, sample_rate, true, "FFT", 0, 25, 50, 25);
+            plot_fft(1, in_filtered_fft, n, sample_rate, true, yv_max, "FFT", 0, 25, 50, 25);
 
             // play the filtered audio
             for (int i = 0; i < n; i++) {
@@ -766,7 +777,7 @@ void *antenna_test(void *cx)
         if (n == MAX_N) {
             sprintf(tc_info, "Generating simulated antenna data: %0.1f secs", t);
             fft_fwd_r2c(antenna, antenna_fft, n);
-            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, "ANTENNA_FFT", 0, 0, 50, 50);
+            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, 0, "ANTENNA_FFT", 0, 0, 50, 50);
             fwrite(antenna, sizeof(double), n, fp);
             n = 0;
         }
@@ -915,6 +926,7 @@ void *rx_fft_thread(void *cx)
 {
     #define DATA_BLOCK_DURATION  ((double)FFT_N / SAMPLE_RATE)
 
+    const double         yv_max = 30000;
     unsigned long        tnow;
     static unsigned long tlast;
 
@@ -926,11 +938,11 @@ void *rx_fft_thread(void *cx)
         }
 
         fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
-        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, "DATA_FFT", 0, 0, 100, 30);
+        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, yv_max, "DATA_FFT", 0, 0, 100, 30);
 
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, "DATA_LPF_FFT", 0, 30, 100, 30);
+        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, yv_max, "DATA_LPF_FFT", 0, 30, 100, 30);
 
         tlast = tnow;
         fft.n = 0;
