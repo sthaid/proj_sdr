@@ -1,4 +1,4 @@
-TARGETS=ut
+TARGETS=ut sdr
 
 LIBS=-lm -lsndfile -lpng -lportaudio -lfftw3 -lSDL2 -lSDL2_ttf
 INCLUDE=-I../utils -I/usr/include/SDL2
@@ -9,7 +9,13 @@ all: $(TARGETS)
 ut: ut.c ut_antenna.c $(UTILS)
 	gcc -g -O2 -Wall $(INCLUDE) -o $@ $^ $(LIBS)
 
-run: ut
+sdr: sdr.c ../utils/misc.c
+	gcc -g -O2 -Wall $(INCLUDE) -o $@ $^ -lrtlsdr
+
+run: sdr
+	sdr
+
+run_ut: ut
 	#./ut plot
 	#./ut antenna
 	./ut filter
