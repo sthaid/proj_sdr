@@ -109,10 +109,6 @@ void fft_fwd_r2c(double *in, complex *out, int n)
 
     p = get_plan(R2C, n, in, out, FFTW_FORWARD);
     fftw_execute(p);
-
-    for (int i = n/2+1; i < n; i++) {
-        out[i] = 0;
-    }
 }
 
 void fft_back_c2r(complex *in, double *out, int n)
@@ -141,18 +137,13 @@ void fft_back_c2c(complex *in, complex *out, int n)
 
 // -----------------  FILTERS  ----------------------------------------
 
-void fft_bpf_complex(complex *in, complex *out, complex *fft, int n, double sample_rate, double f_low, double f_high)
+void fft_bpf_complex(complex *in, complex *out, int n, double sample_rate, double f_low, double f_high)
 {
     unsigned long start=microsec_timer();
     int           i, ix1, ix2;
 
     // perform forward fft
     fft_fwd_c2c(in, out, n);
-
-    // copy fft to caller supplied buffer
-    if (fft) {
-        memcpy(fft, out, n*sizeof(complex));  // xxx use copy macro
-    }
 
     // apply filter
     ix1 = n / sample_rate * f_low;
@@ -171,36 +162,24 @@ void fft_bpf_complex(complex *in, complex *out, complex *fft, int n, double samp
     DEBUG("fft_lpf_complex duration %ld ms\n", (microsec_timer()-start)/1000);
 }
 
-void fft_lpf_real(double *in, double *out, int n, double sample_rate, double f)
+// note: the number of elements in out must be n+2
+void fft_lpf_real(double *in, double *out, int n, double sample_rate, double f_cutoff)
 {
     unsigned long   start = microsec_timer();
     int             i, ix;
-    static complex *tmp;
-
-    // xxx could have different size tmp buffers
-
-    #define MAX_TMP 10000000
-
-    if (n/2+1 > MAX_TMP) {
-        FATAL("fft_lpf_real n=%d\n", n);
-    }
-
-    // alloc tmp buffer, if not already done so
-    if (tmp == NULL) {
-        tmp = fftw_alloc_complex(MAX_TMP);
-    }
+    complex        *out_complex = (complex*)out;
 
     // perform forward fft
-    fft_fwd_r2c(in, tmp, n);
+    fft_fwd_r2c(in, out_complex, n);
 
     // apply filter
-    ix = n / sample_rate * f;
+    ix = n / sample_rate * f_cutoff;
     for (i = ix; i < n/2+1; i++) {
-        tmp[i] = 0;
+        out_complex[i] = 0;
     }
 
     // perform backward fft
-    fft_back_c2r(tmp, out, n);
+    fft_back_c2r(out_complex, out, n);
 
     // print elapsed time
     DEBUG("fft_lpf_real duration %ld ms\n", (microsec_timer()-start)/1000);

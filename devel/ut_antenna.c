@@ -97,7 +97,7 @@ static void init_station_wav_file(double carrier_freq, double carrier_amp, char 
         exit(1);
     }
 
-    audio_data2 = fftw_alloc_real(num_items);
+    audio_data2 = fftw_alloc_real(num_items+2);
     memcpy(audio_data2, audio_data, num_items*sizeof(double));
     free(audio_data);
 
@@ -120,7 +120,7 @@ static void init_station_sine_wave(double carrier_freq, double carrier_amp, doub
 
     a->audio_n           = 22000;
     a->audio_sample_rate = 22000;
-    a->audio_data        = fftw_alloc_real(a->audio_n);
+    a->audio_data        = fftw_alloc_real(a->audio_n+2);
     a->carrier_freq      = carrier_freq;
     a->carrier_amp       = carrier_amp;
 
@@ -142,7 +142,7 @@ static void init_station_white_noise(double carrier_freq, double carrier_amp)
 
     a->audio_n           = 10*22000;
     a->audio_sample_rate = 22000;;
-    a->audio_data        = fftw_alloc_real(a->audio_n);
+    a->audio_data        = fftw_alloc_real(a->audio_n+2);
     a->carrier_freq      = carrier_freq;
     a->carrier_amp       = carrier_amp;
 
