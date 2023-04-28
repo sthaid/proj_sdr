@@ -29,6 +29,12 @@
 #define DIRECT_SAMPLING_I_ADC_ENABLED     1
 #define DIRECT_SAMPLING_Q_ADC_ENABLED     2
 
+#define DIRECT_SAMPLING_STR(x) \
+    ((x) == DIRECT_SAMPLING_DISABLED      ? "DISABLED"      : \
+     (x) == DIRECT_SAMPLING_I_ADC_ENABLED ? "I_ADC_ENABLED" : \
+     (x) == DIRECT_SAMPLING_Q_ADC_ENABLED ? "Q_ADC_ENABLED" : \
+                                            "????")
+
 #define KHZ 1000
 #define MHZ 1000000
 
@@ -46,7 +52,7 @@ typedef struct {
 //
 
 static void print_info(rtlsdr_dev_t *dev);
-static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int *gains_arg);
+static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int **gains_arg);
 static int get_max_gain(rtlsdr_dev_t *dev);
 static void *async_reader_thread(void *cx);
 static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg);
@@ -56,12 +62,12 @@ static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg);
 // xxx call this at startup
 void sdr_list_devices(void)
 {
-    // list devices
+    int dev_cnt, i, rc;
+
     dev_cnt = rtlsdr_get_device_count();
     NOTICE("dev_cnt = %d\n", dev_cnt);
     if (dev_cnt == 0) {
-        ERROR("dev_cnt = 0\n");
-        exit(1);
+        FATAL("dev_cnt = 0\n");
     }
 
     for (i = 0; i < dev_cnt; i++) {
@@ -69,8 +75,7 @@ void sdr_list_devices(void)
 
         rc = rtlsdr_get_device_usb_strings(0, manufact, product, serial);
         if (rc != 0) {
-            ERROR("rtlsdr_get_device_usb_strings(%d) rc=%d\n", i, rc);
-            exit(1);
+            FATAL("rtlsdr_get_device_usb_strings(%d) rc=%d\n", i, rc);
         }
         NOTICE("name='%s'  manufact='%s'  product='%s'  serial='%s'\n",
                rtlsdr_get_device_name(i), manufact, product, serial);
@@ -78,7 +83,7 @@ void sdr_list_devices(void)
 }
 
 // xxx pass in idx, sample_rate, ...
-void sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
+rtlsdr_dev_t * sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
 {
     int rc;
     rtlsdr_dev_t *dev;
@@ -122,7 +127,7 @@ void sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
         FATAL("rtlsdr_set_direct_sampling\n");
     }
     direct_sampling = rtlsdr_get_direct_sampling(dev);
-    NOTICE("curr direct sampling = %s\n", DIRECT_SAMPLE_STR(direct_sampling));
+    NOTICE("curr direct sampling = %s\n", DIRECT_SAMPLING_STR(direct_sampling));
 
     // set center frequency
     unsigned int ctr_freq;
@@ -137,13 +142,16 @@ void sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
     if (rc != 0) {
         FATAL("rtlsdr_reset_buffer\n");
     }
-    cx = malloc(sizoef(cx_t));
+    cx = malloc(sizeof(cx_t));
     cx->dev = dev;
     cx->cb = cb;
     pthread_create(&tid, NULL, async_reader_thread, cx);
+
+    // return dev
+    return dev;
 }
 
-void sdr_set_freq(double f)
+void sdr_set_freq(rtlsdr_dev_t *dev, double f)
 {
     rtlsdr_set_center_freq(dev, f);
 }
@@ -152,6 +160,9 @@ void sdr_set_freq(double f)
 
 static void print_info(rtlsdr_dev_t *dev)
 {
+    int rc;
+    char str[300], *p;
+
     // get xtal freq
     unsigned int rtl_freq, tuner_freq;
     rc = rtlsdr_get_xtal_freq(dev, &rtl_freq, &tuner_freq);
@@ -169,9 +180,11 @@ static void print_info(rtlsdr_dev_t *dev)
     NOTICE("tuner=%d %s\n", tuner, TUNER_TYPE_STR(tuner));   // is RTLSDR_TUNER_R820T
 
     // get gains
+    int num_gains, *gains;
     get_gains(dev, &num_gains, &gains);
+    p = str;
     p += sprintf(p, "num_gains=%d: ", num_gains);
-    for (i = 0; i < num_gains; i++) {
+    for (int i = 0; i < num_gains; i++) {
         p += sprintf(p, "%d ", gains[i]);
     }
     NOTICE("%s\n", str);
@@ -179,7 +192,7 @@ static void print_info(rtlsdr_dev_t *dev)
     free(gains);
 }
 
-static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int *gains_arg)
+static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int **gains_arg)
 {
     int num_gains, *gains;
 
@@ -193,7 +206,7 @@ static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int *gains_arg)
 
 static int get_max_gain(rtlsdr_dev_t *dev)
 {
-    int num_gains, *gains;
+    int num_gains, *gains, max_gain;
 
     get_gains(dev, &num_gains, &gains);
     max_gain = gains[num_gains-1];
@@ -201,9 +214,9 @@ static int get_max_gain(rtlsdr_dev_t *dev)
     return max_gain;
 }
 
-static void *async_reader_thread(void *cx)
+static void *async_reader_thread(void *cx_arg)
 {
-    rtl_sdr_t *dev = cx;
+    cx_t * cx = cx_arg;
 
     NOTICE("BEFORE rtlsdr_read_async\n");
     rtlsdr_read_async(cx->dev, async_reader_cb, cx, 0, 0);
@@ -218,6 +231,19 @@ static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg)
 {
     cx_t * cx = cx_arg;
 
+    static unsigned long start;
+    static unsigned long total;
+    static int cnt;
+    if (start == 0) {
+        start = microsec_timer();
+    }
+    total += len/2;
+    if (++cnt == 50) {
+        NOTICE("RATE = %f\n", total / ((microsec_timer()-start)/1000000.) / 1000000.);
+        cnt = 0;
+    }
+
+    //NOTICE("CALLBACK len=%d\n", len);
     cx->cb(buf, len);
 }
 

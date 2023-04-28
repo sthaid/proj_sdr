@@ -508,7 +508,7 @@ void *pa_play_thread(void*cx)
 {
     int ret;
     int num_chan = 1;
-    int sample_rate = 22000;
+    int sample_rate = 22000;  //xxx define
 
     ret = pa_play2(DEFAULT_OUTPUT_DEVICE, num_chan, sample_rate, PA_FLOAT32, pa_play_cb, NULL);
     if (ret != 0) {
@@ -904,7 +904,7 @@ void *rx_test(void *cx)
 
         if (cnt++ >= SAMPLE_RATE/10) {
             cnt = 0;
-            sprintf(tc.info, "FREQ = %0.3f MHz", (tc_freq + tc_freq_offset) / 1000);
+            sprintf(tc.info, "FREQ = %0.3f MHz", (tc_freq + tc_freq_offset) / 1000000);
         }
     }
 
@@ -1018,7 +1018,8 @@ void rx_demod_am(complex data_lpf)
         yo = yo + (y - yo) * tc_k1;
     }
 
-    if (cnt++ == (SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
+    // xxx why 0.9
+    if (cnt++ == (int)(0.9 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
         audio_out(yo*tc_k2);  // xxx auto scale
         cnt = 0;
     }
@@ -1094,7 +1095,7 @@ void * rx_sdr_ctrl_thread(void *cx)
     while (true) {
         f = tc_freq;
         if (f != tc_freq_last_set) {
-            sdr_set_freq(f);
+            //xxx sdr_set_freq(f);
             tc_freq_last_set = f;
         }
 
@@ -1108,6 +1109,8 @@ void * rx_sdr_ctrl_thread(void *cx)
 void rx_sdr_cb(unsigned char *iq, size_t len)
 {
     int items=len/2, i, j;
+
+    //NOTICE("RX_SDR_CB len=%d\n", len);
 
     if (MAX_DATA - (Tail - Head) < items) {
         NOTICE("discarding sdr data\n");
