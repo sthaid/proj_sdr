@@ -44,11 +44,14 @@ double get_antenna(double t)
 
 void init_antenna(void)
 {
-    init_station_white_noise(420000, .2);
-    init_station_wav_file(   460000, .4, "wav_files/one_bourbon_one_scotch_one_beer.wav");
-    init_station_wav_file(   500000, .6, "wav_files/super_critical.wav");
-    init_station_wav_file(   540000, .8, "wav_files/proud_mary.wav");
-    init_station_sine_wave(  580000, 1, 500);
+    #define FREQ    500000  // 500 KHz
+    #define SPACING 40000   //  40 KHz
+
+    init_station_white_noise(FREQ-2*SPACING, 1);
+    init_station_wav_file(   FREQ-1*SPACING, 1, "wav_files/one_bourbon_one_scotch_one_beer.wav");
+    init_station_wav_file(   FREQ+0*SPACING, 1, "wav_files/super_critical.wav");
+    init_station_wav_file(   FREQ+1*SPACING, 1, "wav_files/proud_mary.wav");
+    init_station_sine_wave(  FREQ+2*SPACING, 1, 500);
 }
 
 // -----------------  GET STATION  -------------------------------------
@@ -87,7 +90,7 @@ static void init_station_wav_file(double carrier_freq, double carrier_amp, char 
     memcpy(audio_data2, audio_data, num_items*sizeof(double));
     free(audio_data);
 
-    a->audio_n           = num_items;
+    a->audio_n           = num_items;     // duration is length of wav file
     a->audio_sample_rate = sample_rate;
     a->audio_data        = audio_data2;
     a->carrier_freq      = carrier_freq;
@@ -104,7 +107,7 @@ static void init_station_sine_wave(double carrier_freq, double carrier_amp, doub
     double          t, dt;
     int             i;
 
-    a->audio_n           = 22000;
+    a->audio_n           = 22000;   // 1 sec
     a->audio_sample_rate = 22000;
     a->audio_data        = fftw_alloc_real(a->audio_n+2);
     a->carrier_freq      = carrier_freq;
@@ -126,7 +129,7 @@ static void init_station_white_noise(double carrier_freq, double carrier_amp)
 {
     struct station_s *a = &station[max_station++];
 
-    a->audio_n           = 10*22000;
+    a->audio_n           = 10*22000;  // 10 sec
     a->audio_sample_rate = 22000;;
     a->audio_data        = fftw_alloc_real(a->audio_n+2);
     a->carrier_freq      = carrier_freq;

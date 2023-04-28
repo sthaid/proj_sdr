@@ -58,8 +58,8 @@ typedef struct {
 } plots_t;
 
 typedef struct {
-    char *name;
-    char *info;
+    char name[100];
+    char info[100];
     struct test_ctrl_s {
         char *name;
         double *val, min, max, step;
@@ -76,6 +76,7 @@ typedef struct {
 
 char *progname = "ut";
 
+char *test_name;
 char *arg1_str, *arg2_str, *arg3_str;
 int   arg1=-1, arg2=-1, arg3=-1;
 
@@ -112,7 +113,8 @@ static struct test_s {
         { "plot",    plot_test  },
         { "filter",  filter_test   },
         { "antenna", antenna_test   },
-        { "rx",      rx_test    },
+        { "rx_sim",  rx_test    },
+        { "rx_sdr",  rx_test    },
                 };
 
 // -----------------  MAIN  --------------------------------
@@ -122,7 +124,6 @@ int main(int argc, char **argv)
     int i;
     struct test_s *t;
     pthread_t tid;
-    char *test_name;
 
     #define MAX_TESTS (sizeof(tests)/sizeof(tests[0]))
 
@@ -153,7 +154,8 @@ int main(int argc, char **argv)
     init_audio_out();
 
     // start test thread
-    NOTICE("Running '%s' test\n", t->test_name);
+    NOTICE("Running '%s' test\n", test_name);
+    sprintf(tc.name, "%s", test_name);
     pthread_create(&tid, NULL, t->proc, NULL);
 
     // init sdl
@@ -207,7 +209,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
     // ------------------------
 
     if (request == PANE_HANDLER_REQ_RENDER) {
-        char str[100], *p;
+        char str[200], *p;
 
         pthread_mutex_lock(&mutex);
         for (int i = 0; i < MAX_PLOT; i++) {
@@ -225,10 +227,8 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
         str[0] = '\0';
         p = str;
-        if (tc.name != NULL) {
-            p += sprintf(p, "%s", tc.name);
-        }
-        if (tc.info != NULL) {
+        p += sprintf(p, "%s", tc.name);
+        if (tc.info[0] != '\0') {
             p += sprintf(p, " - %s", tc.info);
         }
         sdl_render_printf(pane, 
@@ -529,8 +529,7 @@ void *plot_test(void *cx)
 
     #define SECS 1
 
-    tc.name = "PLOT";
-    tc.info = "Hello World";
+    sprintf(tc.info, "Hello World");
 
     sample_rate = 20000;
     f = 10;
@@ -575,7 +574,6 @@ void *filter_test(void *cx)
     int        n           = .1 * sample_rate;    // .1 secs of data processed at a time
     int        total       = 0;
 
-    char       tc_info[100];
     double     tc_mode = SINE_WAVES;
     double     tc_cutoff = DEFAULT_CUTOFF;
     double     tc_order  = DEFAULT_ORDER;
@@ -595,8 +593,6 @@ void *filter_test(void *cx)
     double     yv_max;
 
     // init test controls
-    tc.name = "BPF";
-    tc.info = tc_info;
     tc.ctrl[0] = (struct test_ctrl_s)
                  {"MODE", &tc_mode, SINE_WAVE, WAV_FILE, 1, 
                   {"SINE_WAVE", "SINE_WAVES", "WHITE_NOISE", "WAV_FILE"}, "", 
@@ -747,8 +743,6 @@ void *antenna_test(void *cx)
     FILE    *fp;
     int      n = 0;
 
-    static char tc_info[100];
-
     init_antenna();
 
     antenna     = fftw_alloc_real(MAX_N);
@@ -756,10 +750,6 @@ void *antenna_test(void *cx)
 
     // xxx
     tmax = (arg1 == -1 ? 30 : arg1);
-
-    // init test controls
-    tc.name = "ANTENNA";
-    tc.info = tc_info;
 
     // xxx
     fp = fopen(ANTENNA_FILENAME, "w");
@@ -775,7 +765,7 @@ void *antenna_test(void *cx)
 
         // xxx
         if (n == MAX_N) {
-            sprintf(tc_info, "Generating simulated antenna data: %0.1f secs", t);
+            sprintf(tc.info, "Generating simulated antenna data: %0.1f secs", t);
             fft_fwd_r2c(antenna, antenna_fft, n);
             plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, 0, "ANTENNA_FFT", 0, 0, 50, 50);
             fwrite(antenna, sizeof(double), n, fp);
@@ -783,8 +773,13 @@ void *antenna_test(void *cx)
         }
     }
 
+    sprintf(tc.info, "Done");
+
     // xxxx
     fclose(fp);
+
+    // xxx 
+    sdl_push_event(&(sdl_event_t){SDL_EVENT_QUIT});
 
     return NULL;
 }
@@ -800,9 +795,9 @@ void *antenna_test(void *cx)
 #define MAX_DATA_CHUNK  131072
 #define MAX_DATA        (4*MAX_DATA_CHUNK)
 
-#define DEFAULT_FREQ 500000   // 500 KHz
-#define DEFAULT_K1   0.004
-#define DEFAULT_K2   4.0
+#define DEFAULT_FREQ    (strcmp(test_name,"rx_sim") == 0 ? 500000 : 1030000)  // 500 KHz or 1030 KHz
+#define DEFAULT_K1      0.004
+#define DEFAULT_K2      4.0
 
 // typedefs
 
@@ -822,15 +817,16 @@ complex       Data[MAX_DATA];
 
 fft_t         fft;
 
-double        tc_freq  = DEFAULT_FREQ;
-double        tc_k1    = DEFAULT_K1;
-double        tc_k2    = DEFAULT_K2;
-double        tc_reset = 0;
-char          tc_info[100];
+double        tc_freq;
+double        tc_freq_offset;
+double        tc_k1;
+double        tc_k2;
+double        tc_reset;
 
 // prototypes
 
 void rx_tc_init(void);
+void rx_tc_reset(void);
 
 void rx_fft_init(void);
 void rx_fft_add_data(complex data, complex data_lpf);
@@ -841,40 +837,72 @@ void rx_demod_am(complex data_lpf);
 void *rx_sim_thread(void *cx);
 void *rx_sim_thread2(void *cx);
 
+// AAA xxx
+// - incorporate the sdr
+// - mark the top fft at the frequency point
+// - exapand the graph to just part of the fft
+//
+// AAA done
+// - select sim or sdr
+// - tc_reset
+// - have a ctr and offset freq
+
 // - - - - - - - - -  RX TEST - - - - - - - - - - - 
 
 void *rx_test(void *cx)
 {
     pthread_t  tid;
     BWLowPass *bwi, *bwq;
-    complex    data, data_lpf;
+    complex    data_orig, data, data_lpf;
+    double     t=0, w;
+    int cnt=0;
+    const double delta_t = 1. / SAMPLE_RATE;
 
     rx_tc_init();
     rx_fft_init();
 
-    bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
+    bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);  //xxx adjust the 4000?
     bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
 
-    //xxx pthread_create(&tid, NULL, rx_sim_thread, NULL);
-    pthread_create(&tid, NULL, rx_sim_thread2, NULL);
+    if (strcmp(test_name, "rx_sim") == 0) {
+        pthread_create(&tid, NULL, rx_sim_thread, NULL);
+    } else {
+        pthread_create(&tid, NULL, rx_sim_thread2, NULL); // XXX
+    }
     pthread_create(&tid, NULL, rx_fft_thread, NULL);
 
     while (true) {
+        if (tc_reset) {
+            rx_tc_reset();
+        }
+
         if (Head == Tail) {
             usleep(1000);
             continue;
         }
 
-        data = Data[Head % MAX_DATA];
+        // xxx needs cleanup and comments
+
+        data_orig = Data[Head % MAX_DATA];
+
+        w = TWO_PI * tc_freq_offset;
+        data = data_orig * cexp(I * w * t);
 
         data_lpf = bw_low_pass(bwi, creal(data)) +
                    bw_low_pass(bwq, cimag(data)) * I;
 
-        rx_fft_add_data(data, data_lpf);
+        rx_fft_add_data(data_orig, data_lpf);
 
         rx_demod_am(data_lpf);
 
         Head++;
+
+        t += delta_t;
+
+        if (cnt++ >= SAMPLE_RATE/10) {
+            cnt = 0;
+            sprintf(tc.info, "FREQ = %0.3f MHz", (tc_freq + tc_freq_offset) / 1000);
+        }
     }
 
     return NULL;
@@ -882,30 +910,43 @@ void *rx_test(void *cx)
 
 void rx_tc_init(void)
 {
-    tc.name = "RX";
-    tc.info = tc_info;
     tc.ctrl[0] = (struct test_ctrl_s)
-                 {"F", &tc_freq, 0, 1000000, 1000, 
+                 {"F", &tc_freq, -2000000, 2000000, 1000, 
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
     tc.ctrl[1] = (struct test_ctrl_s)
-                 {"K1", &tc_k1, 0, 1.0, .0001, 
-                  {}, NULL,
+                 {"F_OFF", &tc_freq_offset, -600000, 600000, 1000,
+                  {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
     tc.ctrl[2] = (struct test_ctrl_s)
+                 {"K1", &tc_k1, 0, 1.0, .0001, 
+                  {}, NULL,
+                  '1', '2'};
+    tc.ctrl[3] = (struct test_ctrl_s)
                  {"K2", &tc_k2, 1, 100, 1, 
                   {}, NULL,
-                  SDL_EVENT_KEY_LEFT_ARROW+ALT, SDL_EVENT_KEY_RIGHT_ARROW+ALT};
-    tc.ctrl[3] = (struct test_ctrl_s)
+                  '3', '4'};
+    tc.ctrl[4] = (struct test_ctrl_s)
                  {"RESET", &tc_reset, 0, 1, 1,
                   {"", ""}, NULL, 
                   SDL_EVENT_NONE, 'r'};
+
+    rx_tc_reset();
+}
+
+void rx_tc_reset(void)
+{
+    tc_freq        = DEFAULT_FREQ;
+    tc_freq_offset = 0;
+    tc_k1          = DEFAULT_K1;
+    tc_k2          = DEFAULT_K2;
+    tc_reset       = 0;
 }
 
 // - - - - - - - - -  RX FFT   - - - - - - - - - - - 
 
-#define FFT_N        65536
-#define FFT_INTERVAL 1000000   // 1 sec
+#define FFT_N        240000
+#define FFT_INTERVAL 100000   // .2 sec
 
 void rx_fft_init(void)
 {
@@ -928,7 +969,7 @@ void *rx_fft_thread(void *cx)
 {
     #define DATA_BLOCK_DURATION  ((double)FFT_N / SAMPLE_RATE)
 
-    const double         yv_max = 30000;
+    const double         yv_max = 150000;  // xxx auto scale
     unsigned long        tnow;
     static unsigned long tlast;
 
@@ -979,15 +1020,6 @@ void rx_demod_am(complex data_lpf)
         cnt = 0;
     }
 }
-
-#if 0
-        if (tc_reset) {
-            tc_freq     = DEFAULT_FREQ;
-            tc_k1       = DEFAULT_K1;
-            tc_k2       = DEFAULT_K2;
-            tc_reset = 0;
-        }
-#endif
 
 void *rx_sim_thread(void *cx)
 {
@@ -1064,6 +1096,10 @@ void *rx_sim_thread2(void *cx)
     file_size = statbuf.st_size;
     file_offset = 0;
 
+    // other inits
+    double t = 0;
+    double delta_t = (1. / SAMPLE_RATE);
+
     // loop forever, 
     // when end of file is reached start over from file begining
     while (true) {
@@ -1084,10 +1120,15 @@ void *rx_sim_thread2(void *cx)
 
         // convert the iq bytes to complex Data values
         complex *data = &Data[Tail % MAX_DATA];
+        double w = TWO_PI * tc_freq;
         for (int i = 0; i < MAX_DATA_CHUNK; i++) {
             data[i] = (iq[2*i+0] - 128) +
                       (iq[2*i+1] - 128) * I;
             data[i] /= 128;
+
+            data[i] *= cexp(I * w * t);
+
+            t += delta_t;
         }
 
         // increment Tail

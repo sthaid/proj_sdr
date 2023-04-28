@@ -15,7 +15,7 @@ rtlsdr_dev_t *dev;
 unsigned long total = 0;
 int min = 128, max = 128;
 
-unsigned char buf0[25000000];
+unsigned char buf0[150000000];
 int max0;
 
 #define TUNER_TYPE_STR(x) \
@@ -209,7 +209,7 @@ int main(int argc, char **argv)
 
     pthread_t tid;
     pthread_create(&tid, NULL, reader, NULL);
-    sleep(5);
+    sleep(30);
     NOTICE("cancelling\n");
     rc = rtlsdr_cancel_async(dev);
     NOTICE("cancel ret %d\n", rc);
