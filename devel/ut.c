@@ -835,7 +835,8 @@ void *rx_fft_thread(void *cx);
 void rx_demod_am(complex data_lpf);
 
 void *rx_sim_thread(void *cx);
-void *rx_sim_thread2(void *cx);
+void *rx_sdr_ctrl_thread(void *cx);
+void rx_sdr_cb(unsigned char *iq, size_t len);
 
 // AAA xxx
 // - incorporate the sdr
@@ -867,8 +868,10 @@ void *rx_test(void *cx)
     if (strcmp(test_name, "rx_sim") == 0) {
         pthread_create(&tid, NULL, rx_sim_thread, NULL);
     } else {
-        pthread_create(&tid, NULL, rx_sim_thread2, NULL); // XXX
+        sdr_init(tc_freq, rx_sdr_cb);
+        pthread_create(&tid, NULL, rx_sdr_ctrl_thread, NULL);
     }
+
     pthread_create(&tid, NULL, rx_fft_thread, NULL);
 
     while (true) {
@@ -1021,6 +1024,8 @@ void rx_demod_am(complex data_lpf)
     }
 }
 
+// - - - - - - - - -  RX SIMULATOR - - - - - - - - - 
+
 void *rx_sim_thread(void *cx)
 {
     int fd;
@@ -1078,6 +1083,47 @@ void *rx_sim_thread(void *cx)
     return NULL;
 }
 
+// - - - - - - - - -  RX SDR - - - - - - - - - - - - 
+
+// AAA
+void * rx_sdr_ctrl_thread(void *cx)
+{
+    double tc_freq_last_set = tc_freq;
+    double f;
+
+    while (true) {
+        f = tc_freq;
+        if (f != tc_freq_last_set) {
+            sdr_set_freq(f);
+            tc_freq_last_set = f;
+        }
+
+        usleep(10000);
+    }
+
+    return NULL;
+}
+
+// AAA todo
+void rx_sdr_cb(unsigned char *iq, size_t len)
+{
+    int items=len/2, i, j;
+
+    if (MAX_DATA - (Tail - Head) < items) {
+        NOTICE("discarding sdr data\n");
+        return;
+    }
+
+    j = Tail % MAX_DATA;
+    for (i = 0; i < items; i++) {
+        Data[j] = ((iq[2*i+0] - 128.) + (iq[2*i+1] - 128.) * I) / 128.;  // xxx try without all the 128.
+        if (++j == MAX_DATA) j = 0;
+    }
+
+    Tail += items;
+}
+
+#if 0
 void *rx_sim_thread2(void *cx)
 {
     int fd;
@@ -1137,3 +1183,4 @@ void *rx_sim_thread2(void *cx)
 
     return NULL;
 }
+#endif

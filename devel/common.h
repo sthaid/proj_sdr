@@ -26,3 +26,6 @@
 void init_antenna(void);
 double get_antenna(double t);
 
+// sdr2.c
+void sdr_init(double f, void(*cb)(unsigned char *iq, size_t len));
+void sdr_set_freq(double f);
