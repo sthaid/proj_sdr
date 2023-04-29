@@ -2,7 +2,7 @@
 #include <rtl-sdr.h>
 
 // xxx check ret codes
-// xxx may want this when shuttind down
+// xxx may want this when shutting down
 //  rc = rtlsdr_cancel_async(dev);
 //  rtlsdr_close(dev);
 
@@ -48,6 +48,13 @@ typedef struct {
 } cx_t;
 
 //
+// variables
+//
+
+static bool direct_sampling_enabled;
+static void(*cb)(unsigned char *iq, size_t len);
+
+//
 // prototypes
 //
 
@@ -83,10 +90,13 @@ void sdr_list_devices(void)
 }
 
 // xxx pass in idx, sample_rate, ...
-rtlsdr_dev_t * sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
+rtlsdr_dev_t * sdr_init(double f, void(*cb_arg)(unsigned char *iq, size_t len))
 {
     int rc;
     rtlsdr_dev_t *dev;
+
+    // save cb_arg in global var
+    cb = cb_arg;
 
     // open
     rc = rtlsdr_open(&dev, 0);
@@ -129,6 +139,7 @@ rtlsdr_dev_t * sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
     }
     direct_sampling = rtlsdr_get_direct_sampling(dev);
     NOTICE("curr direct sampling = %s\n", DIRECT_SAMPLING_STR(direct_sampling));
+    direct_sampling_enabled = (direct_sampling == DIRECT_SAMPLING_Q_ADC_ENABLED);
 
     // set center frequency
     unsigned int ctr_freq;
@@ -145,7 +156,7 @@ rtlsdr_dev_t * sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
     }
     cx = malloc(sizeof(cx_t));
     cx->dev = dev;
-    cx->cb = cb;
+    cx->cb = cb;  // xxx won't need cx
     pthread_create(&tid, NULL, async_reader_thread, cx);
 
     // return dev
@@ -154,6 +165,42 @@ rtlsdr_dev_t * sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
 
 void sdr_set_freq(rtlsdr_dev_t *dev, double f)
 {
+    bool      direct_sampling_needed = (f < 28.8*MHZ);
+    int       rc, direct_sampling;
+    pthread_t tid;
+    cx_t     *cx;
+
+    if (direct_sampling_enabled != direct_sampling_needed) {
+        NOTICE("CANCELLING ASYNC\n");
+        rc = rtlsdr_cancel_async(dev);
+        if (rc != 0) {
+            FATAL("rtlsdr_cancel_async\n");
+        }
+        sleep(1);
+
+        direct_sampling = (f < 28.8*MHZ ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
+        NOTICE("SETTING DIRECT SAMPLING TO %s\n", DIRECT_SAMPLING_STR(direct_sampling));
+        rc = rtlsdr_set_direct_sampling(dev, direct_sampling);
+        if (rc != 0) {
+            FATAL("rtlsdr_set_direct_sampling\n");
+        }
+        direct_sampling_enabled = (direct_sampling == DIRECT_SAMPLING_Q_ADC_ENABLED);
+
+        // start async reader
+        NOTICE("STARTING ASYNC READER\n");
+        rc = rtlsdr_reset_buffer(dev);
+        if (rc != 0) {
+            FATAL("rtlsdr_reset_buffer\n");
+        }
+        cx = malloc(sizeof(cx_t));
+        cx->dev = dev;
+        cx->cb = cb;
+        pthread_create(&tid, NULL, async_reader_thread, cx);
+    }
+
+// AAA xxx change mode
+// xxx may need to stop when setting ds
+
     rtlsdr_set_center_freq(dev, f);
 }
 

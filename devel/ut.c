@@ -3,6 +3,8 @@
 // - exit pgm
 // - better way to handle global args
 
+// xxx move all tests to other file, one for each
+
 // xxx restore fm_receiver file
 
 // xxx improve filter quality
@@ -34,7 +36,7 @@
 #define MAX_PLOT       10
 #define MAX_PLOT_DATA  250000
 
-#define MAX_CTRL            6
+#define MAX_CTRL            14
 #define MAX_CTRL_ENUM_NAMES 10
 
 #define min(a,b) ((a) < (b) ? (a) : (b))
@@ -162,7 +164,7 @@ int main(int argc, char **argv)
     pthread_create(&tid, NULL, t->proc, NULL);
 
     // init sdl
-    static int win_width = 1600;
+    static int win_width = 1680;
     static int win_height = 800;
     if (sdl_init(&win_width, &win_height, false, false, false) < 0) {
         FATAL("sdl_init %dx%d failed\n", win_width, win_height);
@@ -235,11 +237,13 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
             p += sprintf(p, " - %s", tc.info);
         }
         sdl_render_printf(pane, 
-                          0, pane->h-ROW2Y(4,FONTSZ), FONTSZ,
+                          0, pane->h-ROW2Y(7,FONTSZ), FONTSZ,
                           SDL_WHITE, SDL_BLACK, "%s" , str);
 
         for (int i = 0; i < MAX_CTRL; i++) {
             struct test_ctrl_s *x = &tc.ctrl[i];
+            int xpos, ypos;
+
             if (x->val == NULL) continue;
 
             str[0] = '\0';
@@ -261,23 +265,30 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                 p += sprintf(p, "%s", x->units);
             }
 
-            sdl_render_printf(pane, 
-                              COL2X(20*i,FONTSZ), pane->h-ROW2Y(2,FONTSZ), FONTSZ,
-                              SDL_WHITE, SDL_BLACK, "%s" , str);
+            if (i < MAX_CTRL/2) {
+                xpos = COL2X(20*i,FONTSZ);
+                ypos = pane->h-ROW2Y(5,FONTSZ);
+            } else {
+                xpos = COL2X(20*(i-MAX_CTRL/2),FONTSZ);
+                ypos = pane->h-ROW2Y(2,FONTSZ);
+            }
+            sdl_render_printf(pane, xpos, ypos, FONTSZ, SDL_WHITE, SDL_BLACK, "%s" , str);
         }
 
         for (int i = 0; i < MAX_CTRL; i++) {
             struct test_ctrl_s *x = &tc.ctrl[i];
+            int xpos, ypos;
+
             if (x->val == NULL) continue;
 
             str[0] = '\0';
-            if (x->decr_event == SDL_EVENT_KEY_UP_ARROW && x->incr_event == SDL_EVENT_KEY_DOWN_ARROW) {
-                sprintf(str, "^ v");
-            } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_UP_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_DOWN_ARROW) {
-                sprintf(str, "SHIFT ^ v");
-            } else if (x->decr_event == SDL_EVENT_KEY_UP_ARROW+CTRL && x->incr_event == SDL_EVENT_KEY_DOWN_ARROW+CTRL) {
-                sprintf(str, "CTRL ^ v");
-            } else if (x->decr_event == SDL_EVENT_KEY_UP_ARROW+ALT && x->incr_event == SDL_EVENT_KEY_DOWN_ARROW+ALT) {
+            if (x->decr_event == SDL_EVENT_KEY_DOWN_ARROW && x->incr_event == SDL_EVENT_KEY_UP_ARROW) {
+                sprintf(str, "v ^");
+            } else if (x->decr_event == SDL_EVENT_KEY_SHIFT_DOWN_ARROW && x->incr_event == SDL_EVENT_KEY_SHIFT_UP_ARROW) {
+                sprintf(str, "SHIFT v ^");
+            } else if (x->decr_event == SDL_EVENT_KEY_DOWN_ARROW+CTRL && x->incr_event == SDL_EVENT_KEY_UP_ARROW+CTRL) {
+                sprintf(str, "CTRL v ^");
+            } else if (x->decr_event == SDL_EVENT_KEY_DOWN_ARROW+ALT && x->incr_event == SDL_EVENT_KEY_UP_ARROW+ALT) {
                 sprintf(str, "ALT ^ v");
             } else if (x->decr_event == SDL_EVENT_KEY_LEFT_ARROW && x->incr_event == SDL_EVENT_KEY_RIGHT_ARROW) {
                 sprintf(str, "<- ->");
@@ -293,9 +304,14 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                 if (isgraph(x->incr_event)) p += sprintf(p, "%c ", x->incr_event);
             }
 
-            sdl_render_printf(pane, 
-                              COL2X(20*i,FONTSZ), pane->h-ROW2Y(1,FONTSZ), FONTSZ,
-                              SDL_WHITE, SDL_BLACK, "%s" , str);
+            if (i < MAX_CTRL/2) {
+                xpos = COL2X(20*i,FONTSZ);
+                ypos = pane->h-ROW2Y(4,FONTSZ);
+            } else {
+                xpos = COL2X(20*(i-MAX_CTRL/2),FONTSZ);
+                ypos = pane->h-ROW2Y(1,FONTSZ);
+            }
+            sdl_render_printf(pane, xpos, ypos, FONTSZ, SDL_WHITE, SDL_BLACK, "%s" , str);
         }
     
         return PANE_HANDLER_RET_NO_ACTION;
@@ -554,7 +570,7 @@ void *plot_test(void *cx)
     return NULL;
 }
 
-// -----------------  BAND PASS FILTER TEST  --------------
+// -----------------  FILTER TEST  ------------------------
 
 void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate);
 void init_using_white_noise(double *wn, int n);
@@ -600,7 +616,7 @@ void *filter_test(void *cx)
     tc.ctrl[0] = (struct test_ctrl_s)
                  {"MODE", &tc_mode, SINE_WAVE, WAV_FILE, 1, 
                   {"SINE_WAVE", "SINE_WAVES", "WHITE_NOISE", "WAV_FILE"}, "", 
-                  SDL_EVENT_KEY_UP_ARROW, SDL_EVENT_KEY_DOWN_ARROW};
+                  SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
     tc.ctrl[1] = (struct test_ctrl_s)
                  {"CUTOFF", &tc_cutoff, 100, 10000, 100,
                   {}, "HZ", 
@@ -800,12 +816,15 @@ void *antenna_test(void *cx)
 #define MAX_DATA_CHUNK  131072
 #define MAX_DATA        (4*MAX_DATA_CHUNK)
 
-//xxx
-//#define DEFAULT_FREQ    (strcmp(test_name,"rx_sim") == 0 ? 800000 : 1030000)
-#define DEFAULT_FREQ    (strcmp(test_name,"rx_sim") == 0 ? 800000 : 100700000) 
-#define DEFAULT_K1      0.004
-#define DEFAULT_K2      5 
-#define DEFAULT_K3      60000
+#define DEMOD_AM 0
+#define DEMOD_FM 1
+#define DEMOD_STR(x) \
+    ((x) == DEMOD_AM ? "AM": \
+     (x) == DEMOD_FM ? "FM": \
+                       "????")
+
+#define MHZ 1000000
+#define KHZ 1000
 
 // typedefs
 
@@ -827,10 +846,13 @@ fft_t         fft;
 
 double        tc_freq;
 double        tc_freq_offset;
+double        tc_demod;
+double        tc_lpf_cutoff;
+double        tc_volume;
+double        tc_reset;
 double        tc_k1;
 double        tc_k2;
 double        tc_k3;
-double        tc_reset;
 
 // prototypes
 
@@ -847,26 +869,24 @@ void rx_demod_fm(complex data_lpf);
 void rx_sdr_init(void);
 void rx_sim_init(void);
 
-// AAA xxx
+// xxx
 // - incorporate the sdr
 // - mark the top fft at the frequency point
 // - exapand the graph to just part of the fft
-//
-// AAA done
-// - select sim or sdr
-// - tc_reset
-// - have a ctr and offset freq
 
 // - - - - - - - - -  RX TEST - - - - - - - - - - - 
 
 void *rx_test(void *cx)
 {
+    // xxx review and cleanup
     pthread_t  tid;
-    BWLowPass *bwi, *bwq;
+    BWLowPass *bwi=NULL, *bwq=NULL;
     complex    data_orig, data, data_lpf;
-    double     t=0, w;
+    double     t=0;
     int cnt=0;
     const double delta_t = 1. / SAMPLE_RATE;
+    double curr_lpf_cutoff = 0;
+    int curr_demod;
 
     rx_tc_init();
     rx_fft_init();
@@ -879,27 +899,28 @@ void *rx_test(void *cx)
 
     pthread_create(&tid, NULL, rx_fft_thread, NULL);
 
-#if 0  //xxx
-    bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);  //xxx adjust the 4000?
-    bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
-#else
-    bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_k3); 
-    bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_k3);
-    int tc_k3_last = tc_k3;
-#endif
+    curr_demod = tc_demod;
 
     while (true) {
-        if (tc_reset) {
-            rx_tc_reset();
+        if (tc_reset || curr_demod != tc_demod) {
+            rx_tc_init();
+            curr_demod = tc_demod;
         }
 
-        if (tc_k3 != tc_k3_last) { //xxx
-            NOTICE("changing filter\n");
-            free_bw_low_pass(bwi);
-            free_bw_low_pass(bwq);
-            bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_k3); 
-            bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_k3);
-            tc_k3_last = tc_k3;
+        if (curr_lpf_cutoff != tc_lpf_cutoff) { //xxx
+            NOTICE("xxx changing filter\n");
+            if (bwi) free_bw_low_pass(bwi);
+            if (bwq) free_bw_low_pass(bwq);
+            bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_lpf_cutoff); 
+            bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_lpf_cutoff);
+            curr_lpf_cutoff = tc_lpf_cutoff;
+        }
+
+        if (cnt++ >= SAMPLE_RATE/10) {
+            cnt = 0;
+            sprintf(tc.info, "FREQ = %0.3f MHz  DEMOD = %s", //xxx improve format
+                    (tc_freq + tc_freq_offset) / MHZ,
+                    DEMOD_STR(curr_demod));
         }
 
         if (Head == Tail) {
@@ -907,29 +928,35 @@ void *rx_test(void *cx)
             continue;
         }
 
-        // xxx needs cleanup and comments
-
         data_orig = Data[Head % MAX_DATA];
 
-        w = TWO_PI * tc_freq_offset;
-        data = data_orig * cexp(-I * w * t);
+        if (tc_freq_offset) {
+            double w = TWO_PI * tc_freq_offset;
+            data = data_orig * cexp(-I * w * t);
+        } else {
+            data = data_orig;
+        }
 
         data_lpf = bw_low_pass(bwi, creal(data)) +
                    bw_low_pass(bwq, cimag(data)) * I;
 
         rx_fft_add_data(data_orig, data_lpf);
 
-        //xxx rx_demod_am(data_lpf);
-        rx_demod_fm(data_lpf);
+        switch (curr_demod) {
+        case DEMOD_AM:
+            rx_demod_am(data_lpf);
+            break;
+        case DEMOD_FM:
+            rx_demod_fm(data_lpf);
+            break;
+        default:
+            FATAL("invalid demod %d\n", curr_demod);
+            break;
+        }
 
         Head++;
 
         t += delta_t;
-
-        if (cnt++ >= SAMPLE_RATE/10) {
-            cnt = 0;
-            sprintf(tc.info, "FREQ = %0.3f MHz", (tc_freq + tc_freq_offset) / 1000000);
-        }
     }
 
     return NULL;
@@ -946,39 +973,64 @@ void rx_tc_init(void)
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
     tc.ctrl[2] = (struct test_ctrl_s)
-                 {"K1", &tc_k1, 0, 1.0, .0001, 
-                  {}, NULL,
-                  '1', '2'};
+                 {"LPF_CUT", &tc_lpf_cutoff, 1000, 100000, 100,
+                  {}, "HZ", 
+                  SDL_EVENT_KEY_LEFT_ARROW+ALT, SDL_EVENT_KEY_RIGHT_ARROW+ALT};
     tc.ctrl[3] = (struct test_ctrl_s)
-                 {"K2", &tc_k2, 1, 1000, 1, 
+                 {"VOLUME", &tc_volume, 0, 100, 1,
                   {}, NULL,
-                  '3', '4'};
+                  SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
     tc.ctrl[4] = (struct test_ctrl_s)
-                 {"K3", &tc_k3, 2000, 200000, 5000,
-                  {}, NULL,
-                  '5', '6'};
+                 {"DEMOD", &tc_demod, 0, 1, 1,
+                  {"AM", "FM"}, NULL, 
+                  '<', '>'};
     tc.ctrl[5] = (struct test_ctrl_s)
                  {"RESET", &tc_reset, 0, 1, 1,
                   {"", ""}, NULL, 
                   SDL_EVENT_NONE, 'r'};
+
+    tc.ctrl[7] = (struct test_ctrl_s)
+                 {"K1", &tc_k1, 0.001, 0.100, .001,
+                  {}, NULL,
+                  '1', '2'};
+    tc.ctrl[8] = (struct test_ctrl_s)
+                 {"K2", &tc_k2, 0, 100, 1,    
+                  {}, NULL,
+                  '3', '4'};
+    tc.ctrl[9] = (struct test_ctrl_s)
+                 {"K3", &tc_k3, 0, 100, 1,
+                  {}, NULL,
+                  '5', '6'};
 
     rx_tc_reset();
 }
 
 void rx_tc_reset(void)
 {
-    tc_freq        = DEFAULT_FREQ;
-    tc_freq_offset = 0;
-    tc_k1          = DEFAULT_K1;
-    tc_k2          = DEFAULT_K2;
-    tc_k3          = DEFAULT_K3;
-    tc_reset       = 0;
+    static bool first_call = true;
+
+    if (first_call) {
+        tc_demod = DEMOD_FM;
+        first_call = false;
+    }
+    if (strcmp(test_name, "rx_sdr") == 0) {
+        tc_freq = (tc_demod == DEMOD_AM ? 1030*KHZ : 100.7*MHZ);
+    } else {
+        tc_freq = (tc_demod == DEMOD_AM ? 500*KHZ : 800*KHZ);
+    }
+    tc_freq_offset  = 0;
+    tc_lpf_cutoff   = (tc_demod == DEMOD_AM ? 4000 : 60000);
+    tc_volume       = 10;
+    tc_reset        = 0;
+    tc_k1           = 0.004;
+    tc_k2           = 0;
+    tc_k3           = 0;
 }
 
 // - - - - - - - - -  RX FFT   - - - - - - - - - - - 
 
 #define FFT_N        240000
-#define FFT_INTERVAL 100000   // .2 sec
+#define FFT_INTERVAL 100000   // .1 sec
 
 void rx_fft_init(void)
 {
@@ -1023,7 +1075,6 @@ void *rx_fft_thread(void *cx)
 
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-//xxxx 
         plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, yv_max, 0, "DATA_LPF_FFT", 0, 30, 100, 30);
 // xxx                                                                   ^
 
@@ -1058,12 +1109,11 @@ void rx_demod_am(complex data_lpf)
 
     // xxx why 0.9
     if (cnt++ == (int)(0.9 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo*tc_k2);  // xxx auto scale
+        audio_out(yo*tc_volume);  // xxx auto scale
         cnt = 0;
     }
 }
 
-// AAA xxx
 void rx_demod_fm(complex data_lpf)
 {
     static complex prev;
@@ -1080,7 +1130,7 @@ void rx_demod_fm(complex data_lpf)
 
     // xxx why 0.97
     if (cnt++ == (int)(0.97 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo*tc_k2/10.);
+        audio_out(yo*tc_volume/10.);
         cnt = 0;
     }
 }
@@ -1161,24 +1211,24 @@ void rx_sdr_cb(unsigned char *iq, size_t len);
 void rx_sdr_init(void)
 {
     pthread_t tid;
-    struct rtlsdr_dev *dev;
 
-    dev = sdr_init(tc_freq, rx_sdr_cb);
-    pthread_create(&tid, NULL, rx_sdr_ctrl_thread, dev);
+    pthread_create(&tid, NULL, rx_sdr_ctrl_thread, NULL);
 }
 
 void * rx_sdr_ctrl_thread(void *cx)
 {
-    struct rtlsdr_dev *dev = cx;
-    double tc_freq_last_set = tc_freq;
-    double f;
+    struct rtlsdr_dev *dev;
+    double curr_freq;
+
+    curr_freq = tc_freq;
+
+    dev = sdr_init(tc_freq, rx_sdr_cb);
 
     while (true) {
-        f = tc_freq;
-        if (f != tc_freq_last_set) {
-            NOTICE("SET FREQ %f\n", f);
-            sdr_set_freq(dev, f);
-            tc_freq_last_set = f;
+        if (curr_freq != tc_freq) {
+            NOTICE("SET FREQ %f\n", tc_freq);
+            sdr_set_freq(dev, tc_freq); // xxx don't need dev
+            curr_freq = tc_freq;
         }
 
         usleep(10000);
