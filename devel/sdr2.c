@@ -2,7 +2,7 @@
 #include <rtl-sdr.h>
 
 // xxx check ret codes
-// xxx may want this when shutting down
+// xxx may want this when shutting down;  could use atexit
 //  rc = rtlsdr_cancel_async(dev);
 //  rtlsdr_close(dev);
 
@@ -42,17 +42,13 @@
 // typedef
 //
 
-typedef struct {
-    rtlsdr_dev_t *dev;
-    void (*cb)(unsigned char *iq, size_t len);
-} cx_t;
-
 //
 // variables
 //
 
-static bool direct_sampling_enabled;
+static rtlsdr_dev_t *dev;
 static void(*cb)(unsigned char *iq, size_t len);
+static bool direct_sampling_enabled;
 
 //
 // prototypes
@@ -90,10 +86,9 @@ void sdr_list_devices(void)
 }
 
 // xxx pass in idx, sample_rate, ...
-rtlsdr_dev_t * sdr_init(double f, void(*cb_arg)(unsigned char *iq, size_t len))
+void sdr_init(double f, void(*cb_arg)(unsigned char *iq, size_t len))
 {
     int rc;
-    rtlsdr_dev_t *dev;
 
     // save cb_arg in global var
     cb = cb_arg;
@@ -130,7 +125,7 @@ rtlsdr_dev_t * sdr_init(double f, void(*cb_arg)(unsigned char *iq, size_t len))
     // disable agc mode xxx should this be earlier
     rtlsdr_set_agc_mode(dev, AGC_MODE_DISABLE);
 
-    // enable direct sampling, xxx explain QA_ADC
+    // enable direct sampling
     int direct_sampling;
     direct_sampling = (f < 28.8*MHZ ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
     rc = rtlsdr_set_direct_sampling(dev, direct_sampling);
@@ -149,26 +144,18 @@ rtlsdr_dev_t * sdr_init(double f, void(*cb_arg)(unsigned char *iq, size_t len))
 
     // start async reader
     pthread_t tid;
-    cx_t *cx;
     rc = rtlsdr_reset_buffer(dev);
     if (rc != 0) {
         FATAL("rtlsdr_reset_buffer\n");
     }
-    cx = malloc(sizeof(cx_t));
-    cx->dev = dev;
-    cx->cb = cb;  // xxx won't need cx
-    pthread_create(&tid, NULL, async_reader_thread, cx);
-
-    // return dev
-    return dev;
+    pthread_create(&tid, NULL, async_reader_thread, NULL);
 }
 
-void sdr_set_freq(rtlsdr_dev_t *dev, double f)
+void sdr_set_freq(double f)
 {
     bool      direct_sampling_needed = (f < 28.8*MHZ);
     int       rc, direct_sampling;
     pthread_t tid;
-    cx_t     *cx;
 
     if (direct_sampling_enabled != direct_sampling_needed) {
         NOTICE("CANCELLING ASYNC\n");
@@ -192,14 +179,8 @@ void sdr_set_freq(rtlsdr_dev_t *dev, double f)
         if (rc != 0) {
             FATAL("rtlsdr_reset_buffer\n");
         }
-        cx = malloc(sizeof(cx_t));
-        cx->dev = dev;
-        cx->cb = cb;
-        pthread_create(&tid, NULL, async_reader_thread, cx);
+        pthread_create(&tid, NULL, async_reader_thread, NULL);
     }
-
-// AAA xxx change mode
-// xxx may need to stop when setting ds
 
     rtlsdr_set_center_freq(dev, f);
 }
@@ -214,6 +195,9 @@ static void print_info(rtlsdr_dev_t *dev)
     // get xtal freq
     unsigned int rtl_freq, tuner_freq;
     rc = rtlsdr_get_xtal_freq(dev, &rtl_freq, &tuner_freq);
+    if (rc != 0) {
+        FATAL("rtlsdr_get_xtal_freq\n");
+    }
     NOTICE("rtl_freq=%0.2f  tuner_freq=%0.2f\n", (double)rtl_freq/MHZ, (double)tuner_freq/MHZ);
 
     // get manufacturer
@@ -262,12 +246,10 @@ static int get_max_gain(rtlsdr_dev_t *dev)
     return max_gain;
 }
 
-static void *async_reader_thread(void *cx_arg)
+static void *async_reader_thread(void *cx)
 {
-    cx_t * cx = cx_arg;
-
     NOTICE("BEFORE rtlsdr_read_async\n");
-    rtlsdr_read_async(cx->dev, async_reader_cb, cx, 0, 0);
+    rtlsdr_read_async(dev, async_reader_cb, NULL, 0, 0);
     NOTICE("AFTER rtlsdr_read_async\n");
 
     free(cx);
@@ -275,13 +257,12 @@ static void *async_reader_thread(void *cx_arg)
     return NULL;
 }
 
-static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg)
+static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx)
 {
-    cx_t * cx = cx_arg;
-
     static unsigned long start;
     static unsigned long total;
     static int cnt;
+
     if (start == 0) {
         start = microsec_timer();
     }
@@ -291,8 +272,7 @@ static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg)
         cnt = 0;
     }
 
-    //NOTICE("CALLBACK len=%d\n", len);
-    cx->cb(buf, len);
+    cb(buf, len);
 }
 
 

@@ -28,5 +28,5 @@ double get_antenna(double t);
 
 // sdr2.c
 void sdr_list_devices(void);
-struct rtlsdr_dev *sdr_init(double f, void(*cb)(unsigned char *iq, size_t len));
-void sdr_set_freq(struct rtlsdr_dev *dev, double f);
+void sdr_init(double f, void(*cb)(unsigned char *iq, size_t len));
+void sdr_set_freq(double f);

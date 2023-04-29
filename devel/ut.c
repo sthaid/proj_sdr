@@ -1,26 +1,13 @@
 // xxx later
-// - comments
-// - exit pgm
-// - better way to handle global args
-
-// xxx move all tests to other file, one for each
+// - comments and cleanup
 
 // xxx restore fm_receiver file
 
-// xxx improve filter quality
-// xxx are the _sync_cynchronize needed
-
-// xxx make plot screen locations flexible
-
-// xxx also plot Bodie plots, in lpf_test
-
-// xxx
-// - rx sim
-// - rx rtlsdr file
-// - rx rtlsdr direct
-// - rx rtlsdr server
+// xxx are _sync_cynchronize needed
 
 // xxx check the fft code in ut_antenna.c
+
+// xxx AAA move all tests to other file, one for each
 
 #include "common.h"
 
@@ -178,7 +165,7 @@ int main(int argc, char **argv)
         1,              // number of pane handler varargs that follow
         pane_hndlr, NULL, 0, 0, win_width, win_height, PANE_BORDER_STYLE_NONE);
 
-    // xxx
+    // set program_terminating flag
     program_terminating = true;
 }
 
@@ -259,7 +246,16 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                     p += sprintf(p, "%s ", x->val_enum_names[tmp]);
                 }
             } else {
-                p += sprintf(p, "%g ", *x->val);
+                double v = *x->val;
+                if (fabs(v) < 1e3) {
+                    p += sprintf(p, "%0.3f ", v);
+                } else if (fabs(v) < 10e6) {
+                    p += sprintf(p, "%0.1f K", v/1000);
+                } else if (fabs(v) < 10e9) {
+                    p += sprintf(p, "%0.1f M", v/1000000);
+                } else {
+                    p += sprintf(p, "%g ", *x->val);
+                }
             }
             if (x->units) {
                 p += sprintf(p, "%s", x->units);
@@ -576,9 +572,6 @@ void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int
 void init_using_white_noise(double *wn, int n);
 void init_using_wav_file(double *wav, int n, char *filename);
 
-// xxx plot_fft normalizes,  
-// xxx put back the / n in fft.c  ??
-// xxx glitch when changing filters
 void *filter_test(void *cx)
 {
     #define SINE_WAVE   0
@@ -807,9 +800,6 @@ void *antenna_test(void *cx)
 
 // -----------------  RX TEST  -----------------------------
 
-// xxx comments and cleanup
-// xxx still clicking when freq is changed
-
 // defines
 
 #define SAMPLE_RATE     2400000  // 2.4 MS/sec
@@ -870,15 +860,12 @@ void rx_sdr_init(void);
 void rx_sim_init(void);
 
 // xxx
-// - incorporate the sdr
-// - mark the top fft at the frequency point
 // - exapand the graph to just part of the fft
 
 // - - - - - - - - -  RX TEST - - - - - - - - - - - 
 
 void *rx_test(void *cx)
 {
-    // xxx review and cleanup
     pthread_t  tid;
     BWLowPass *bwi=NULL, *bwq=NULL;
     complex    data_orig, data, data_lpf;
@@ -907,8 +894,7 @@ void *rx_test(void *cx)
             curr_demod = tc_demod;
         }
 
-        if (curr_lpf_cutoff != tc_lpf_cutoff) { //xxx
-            NOTICE("xxx changing filter\n");
+        if (curr_lpf_cutoff != tc_lpf_cutoff) {
             if (bwi) free_bw_low_pass(bwi);
             if (bwq) free_bw_low_pass(bwq);
             bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_lpf_cutoff); 
@@ -917,10 +903,10 @@ void *rx_test(void *cx)
         }
 
         if (cnt++ >= SAMPLE_RATE/10) {
-            cnt = 0;
-            sprintf(tc.info, "FREQ = %0.3f MHz  DEMOD = %s", //xxx improve format
+            sprintf(tc.info, "FREQ = %0.3f MHz  DEMOD = %s",
                     (tc_freq + tc_freq_offset) / MHZ,
                     DEMOD_STR(curr_demod));
+            cnt = 0;
         }
 
         if (Head == Tail) {
@@ -973,7 +959,7 @@ void rx_tc_init(void)
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
     tc.ctrl[2] = (struct test_ctrl_s)
-                 {"LPF_CUT", &tc_lpf_cutoff, 1000, 100000, 100,
+                 {"LPF_CUT", &tc_lpf_cutoff, 1000, 500000, 1000,
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+ALT, SDL_EVENT_KEY_RIGHT_ARROW+ALT};
     tc.ctrl[3] = (struct test_ctrl_s)
@@ -1076,7 +1062,7 @@ void *rx_fft_thread(void *cx)
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
         plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, yv_max, 0, "DATA_LPF_FFT", 0, 30, 100, 30);
-// xxx                                                                   ^
+        // xxx                                                           ^
 
         tlast = tnow;
         fft.n = 0;
@@ -1091,8 +1077,10 @@ void rx_demod_am(complex data_lpf)
     static double yo;
     static int    cnt;
 
+    // xxx improve the AM detector
+
 #if 0
-    // xxx why is this not needed?
+    // xxx AAA why is this not needed?
     static const double delta_t = 1. / SAMPLE_RATE;
     static const double w = 300000 * TWO_PI;  // xxx try 0
     static double t;
@@ -1107,8 +1095,8 @@ void rx_demod_am(complex data_lpf)
         yo = yo + (y - yo) * tc_k1;
     }
 
-    // xxx why 0.9
-    if (cnt++ == (int)(0.9 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
+    // xxx why 0.97
+    if (cnt++ == (int)(0.97 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
         audio_out(yo*tc_volume);  // xxx auto scale
         cnt = 0;
     }
@@ -1217,17 +1205,16 @@ void rx_sdr_init(void)
 
 void * rx_sdr_ctrl_thread(void *cx)
 {
-    struct rtlsdr_dev *dev;
     double curr_freq;
 
     curr_freq = tc_freq;
 
-    dev = sdr_init(tc_freq, rx_sdr_cb);
+    sdr_init(curr_freq, rx_sdr_cb);
 
     while (true) {
         if (curr_freq != tc_freq) {
-            NOTICE("SET FREQ %f\n", tc_freq);
-            sdr_set_freq(dev, tc_freq); // xxx don't need dev
+            NOTICE("SETTING FREQ %f\n", tc_freq);
+            sdr_set_freq(tc_freq);
             curr_freq = tc_freq;
         }
 
@@ -1240,8 +1227,6 @@ void * rx_sdr_ctrl_thread(void *cx)
 void rx_sdr_cb(unsigned char *iq, size_t len)
 {
     int items=len/2, i, j;
-
-    //NOTICE("RX_SDR_CB len=%d\n", len);
 
     if (MAX_DATA - (Tail - Head) < items) {
         NOTICE("discarding sdr data\n");
