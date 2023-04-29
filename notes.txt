@@ -91,6 +91,7 @@ Demodulation
 ------------
 
 Detectors
+  https://en.wikipedia.org/wiki/Demodulation                 # overview
   https://en.wikipedia.org/wiki/Software-defined_radio
   https://en.wikipedia.org/wiki/Product_detector
   https://en.wikipedia.org/wiki/Direct-conversion_receiver
@@ -100,7 +101,7 @@ AM Demodulatiion
   https://en.wikipedia.org/wiki/Envelope_detector           # Envelope detector
 
 FM Demodulation
-  https://en.wikipedia.org/wiki/Detector_%28radio%29#Quadrature_detector
+  https://en.wikipedia.org/wiki/Detector_(radio)#Quadrature_detector    # Quadrature detector
   https://dsp.stackexchange.com/questions/2612/why-can-quadrature-demodulation-demod-a-frequency-modulated-signal
   https://dsp.stackexchange.com/questions/51889/what-exactly-is-a-90-degree-phase-shift-of-a-digital-signal-in-fm-demodulation-a
 

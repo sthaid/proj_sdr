@@ -57,7 +57,7 @@ void init_antenna(void)
     init_station_wav_file(   AM, 540000, 1, "wav_files/proud_mary.wav");
     init_station_sine_wave(  AM, 580000, 1, 500);
 
-    init_station_wav_file(   FM, 700000, 1, "wav_files/not_fade_away.wav");
+    init_station_wav_file(   FM, 800000, 1, "wav_files/not_fade_away.wav");
 }
 
 // -----------------  GET STATION  -------------------------------------

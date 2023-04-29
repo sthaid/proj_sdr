@@ -122,7 +122,8 @@ rtlsdr_dev_t * sdr_init(double f, void(*cb)(unsigned char *iq, size_t len))
 
     // enable direct sampling, xxx explain QA_ADC
     int direct_sampling;
-    rc = rtlsdr_set_direct_sampling(dev, DIRECT_SAMPLING_Q_ADC_ENABLED);
+    direct_sampling = (f < 28.8*MHZ ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
+    rc = rtlsdr_set_direct_sampling(dev, direct_sampling);
     if (rc != 0) {
         FATAL("rtlsdr_set_direct_sampling\n");
     }

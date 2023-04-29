@@ -3,6 +3,8 @@
 // - exit pgm
 // - better way to handle global args
 
+// xxx restore fm_receiver file
+
 // xxx improve filter quality
 // xxx are the _sync_cynchronize needed
 
@@ -798,9 +800,12 @@ void *antenna_test(void *cx)
 #define MAX_DATA_CHUNK  131072
 #define MAX_DATA        (4*MAX_DATA_CHUNK)
 
-#define DEFAULT_FREQ    (strcmp(test_name,"rx_sim") == 0 ? 500000 : 1030000)  // 500 KHz or 1030 KHz
+//xxx
+//#define DEFAULT_FREQ    (strcmp(test_name,"rx_sim") == 0 ? 800000 : 1030000)
+#define DEFAULT_FREQ    (strcmp(test_name,"rx_sim") == 0 ? 800000 : 100700000) 
 #define DEFAULT_K1      0.004
-#define DEFAULT_K2      4.0
+#define DEFAULT_K2      5 
+#define DEFAULT_K3      60000
 
 // typedefs
 
@@ -824,6 +829,7 @@ double        tc_freq;
 double        tc_freq_offset;
 double        tc_k1;
 double        tc_k2;
+double        tc_k3;
 double        tc_reset;
 
 // prototypes
@@ -836,6 +842,7 @@ void rx_fft_add_data(complex data, complex data_lpf);
 void *rx_fft_thread(void *cx);
 
 void rx_demod_am(complex data_lpf);
+void rx_demod_fm(complex data_lpf);
 
 void rx_sdr_init(void);
 void rx_sim_init(void);
@@ -872,12 +879,27 @@ void *rx_test(void *cx)
 
     pthread_create(&tid, NULL, rx_fft_thread, NULL);
 
+#if 0  //xxx
     bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);  //xxx adjust the 4000?
     bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
+#else
+    bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_k3); 
+    bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_k3);
+    int tc_k3_last = tc_k3;
+#endif
 
     while (true) {
         if (tc_reset) {
             rx_tc_reset();
+        }
+
+        if (tc_k3 != tc_k3_last) { //xxx
+            NOTICE("changing filter\n");
+            free_bw_low_pass(bwi);
+            free_bw_low_pass(bwq);
+            bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_k3); 
+            bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_k3);
+            tc_k3_last = tc_k3;
         }
 
         if (Head == Tail) {
@@ -897,7 +919,8 @@ void *rx_test(void *cx)
 
         rx_fft_add_data(data_orig, data_lpf);
 
-        rx_demod_am(data_lpf);
+        //xxx rx_demod_am(data_lpf);
+        rx_demod_fm(data_lpf);
 
         Head++;
 
@@ -927,10 +950,14 @@ void rx_tc_init(void)
                   {}, NULL,
                   '1', '2'};
     tc.ctrl[3] = (struct test_ctrl_s)
-                 {"K2", &tc_k2, 1, 100, 1, 
+                 {"K2", &tc_k2, 1, 1000, 1, 
                   {}, NULL,
                   '3', '4'};
     tc.ctrl[4] = (struct test_ctrl_s)
+                 {"K3", &tc_k3, 2000, 200000, 5000,
+                  {}, NULL,
+                  '5', '6'};
+    tc.ctrl[5] = (struct test_ctrl_s)
                  {"RESET", &tc_reset, 0, 1, 1,
                   {"", ""}, NULL, 
                   SDL_EVENT_NONE, 'r'};
@@ -944,6 +971,7 @@ void rx_tc_reset(void)
     tc_freq_offset = 0;
     tc_k1          = DEFAULT_K1;
     tc_k2          = DEFAULT_K2;
+    tc_k3          = DEFAULT_K3;
     tc_reset       = 0;
 }
 
@@ -1024,12 +1052,35 @@ void rx_demod_am(complex data_lpf)
 
     y = cabs(data_lpf);
     if (y > 0) {
+        // xxx check this
         yo = yo + (y - yo) * tc_k1;
     }
 
     // xxx why 0.9
     if (cnt++ == (int)(0.9 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
         audio_out(yo*tc_k2);  // xxx auto scale
+        cnt = 0;
+    }
+}
+
+// AAA xxx
+void rx_demod_fm(complex data_lpf)
+{
+    static complex prev;
+    double yo;
+    static int cnt;
+    complex product;
+    static void *ma_cx=NULL;
+
+    product = data_lpf * conj(prev);
+    yo = atan2(cimag(product), creal(product));
+    prev = data_lpf;
+
+    yo = moving_avg(yo, 110, &ma_cx);
+
+    // xxx why 0.97
+    if (cnt++ == (int)(0.97 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
+        audio_out(yo*tc_k2/10.);
         cnt = 0;
     }
 }
@@ -1107,7 +1158,6 @@ void *rx_sim_thread(void *cx)
 void *rx_sdr_ctrl_thread(void *cx);
 void rx_sdr_cb(unsigned char *iq, size_t len);
 
-// AAA
 void rx_sdr_init(void)
 {
     pthread_t tid;
@@ -1137,7 +1187,6 @@ void * rx_sdr_ctrl_thread(void *cx)
     return NULL;
 }
 
-// AAA todo
 void rx_sdr_cb(unsigned char *iq, size_t len)
 {
     int items=len/2, i, j;
@@ -1157,65 +1206,3 @@ void rx_sdr_cb(unsigned char *iq, size_t len)
 
     Tail += items;
 }
-
-#if 0
-void *rx_sim_thread2(void *cx)
-{
-    int fd;
-    struct stat statbuf;
-    size_t file_offset, file_size, len;
-    unsigned char iq[2*MAX_DATA_CHUNK];
-
-    // open BUF0
-    fd = open("buf0", O_RDONLY);
-    if (fd < 0) {
-        FATAL("failed open buf0, %s\n", strerror(errno));
-    }
-
-    // get size of BUF0
-    fstat(fd, &statbuf);
-    file_size = statbuf.st_size;
-    file_offset = 0;
-
-    // other inits
-    double t = 0;
-    double delta_t = (1. / SAMPLE_RATE);
-
-    // loop forever, 
-    // when end of file is reached start over from file begining
-    while (true) {
-        // wait for space to be available in Data array, 
-        while (MAX_DATA - (Tail - Head) < MAX_DATA_CHUNK) {
-            usleep(1000);
-        }
-
-        // read values from buf0 file, these are IQ bytes
-        len = pread(fd, iq, MAX_DATA_CHUNK*2, file_offset);
-        if (len != MAX_DATA_CHUNK*2) {
-            FATAL("read %s, len=%ld, %s\n", "buf0", len, strerror(errno));
-        }
-        file_offset += len;
-        if (file_offset + len > file_size) {
-            file_offset = 0;
-        }
-
-        // convert the iq bytes to complex Data values
-        complex *data = &Data[Tail % MAX_DATA];
-        double w = TWO_PI * tc_freq;
-        for (int i = 0; i < MAX_DATA_CHUNK; i++) {
-            data[i] = (iq[2*i+0] - 128) +
-                      (iq[2*i+1] - 128) * I;
-            data[i] /= 128;
-
-            data[i] *= cexp(I * w * t);
-
-            t += delta_t;
-        }
-
-        // increment Tail
-        Tail += MAX_DATA_CHUNK;
-    }
-
-    return NULL;
-}
-#endif
