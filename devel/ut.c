@@ -972,13 +972,15 @@ void *rx_fft_thread(void *cx)
 {
     #define DATA_BLOCK_DURATION  ((double)FFT_N / SAMPLE_RATE)
 
-#if 0
-    const double         yv_max = 150000;  // xxx auto scale
-#else
-    const double         yv_max = 4000;  // xxx auto scale
-#endif
+    double               yv_max;
     unsigned long        tnow;
     static unsigned long tlast;
+
+    if (strcmp(test_name, "rx_sim") == 0) {
+        yv_max = 150000;
+    } else {
+        yv_max = 4000;
+    }
 
     while (true) {
         tnow = microsec_timer();
