@@ -1,23 +1,27 @@
-Amazon
-------
+Amazon Order
+------------
+
+Nooelec RTL-SDR v5 Bundle - 
+  NESDR Smart HF/VHF/UHF (100kHz-1.75GHz) Software Defined Radio. 
+  Premium RTLSDR w/ 0.5PPM TCXO, SMA Input, 
+  Aluminum Enclosure & 
+  3 Antennas. RTL2832U & R820T2-Based Radio
+
 https://www.amazon.com/dp/B01GDN1T4S?psc=1&ref=ppx_yo2ov_dt_b_product_details
 https://www.amazon.com/stores/Nooelec/page/19B596C7-6ED9-427B-8FA7-53232732CB8F?ref_=ast_bln
 
-Qudrature Encoding
-------------------
-https://www.dsprelated.com/showarticle/192.php#:~:text=Quadrature%2Dsampling%20is%20the%20process,frequency%20of%20fc%20Hz.
+The SDR - NESDR SMArt v5
+------------------------
 
-The SDR
--------
 http://www.nooelec.com
 https://www.nooelec.com/store/sdr.html
 https://www.nooelec.com/store/sdr/nesdr-smart.html
 https://www.nooelec.com/store/downloads/dl/file/id/111/product/246/nesdr_smart_rtl_sdr_v5_datasheet_revision_1.pdf
-
-gqrx  rtl=0,direct_samp=2   <===========
+  (simplified schematic)
 
 Setup the SDR
 -------------
+
 start.nesdr.com
 https://www.nooelec.com/store/downloads/dl/file/id/72/product/0/nesdr_installation_manual_for_ubuntu.pdf
 
@@ -26,126 +30,95 @@ Steps:
   blacklist dvb_usb_rtl28xxu
   reboot
 - apt install rtl-sdr
+- rtl_test
 - Ubuntu Software -> install gqrx  (takes some time)
 
-rtl utils
-----------
+rtl utils (from the rtl-sdr package)
+------------------------------------
+
 rtl_adsb
 rtl_biast
 rtl_eeprom
 rtl_fm
-   # ARM and Intel are Little Endian
-   rtl_fm -f 100700000  -s 200000 -r 48000  | aplay -r 48000 -f S16_LE
-   rtl_fm -f 100700000  -s 200000 -r 48000  | aplay -r 48000 -f S16_LE
-   rtl_fm -f 90.9M:101M:.1M -l 50 -s 200000 -r 48000  | aplay -r 48000 -f S16_LE
 rtl_power
 rtl_sdr
 rtl_tcp
 rtl_test
 
-web links
----------
-https://www.rtl-sdr.com/big-list-rtl-sdr-supported-software/
-  List of RTL-SDR Software
+RTL SDR  
+-------
 
-https://dsp.stackexchange.com/questions/2612/why-can-quadrature-demodulation-demod-a-frequency-modulated-signal
-  FM Demod
+rtl-sdr.com
+  https://www.rtl-sdr.com/rtl-sdr-blog-v-3-dongles-user-guide/   # Dongles user guide
+        this is where I found this gqrx setting "rtl=0,direct_samp=2"
+  https://www.rtl-sdr.com/big-list-rtl-sdr-supported-software/   # list of RTL-SDR software
 
-https://en.wikipedia.org/wiki/Product_detector
-  A product detector is a type of demodulator used for AM and SSB signals.
+RTL SDR - The RTL2832U ...
+  https://osmocom.org/projects/rtl-sdr/wiki             # Wiki
+  https://cgit.osmocom.org/rtl-sdr                      # GIT index rtl-sdr
+  git clone https://gitea.osmocom.org/sdr/rtl-sdr.git   # the rtl utils code is here
 
-https://osmocom.org/projects/rtl-sdr/wiki
-https://cgit.osmocom.org/rtl-sdr
-git clone https://gitea.osmocom.org/sdr/rtl-sdr.git
-  the rtl utils code is here
+How RTL-SDR dongles work (very helpful!)
+  https://pa3fwm.nl/technotes/            # home page
+  https://pa3fwm.nl/technotes/tn20.html   # how the dongle works
 
+Sample Code
+-----------
 
-https://pa3fwm.nl/technotes/
-https://pa3fwm.nl/technotes/tn20.html
-  How RTL-SDR dongles work ***
-
-https://dsp.stackexchange.com/questions/51889/what-exactly-is-a-90-degree-phase-shift-of-a-digital-signal-in-fm-demodulation-a
-https://rahsoft.com/2022/10/17/understanding-90%cb%9a-phase-shift-and-hilbert-transform/
-
-https://github.com/adis300/filter-c/blob/master/filter.c
-
-
-            // xxx a product detector
-            //   https://en.wikipedia.org/wiki/Product_detector
-            // xxx this discusses quadrature detectors
-            //   https://en.wikipedia.org/wiki/Direct-conversion_receiver
-            // xxx wikipedia sdr
-            //   https://en.wikipedia.org/wiki/Software-defined_radio
-            // xxx qudrature mixers
-            //   https://www.youtube.com/watch?v=JuuKF1RFvBM
-
-            // lpf filter
-            // https://www.youtube.com/watch?v=HJ-C4Incgpw
-            // butterworth filter  4th order  or 50
-            //   https://github.com/adis300/filter-c/blob/master/filter.c
-            //   https://github.com/adis300/filter-c
-            // https://exstrom.com/journal/sigproc/dsigproc.html
-
-
-old examples found on web
--------------------------
-https://github.com/lgeek/sdr-examples.git
+SDR code example - fm_receiver
   git clone https://github.com/lgeek/sdr-examples.git
-  sudo apt install librtlsdr-dev
-  sudo apt install fftw3-dev
-  gcc -o fm_receiver fm_receiver.c -l fftw3 -l m -l rtlsdr
-  fm_receiver
+     sudo apt install librtlsdr-dev
+     sudo apt install fftw3-dev
+     gcc -o fm_receiver fm_receiver.c -l fftw3 -l m -l rtlsdr
 
-https://github.com/keenerd/rtl-sdr-misc
+More code examples
+  https://github.com/keenerd/rtl-sdr-misc
 
+Filters
+-------
 
-simulation
+Elegant Butterworth and Chebyshev filter implemented in C,  (very helpful!)
+  https://github.com/adis300/filter-c
+  https://github.com/adis300/filter-c/blob/master/filter.c
+  https://exstrom.com/journal/sigproc/dsigproc.html
+
+Other filter web links
+  https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/      # filters
+  https://sestevenson.wordpress.com/implementation-of-fir-filtering-in-c-part-1/
+  https://medium.com/geekculture/digital-filter-design-in-python-and-c-4484b6d6f4a5
+
+Demodulation
+------------
+
+Detectors
+  https://en.wikipedia.org/wiki/Software-defined_radio
+  https://en.wikipedia.org/wiki/Product_detector
+  https://en.wikipedia.org/wiki/Direct-conversion_receiver
+
+AM Demodulatiion 
+  https://en.wikipedia.org/wiki/Product_detector            # Product Detector
+  https://en.wikipedia.org/wiki/Envelope_detector           # Envelope detector
+
+FM Demodulation
+  https://en.wikipedia.org/wiki/Detector_%28radio%29#Quadrature_detector
+  https://dsp.stackexchange.com/questions/2612/why-can-quadrature-demodulation-demod-a-frequency-modulated-signal
+  https://dsp.stackexchange.com/questions/51889/what-exactly-is-a-90-degree-phase-shift-of-a-digital-signal-in-fm-demodulation-a
+
+Qudrature Encoding
+------------------
+
+https://www.dsprelated.com/showarticle/192.php
+https://rahsoft.com/2022/10/17/understanding-90%cb%9a-phase-shift-and-hilbert-transform/
+https://www.youtube.com/watch?v=JuuKF1RFvBM  # quadrature mixer
+
+misc notes
 ----------
-src | am_mod | mixer | lpf | aplay
 
-src = sine wave, music, sine wave with varying amplitude
-
-viewer
-power
+ARM and Intel are Little Endian
 
 aplay -t raw -c 1 -f S16_LE -r 22000
 
+gqrx hints
+. Using Direct Sampling:  "rtl=0,direct_samp=2"
+    https://www.rtl-sdr.com/rtl-sdr-blog-v-3-dongles-user-guide/   # Dongles user guide
 
-- measure cpu used
-- use floats?
-- ctrl panel design
-- combine modulated signals
-- viewer pgm
-
-
--- filter --
-https://www.earlevel.com/main/2012/11/26/biquad-c-source-code/
-
-https://sestevenson.wordpress.com/implementation-of-fir-filtering-in-c-part-1/
-
-https://medium.com/geekculture/digital-filter-design-in-python-and-c-4484b6d6f4a5
-
-fftfilt
-
-
-xxxxxxxxxx next steps
-
-fft display of data set
-
-fftfilt
-
-find gqrx code
-
-what exactly is being sampled
-
-rtl=0,direct_samp=2
-https://www.rtl-sdr.com/rtl-sdr-blog-v-3-dongles-user-guide/
-
-why getting twice as many samples as expected
-
---------
-
-git clone https://github.com/csete/gr-osmosdr-gqrx
-
-git clone git://github.com/csete/gr-osmosdr-gqrx
-git clone git://git.osmocom.org/gr-osmosdr

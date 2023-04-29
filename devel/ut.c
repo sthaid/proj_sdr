@@ -769,6 +769,7 @@ void *antenna_test(void *cx)
         if (n == MAX_N) {
             sprintf(tc.info, "Generating simulated antenna data: %0.1f secs", t);
             fft_fwd_r2c(antenna, antenna_fft, n);
+            // xxx cursor at end of plot?
             plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, 0, SAMPLE_RATE, "ANTENNA_FFT", 0, 0, 50, 50);
             fwrite(antenna, sizeof(double), n, fp);
             n = 0;
