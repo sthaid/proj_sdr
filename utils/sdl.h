@@ -260,7 +260,7 @@ void sdl_update_iyuv_texture(texture_t texture, uint8_t *y_plane, int y_pitch,
 void sdl_plot(rect_t *pane,
               int x_pos, int y_pos, int x_width, int y_height,  // 0 - 100 percent
               double *data, int n,
-              double xv_min, double xv_max,
+              double xv_min, double xv_max, double xv_cursor,
               double yv_min, double yv_max,
               unsigned int flags, char *title, char *x_units);
 

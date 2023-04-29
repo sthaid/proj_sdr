@@ -2207,7 +2207,7 @@ void sdl_update_iyuv_texture(texture_t texture,
 void sdl_plot(rect_t *pane, 
               int x_pos, int y_pos, int x_width, int y_height,  // 0 - 100 percent
               double *data, int n, 
-              double xv_min, double xv_max, 
+              double xv_min, double xv_max, double xv_cursor,
               double yv_min, double yv_max,
               unsigned int flags,
               char *title, char *x_units)
@@ -2219,18 +2219,20 @@ void sdl_plot(rect_t *pane,
         double min;
         double max;
     } yv[MAX_YV];
-    double yv_span, y, y_min, y_max;
+    double xv_span, yv_span, y, y_min, y_max;
 
     int x_l, x_r, y_t, y_b;
     int x_left, x_right, y_top, y_bottom;
     int x_span, y_span;
     int x_origin, y_origin;
+    int x_cursor;
 
     int x_title;
     int x, i;
     char s[100], *p;
 
-    // init y value span
+    // init x,y value span
+    xv_span  = xv_max - xv_min;
     yv_span  = yv_max - yv_min;
 
     // init pixel coords
@@ -2309,6 +2311,10 @@ void sdl_plot(rect_t *pane,
                         x_origin+x, y_origin-y_max,
                         SDL_WHITE);
     }
+
+    // cursor
+    x_cursor = x_left + (x_span / xv_span) * (xv_cursor - xv_min);
+    sdl_render_point(pane, x_cursor, y_bottom, SDL_RED, 5);
 
     // x axis: line
     if (y_origin <= y_bottom && y_origin >= y_top) {

@@ -46,6 +46,7 @@ typedef struct {
     int     n;
     double  xv_min;
     double  xv_max;
+    double  xv_cursor;
     double  yv_min;
     double  yv_max;
     unsigned int flags;
@@ -218,7 +219,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                 sdl_plot(pane,
                          p->x_pos, p->y_pos, p->x_width, p->y_height,
                          p->data, p->n,
-                         p->xv_min, p->xv_max,
+                         p->xv_min, p->xv_max, p->xv_cursor,
                          p->yv_min, p->yv_max,
                          p->flags, p->title, p->x_units);
             }
@@ -380,7 +381,7 @@ void plot_real(int idx,
 
 // to auto scale use max=0
 void plot_fft(int idx, 
-              complex *fft, int n, double sample_rate, bool half_flag, double yv_max,
+              complex *fft, int n, double sample_rate, bool half_flag, double yv_max, double xv_cursor,
               char *title,
               int x_pos, int y_pos, int x_width, int y_height)
 {
@@ -415,6 +416,7 @@ void plot_fft(int idx,
     p->xv_max  = sample_rate/2;
     p->yv_min  = 0;
     p->yv_max  = yv_max;
+    p->xv_cursor = xv_cursor;
     p->flags   = SDL_PLOT_FLAG_BARS;
     p->title   = title;
     p->x_units = "HZ";
@@ -671,11 +673,11 @@ void *filter_test(void *cx)
 
             // plot fft of 'in'
             fft_fwd_r2c(in, in_fft, n);
-            plot_fft(0, in_fft, n, sample_rate, true, yv_max, "FFT", 0, 0, 50, 25);
+            plot_fft(0, in_fft, n, sample_rate, true, yv_max, tc_cutoff, "FFT", 0, 0, 50, 25);
 
             // plot fft of 'in_filtered'
             fft_fwd_r2c(in_filtered, in_filtered_fft, n);
-            plot_fft(1, in_filtered_fft, n, sample_rate, true, yv_max, "FFT", 0, 25, 50, 25);
+            plot_fft(1, in_filtered_fft, n, sample_rate, true, yv_max, tc_cutoff, "FFT", 0, 25, 50, 25);
 
             // play the filtered audio
             for (int i = 0; i < n; i++) {
@@ -767,7 +769,7 @@ void *antenna_test(void *cx)
         if (n == MAX_N) {
             sprintf(tc.info, "Generating simulated antenna data: %0.1f secs", t);
             fft_fwd_r2c(antenna, antenna_fft, n);
-            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, 0, "ANTENNA_FFT", 0, 0, 50, 50);
+            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, 0, SAMPLE_RATE, "ANTENNA_FFT", 0, 0, 50, 50);
             fwrite(antenna, sizeof(double), n, fp);
             n = 0;
         }
@@ -834,9 +836,8 @@ void *rx_fft_thread(void *cx);
 
 void rx_demod_am(complex data_lpf);
 
-void *rx_sim_thread(void *cx);
-void *rx_sdr_ctrl_thread(void *cx);
-void rx_sdr_cb(unsigned char *iq, size_t len);
+void rx_sdr_init(void);
+void rx_sim_init(void);
 
 // AAA xxx
 // - incorporate the sdr
@@ -862,17 +863,16 @@ void *rx_test(void *cx)
     rx_tc_init();
     rx_fft_init();
 
-    bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);  //xxx adjust the 4000?
-    bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
-
     if (strcmp(test_name, "rx_sim") == 0) {
-        pthread_create(&tid, NULL, rx_sim_thread, NULL);
+        rx_sim_init();
     } else {
-        sdr_init(tc_freq, rx_sdr_cb);
-        pthread_create(&tid, NULL, rx_sdr_ctrl_thread, NULL);
+        rx_sdr_init();
     }
 
     pthread_create(&tid, NULL, rx_fft_thread, NULL);
+
+    bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);  //xxx adjust the 4000?
+    bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, 4000);
 
     while (true) {
         if (tc_reset) {
@@ -889,7 +889,7 @@ void *rx_test(void *cx)
         data_orig = Data[Head % MAX_DATA];
 
         w = TWO_PI * tc_freq_offset;
-        data = data_orig * cexp(I * w * t);
+        data = data_orig * cexp(-I * w * t);
 
         data_lpf = bw_low_pass(bwi, creal(data)) +
                    bw_low_pass(bwq, cimag(data)) * I;
@@ -914,7 +914,7 @@ void *rx_test(void *cx)
 void rx_tc_init(void)
 {
     tc.ctrl[0] = (struct test_ctrl_s)
-                 {"F", &tc_freq, -2000000, 2000000, 1000, 
+                 {"F", &tc_freq, 0, 200000000, 1000,   // 0 to 200 MHx
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
     tc.ctrl[1] = (struct test_ctrl_s)
@@ -972,7 +972,11 @@ void *rx_fft_thread(void *cx)
 {
     #define DATA_BLOCK_DURATION  ((double)FFT_N / SAMPLE_RATE)
 
+#if 0
     const double         yv_max = 150000;  // xxx auto scale
+#else
+    const double         yv_max = 4000;  // xxx auto scale
+#endif
     unsigned long        tnow;
     static unsigned long tlast;
 
@@ -984,11 +988,13 @@ void *rx_fft_thread(void *cx)
         }
 
         fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
-        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, yv_max, "DATA_FFT", 0, 0, 100, 30);
+        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, yv_max, tc_freq_offset, "DATA_FFT", 0, 0, 100, 30);
 
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, yv_max, "DATA_LPF_FFT", 0, 30, 100, 30);
+//xxxx 
+        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, yv_max, 0, "DATA_LPF_FFT", 0, 30, 100, 30);
+// xxx                                                                   ^
 
         tlast = tnow;
         fft.n = 0;
@@ -1026,6 +1032,15 @@ void rx_demod_am(complex data_lpf)
 }
 
 // - - - - - - - - -  RX SIMULATOR - - - - - - - - - 
+
+void *rx_sim_thread(void *cx);
+
+void rx_sim_init(void)
+{
+    pthread_t tid;
+
+    pthread_create(&tid, NULL, rx_sim_thread, NULL);
+}
 
 void *rx_sim_thread(void *cx)
 {
@@ -1086,16 +1101,30 @@ void *rx_sim_thread(void *cx)
 
 // - - - - - - - - -  RX SDR - - - - - - - - - - - - 
 
+void *rx_sdr_ctrl_thread(void *cx);
+void rx_sdr_cb(unsigned char *iq, size_t len);
+
 // AAA
+void rx_sdr_init(void)
+{
+    pthread_t tid;
+    struct rtlsdr_dev *dev;
+
+    dev = sdr_init(tc_freq, rx_sdr_cb);
+    pthread_create(&tid, NULL, rx_sdr_ctrl_thread, dev);
+}
+
 void * rx_sdr_ctrl_thread(void *cx)
 {
+    struct rtlsdr_dev *dev = cx;
     double tc_freq_last_set = tc_freq;
     double f;
 
     while (true) {
         f = tc_freq;
         if (f != tc_freq_last_set) {
-            //xxx sdr_set_freq(f);
+            NOTICE("SET FREQ %f\n", f);
+            sdr_set_freq(dev, f);
             tc_freq_last_set = f;
         }
 
