@@ -99,6 +99,8 @@ Detectors
 AM Demodulatiion 
   https://en.wikipedia.org/wiki/Product_detector            # Product Detector
   https://en.wikipedia.org/wiki/Envelope_detector           # Envelope detector
+  https://www.dsprelated.com/showarticle/938.php
+  http://web.mit.edu/6.02/www/s2012/handouts/14.pdf
 
 FM Demodulation
   https://en.wikipedia.org/wiki/Detector_(radio)#Quadrature_detector    # Quadrature detector

@@ -10,7 +10,7 @@
 // defines
 //
 
-#define SAMPLE_RATE   2400000
+#define F_DS (28*MHZ)
 
 #define TUNER_TYPE_STR(x) \
     ((x) == RTLSDR_TUNER_UNKNOWN ? "UNKNOWN" : \
@@ -127,7 +127,7 @@ void sdr_init(double f, void(*cb_arg)(unsigned char *iq, size_t len))
 
     // enable direct sampling
     int direct_sampling;
-    direct_sampling = (f < 28.8*MHZ ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
+    direct_sampling = (f < F_DS ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
     rc = rtlsdr_set_direct_sampling(dev, direct_sampling);
     if (rc != 0) {
         FATAL("rtlsdr_set_direct_sampling\n");
@@ -153,7 +153,7 @@ void sdr_init(double f, void(*cb_arg)(unsigned char *iq, size_t len))
 
 void sdr_set_freq(double f)
 {
-    bool      direct_sampling_needed = (f < 28.8*MHZ);
+    bool      direct_sampling_needed = (f < F_DS);
     int       rc, direct_sampling;
     pthread_t tid;
 
@@ -165,7 +165,7 @@ void sdr_set_freq(double f)
         }
         sleep(1);
 
-        direct_sampling = (f < 28.8*MHZ ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
+        direct_sampling = (f < F_DS ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
         NOTICE("SETTING DIRECT SAMPLING TO %s\n", DIRECT_SAMPLING_STR(direct_sampling));
         rc = rtlsdr_set_direct_sampling(dev, direct_sampling);
         if (rc != 0) {

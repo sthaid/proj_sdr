@@ -68,7 +68,6 @@ void *rx_test(void *cx)
     double     t=0;
     int cnt=0;
     double curr_lpf_cutoff = 0;
-    int curr_demod;
 
     rx_tc_init();
     rx_fft_init();
@@ -81,12 +80,9 @@ void *rx_test(void *cx)
 
     pthread_create(&tid, NULL, rx_fft_thread, NULL);
 
-    curr_demod = tc_demod;
-
     while (true) {
-        if (tc_reset || curr_demod != tc_demod) {
-            rx_tc_init();
-            curr_demod = tc_demod;
+        if (tc_reset) {
+            rx_tc_reset();
         }
 
         if (curr_lpf_cutoff != tc_lpf_cutoff) {
@@ -100,7 +96,7 @@ void *rx_test(void *cx)
         if (cnt++ >= SAMPLE_RATE/10) {
             sprintf(tc.info, "FREQ = %0.3f MHz  DEMOD = %s",
                     (tc_freq + tc_freq_offset) / MHZ,
-                    DEMOD_STR(curr_demod));
+                    DEMOD_STR(tc_demod));
             cnt = 0;
         }
 
@@ -123,7 +119,7 @@ void *rx_test(void *cx)
 
         rx_fft_add_data(data_orig, data_lpf);
 
-        switch (curr_demod) {
+        switch ((int)tc_demod) {
         case DEMOD_AM:
             rx_demod_am(data_lpf);
             break;
@@ -131,7 +127,7 @@ void *rx_test(void *cx)
             rx_demod_fm(data_lpf);
             break;
         default:
-            FATAL("invalid demod %d\n", curr_demod);
+            FATAL("invalid demod %f\n", tc_demod);
             break;
         }
 
@@ -148,7 +144,7 @@ void *rx_test(void *cx)
 static void rx_tc_init(void)
 {
     tc.ctrl[0] = (struct test_ctrl_s)
-                 {"F", &tc_freq, 0, 200000000, 1000,   // 0 to 200 MHx
+                 {"F", &tc_freq, 0, 200000000, 10000,   // 0 to 200 MHx
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
     tc.ctrl[1] = (struct test_ctrl_s)
@@ -177,7 +173,7 @@ static void rx_tc_init(void)
                   {}, NULL,
                   '1', '2'};
     tc.ctrl[8] = (struct test_ctrl_s)
-                 {"K2", &tc_k2, 0, 100, 1,    
+                 {"K2", &tc_k2, 10, 5000, 10,    
                   {}, NULL,
                   '3', '4'};
     tc.ctrl[9] = (struct test_ctrl_s)
@@ -190,12 +186,6 @@ static void rx_tc_init(void)
 
 static void rx_tc_reset(void)
 {
-    static bool first_call = true;
-
-    if (first_call) {
-        tc_demod = DEMOD_FM;
-        first_call = false;
-    }
     if (strcmp(test_name, "rx_sdr") == 0) {
         tc_freq = (tc_demod == DEMOD_AM ? 1030*KHZ : 100.7*MHZ);
     } else {
@@ -206,7 +196,7 @@ static void rx_tc_reset(void)
     tc_volume       = 10;
     tc_reset        = 0;
     tc_k1           = 0.004;
-    tc_k2           = 0;
+    tc_k2           = 1000;
     tc_k3           = 0;
 }
 
@@ -270,29 +260,23 @@ static void *rx_fft_thread(void *cx)
 
 static void rx_demod_am(complex data_lpf)
 {
-    double        y;
-    static double yo;
+    double        yo;
     static int    cnt;
+    static void *ma_cx;
+    static int current;
 
     // xxx improve the AM detector
 
-#if 0
-    // xxx AAA why is this not needed?
-    static const double w = 300000 * TWO_PI;  // xxx try 0
-    static double t;
-
-    data_lpf = data_lpf * cexp(I * w * t);
-    t += DELTA_T;
-#endif
-
-    y = cabs(data_lpf);
-    if (y > 0) {
-        // xxx check this
-        yo = yo + (y - yo) * tc_k1;
+    yo = cabs(data_lpf);
+    if (tc_k2 != current) {
+        NOTICE("XXX %f\n", tc_k2);
+        ma_cx = NULL;
+        current = tc_k2;
     }
+    yo = moving_avg(yo, current, &ma_cx); 
 
     // xxx why 0.97
-    if (cnt++ == (int)(0.97 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
+    if (cnt++ == (int)(0.95 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
         audio_out(yo*tc_volume);  // xxx auto scale
         cnt = 0;
     }
