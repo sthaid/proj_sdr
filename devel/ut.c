@@ -9,6 +9,9 @@
 
 // xxx AAA move all tests to other file, one for each
 
+// xxx
+// - loc of red dot in plot_test
+
 #include "common.h"
 
 //
@@ -22,9 +25,6 @@
 
 #define MAX_PLOT       10
 #define MAX_PLOT_DATA  250000
-
-#define MAX_CTRL            14
-#define MAX_CTRL_ENUM_NAMES 10
 
 #define min(a,b) ((a) < (b) ? (a) : (b))
 
@@ -49,19 +49,6 @@ typedef struct {
     int    y_height;
 } plots_t;
 
-typedef struct {
-    char name[100];
-    char info[100];
-    struct test_ctrl_s {
-        char *name;
-        double *val, min, max, step;
-        char *val_enum_names[MAX_CTRL_ENUM_NAMES];
-        char *units;
-        int decr_event;
-        int incr_event;
-    } ctrl[MAX_CTRL];
-} test_ctrl_t;
-
 //
 // variables
 //
@@ -84,15 +71,9 @@ bool program_terminating;
 // prototypes
 //
 
-void usage(void);
-int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
-
-void init_audio_out(void);
-
-void *plot_test(void *cx);
-void *filter_test(void *cx);
-void *antenna_test(void *cx);
-void *rx_test(void *cx);
+static void usage(void);
+static int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event);
+static void init_audio_out(void);
 
 //
 // test table
@@ -180,6 +161,8 @@ void usage(void)
         NOTICE("  %s\n", t->test_name);
     }
 }
+
+// -----------------  PANE HANDLER  ------------------------
 
 int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t * event)
 {
@@ -441,11 +424,11 @@ void plot_fft(int idx,
     pthread_mutex_unlock(&mutex);
 }
 
-// -----------------  AUDIO OUT  ---------------------------
+// -----------------  AUDIO OUTPUT--------------------------
 
 #ifndef USE_PA
 
-void init_audio_out(void)
+static void init_audio_out(void)
 {
     // nothing needed
 }
@@ -477,13 +460,14 @@ void audio_out(double yo)
 
 #define MAX_AO_BUFF 2000
 
-double ao_buff[MAX_AO_BUFF];
-unsigned long ao_head;
-unsigned long ao_tail;
+static double ao_buff[MAX_AO_BUFF];
+static unsigned long ao_head;
+static unsigned long ao_tail;
 
-void *pa_play_thread(void*cx);
+static void *pa_play_thread(void*cx);
+static int pa_play_cb(void *data, void *cx_arg);
 
-void init_audio_out(void)
+static void init_audio_out(void)
 {
     pthread_t tid;
 
@@ -506,21 +490,7 @@ void audio_out(double yo)
     ao_tail++;
 }
 
-int pa_play_cb(void *data, void *cx_arg)
-{
-    while (ao_head == ao_tail) {
-        if (program_terminating) {
-            return -1;
-        }
-        usleep(1000);
-    }
-
-    *(float*)data = ao_buff[ao_head%MAX_AO_BUFF];
-    ao_head++;
-    return 0;
-}
-
-void *pa_play_thread(void*cx)
+static void *pa_play_thread(void*cx)
 {
     int ret;
     int num_chan = 1;
@@ -534,710 +504,18 @@ void *pa_play_thread(void*cx)
     return NULL;
 }
 
+static int pa_play_cb(void *data, void *cx_arg)
+{
+    while (ao_head == ao_tail) {
+        if (program_terminating) {
+            return -1;
+        }
+        usleep(1000);
+    }
+
+    *(float*)data = ao_buff[ao_head%MAX_AO_BUFF];
+    ao_head++;
+    return 0;
+}
+
 #endif
-
-// -----------------  PLOT TEST  ---------------------------
-
-void *plot_test(void *cx)
-{
-    int sample_rate, f, n;
-    double *sw, t, dt;
-
-    #define SECS 1
-
-    sprintf(tc.info, "Hello World");
-
-    sample_rate = 20000;
-    f = 10;
-    n = SECS * sample_rate;
-    sw = fftw_alloc_real(n);
-    dt = (1. / sample_rate);
-    t = 0;
-
-    for (int i = 0; i < n; i++) {
-        sw[i] = sin(TWO_PI * f * t);
-        t += dt;
-    }
-
-    plot_real(0, sw, n,  0, 1,  -1, +1,     "SINE WAVE", NULL,  0,  0, 50, 25);
-    plot_real(1, sw, n,  0, 1,  -0.5, +0.5, "SINE WAVE", NULL,  0, 25, 50, 25);;
-    plot_real(2, sw, n,  0, 1,  0.5, +1.5,  "SINE WAVE", NULL,  0, 50, 50, 25);;
-
-    return NULL;
-}
-
-// -----------------  FILTER TEST  ------------------------
-
-void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate);
-void init_using_white_noise(double *wn, int n);
-void init_using_wav_file(double *wav, int n, char *filename);
-
-void *filter_test(void *cx)
-{
-    #define SINE_WAVE   0
-    #define SINE_WAVES  1
-    #define WHITE_NOISE 2
-    #define WAV_FILE    3
-
-    #define DEFAULT_CUTOFF 4000
-    #define DEFAULT_ORDER  8
-
-    int        sample_rate = 20000;               // 20 KS/s
-    int        max         = 120 * sample_rate;   // 120 total secs of data
-    int        n           = .1 * sample_rate;    // .1 secs of data processed at a time
-    int        total       = 0;
-
-    double     tc_mode = SINE_WAVES;
-    double     tc_cutoff = DEFAULT_CUTOFF;
-    double     tc_order  = DEFAULT_ORDER;
-    double     tc_reset = 0;
-
-    double    *in_real         = fftw_alloc_real(max);
-    double    *in              = fftw_alloc_real(n);
-    double    *in_filtered     = fftw_alloc_real(n);
-    complex   *in_fft          = fftw_alloc_complex(n);
-    complex   *in_filtered_fft = fftw_alloc_complex(n);
-
-    BWLowPass *bwlpf = NULL;
-    int        bwlpf_cutoff = 0;
-    int        bwlpf_order  = 0;
-    int        current_mode;
-
-    double     yv_max;
-
-    // init test controls
-    tc.ctrl[0] = (struct test_ctrl_s)
-                 {"MODE", &tc_mode, SINE_WAVE, WAV_FILE, 1, 
-                  {"SINE_WAVE", "SINE_WAVES", "WHITE_NOISE", "WAV_FILE"}, "", 
-                  SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
-    tc.ctrl[1] = (struct test_ctrl_s)
-                 {"CUTOFF", &tc_cutoff, 100, 10000, 100,
-                  {}, "HZ", 
-                  SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
-    tc.ctrl[2] = (struct test_ctrl_s)
-                 {"ORDER", &tc_order, 1, 20, 1,
-                  {}, NULL, 
-                  SDL_EVENT_KEY_SHIFT_LEFT_ARROW, SDL_EVENT_KEY_SHIFT_RIGHT_ARROW};
-    tc.ctrl[3] = (struct test_ctrl_s)
-                 {"RESET", &tc_reset, 0, 1, 1,
-                  {"", ""}, NULL, 
-                  SDL_EVENT_NONE, 'r'};
-
-    while (true) {
-        // construct in buff from either:
-        // - sine waves
-        // - white noise
-        // - wav file
-        current_mode = tc_mode;
-        switch (current_mode) {
-        case SINE_WAVE:
-            init_using_sine_waves(in_real, max, 1000, 1000, 0, sample_rate);
-            yv_max = 1000;
-            break;
-        case SINE_WAVES:
-            init_using_sine_waves(in_real, max, 0, 10000, 500, sample_rate);
-            yv_max = 1000;
-            break;
-        case WHITE_NOISE:
-            init_using_white_noise(in_real, max);
-            yv_max = 30;
-            break;
-        case WAV_FILE:
-            init_using_wav_file(in_real, max, "wav_files/super_critical.wav");
-            yv_max = 15;
-            break;
-        default:
-            FATAL("invalid current_mode %d\n", current_mode);
-            break;
-        }
-
-        // loop until test-ctrl mode changes
-        while (current_mode == tc_mode) {
-            // reset ctrls when requested
-            if (tc_reset) {
-                tc_reset = 0;
-                tc_cutoff = DEFAULT_CUTOFF;
-                tc_order  = DEFAULT_ORDER;
-            }
-
-            // if test ctrl cutoff freq has changed then 
-            // free and recreate the butterworth lpf
-            if (tc_cutoff != bwlpf_cutoff || tc_order != bwlpf_order) {
-                if (bwlpf != NULL) {
-                    free_bw_low_pass(bwlpf);
-                }
-                bwlpf = create_bw_low_pass_filter(tc_order, sample_rate, tc_cutoff);
-                bwlpf_cutoff = tc_cutoff;
-                bwlpf_order  = tc_order;
-            }
-
-            // copy .1 secs of data from 'in_real' to 'in'
-            for (int i = 0; i < n; i++) {
-                in[i] = in_real[(total+i)%max];
-            }
-            total += n;
-
-            // apply low pass filter of 'in', output to 'in_filtered'
-            for (int i = 0; i < n; i++) {
-                in_filtered[i] = bw_low_pass(bwlpf, in[i]);
-            }
-
-            // plot fft of 'in'
-            fft_fwd_r2c(in, in_fft, n);
-            plot_fft(0, in_fft, n, sample_rate, true, yv_max, tc_cutoff, "FFT", 0, 0, 50, 25);
-
-            // plot fft of 'in_filtered'
-            fft_fwd_r2c(in_filtered, in_filtered_fft, n);
-            plot_fft(1, in_filtered_fft, n, sample_rate, true, yv_max, tc_cutoff, "FFT", 0, 25, 50, 25);
-
-            // play the filtered audio
-            for (int i = 0; i < n; i++) {
-                audio_out(in_filtered[i]);
-            }
-        }
-    }        
-}
-
-void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate)
-{
-    int f;
-
-    zero_real(sw,n);
-
-    for (f = freq_first; f <= freq_last; f+= freq_step) {
-        double  w = TWO_PI * f;
-        double  t = 0;
-        double  dt = (1. / sample_rate);
-
-        for (int i = 0; i < n; i++) {
-            sw[i] += (w ? sin(w * t) : 0.5);
-            t += dt;
-        }
-
-        if (freq_step == 0) break;
-    }
-}
-
-void init_using_white_noise(double *wn, int n)
-{
-    for (int i = 0; i < n; i++) {
-        wn[i] = ((double)random() / RAND_MAX) - 0.5;
-    }
-}
-
-void init_using_wav_file(double *wav, int n, char *filename)
-{
-    int ret, num_chan, num_items, sample_rate;
-    double *data;
-
-    ret = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
-    if (ret != 0 || num_chan != 1 || sample_rate < 21000 || sample_rate > 23000) {
-        FATAL("read_wav_file ret=%d num_chan=%d sample_rate=%d\n", ret, num_chan, sample_rate);
-    }
-
-    for (int i = 0; i < n; i++) {
-        wav[i] = data[i%num_items];
-    }
-
-    free(data);
-}
-
-// -----------------  ANTENNA TEST  -------------------------
-
-#define ANTENNA_FILENAME "antenna.dat"
-#define SAMPLE_RATE      2400000              // 2.4 MS/sec
-#define MAX_N            (SAMPLE_RATE / 10)   // 0.1 sec range
-#define DELTA_T          (1. / SAMPLE_RATE)
-
-void *antenna_test(void *cx)
-{
-    double  *antenna, t, tmax;
-    complex *antenna_fft;
-    FILE    *fp;
-    int      n = 0;
-
-    init_antenna();
-
-    antenna     = fftw_alloc_real(MAX_N);
-    antenna_fft = fftw_alloc_complex(MAX_N);
-
-    // xxx
-    tmax = (arg1 == -1 ? 30 : arg1);
-
-    // xxx
-    fp = fopen(ANTENNA_FILENAME, "w");
-    if (fp == NULL) {
-        FATAL("failed to create %s\n", ANTENNA_FILENAME);
-    }
-
-    // xxx
-    for (t = 0; t < tmax; t += DELTA_T) {
-        // xxx
-        antenna[n] = get_antenna(t);
-        n++;
-
-        // xxx
-        if (n == MAX_N) {
-            sprintf(tc.info, "Generating simulated antenna data: %0.1f secs", t);
-            fft_fwd_r2c(antenna, antenna_fft, n);
-            // xxx cursor at end of plot?
-            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, 0, SAMPLE_RATE, "ANTENNA_FFT", 0, 0, 50, 50);
-            fwrite(antenna, sizeof(double), n, fp);
-            n = 0;
-        }
-    }
-
-    sprintf(tc.info, "Done");
-
-    // xxxx
-    fclose(fp);
-
-    // xxx 
-    sdl_push_event(&(sdl_event_t){SDL_EVENT_QUIT});
-
-    return NULL;
-}
-
-// -----------------  RX TEST  -----------------------------
-
-// defines
-
-#define SAMPLE_RATE     2400000  // 2.4 MS/sec
-#define MAX_DATA_CHUNK  131072
-#define MAX_DATA        (4*MAX_DATA_CHUNK)
-
-#define DEMOD_AM 0
-#define DEMOD_FM 1
-#define DEMOD_STR(x) \
-    ((x) == DEMOD_AM ? "AM": \
-     (x) == DEMOD_FM ? "FM": \
-                       "????")
-
-#define MHZ 1000000
-#define KHZ 1000
-
-// typedefs
-
-typedef struct {
-    complex *data;
-    complex *data_fft;
-    complex *data_lpf;
-    complex *data_lpf_fft;
-    int      n;
-} fft_t;
-
-// variables
-
-unsigned long Head;
-unsigned long Tail;
-complex       Data[MAX_DATA];
-
-fft_t         fft;
-
-double        tc_freq;
-double        tc_freq_offset;
-double        tc_demod;
-double        tc_lpf_cutoff;
-double        tc_volume;
-double        tc_reset;
-double        tc_k1;
-double        tc_k2;
-double        tc_k3;
-
-// prototypes
-
-void rx_tc_init(void);
-void rx_tc_reset(void);
-
-void rx_fft_init(void);
-void rx_fft_add_data(complex data, complex data_lpf);
-void *rx_fft_thread(void *cx);
-
-void rx_demod_am(complex data_lpf);
-void rx_demod_fm(complex data_lpf);
-
-void rx_sdr_init(void);
-void rx_sim_init(void);
-
-// xxx
-// - exapand the graph to just part of the fft
-
-// - - - - - - - - -  RX TEST - - - - - - - - - - - 
-
-void *rx_test(void *cx)
-{
-    pthread_t  tid;
-    BWLowPass *bwi=NULL, *bwq=NULL;
-    complex    data_orig, data, data_lpf;
-    double     t=0;
-    int cnt=0;
-    const double delta_t = 1. / SAMPLE_RATE;
-    double curr_lpf_cutoff = 0;
-    int curr_demod;
-
-    rx_tc_init();
-    rx_fft_init();
-
-    if (strcmp(test_name, "rx_sim") == 0) {
-        rx_sim_init();
-    } else {
-        rx_sdr_init();
-    }
-
-    pthread_create(&tid, NULL, rx_fft_thread, NULL);
-
-    curr_demod = tc_demod;
-
-    while (true) {
-        if (tc_reset || curr_demod != tc_demod) {
-            rx_tc_init();
-            curr_demod = tc_demod;
-        }
-
-        if (curr_lpf_cutoff != tc_lpf_cutoff) {
-            if (bwi) free_bw_low_pass(bwi);
-            if (bwq) free_bw_low_pass(bwq);
-            bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_lpf_cutoff); 
-            bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_lpf_cutoff);
-            curr_lpf_cutoff = tc_lpf_cutoff;
-        }
-
-        if (cnt++ >= SAMPLE_RATE/10) {
-            sprintf(tc.info, "FREQ = %0.3f MHz  DEMOD = %s",
-                    (tc_freq + tc_freq_offset) / MHZ,
-                    DEMOD_STR(curr_demod));
-            cnt = 0;
-        }
-
-        if (Head == Tail) {
-            usleep(1000);
-            continue;
-        }
-
-        data_orig = Data[Head % MAX_DATA];
-
-        if (tc_freq_offset) {
-            double w = TWO_PI * tc_freq_offset;
-            data = data_orig * cexp(-I * w * t);
-        } else {
-            data = data_orig;
-        }
-
-        data_lpf = bw_low_pass(bwi, creal(data)) +
-                   bw_low_pass(bwq, cimag(data)) * I;
-
-        rx_fft_add_data(data_orig, data_lpf);
-
-        switch (curr_demod) {
-        case DEMOD_AM:
-            rx_demod_am(data_lpf);
-            break;
-        case DEMOD_FM:
-            rx_demod_fm(data_lpf);
-            break;
-        default:
-            FATAL("invalid demod %d\n", curr_demod);
-            break;
-        }
-
-        Head++;
-
-        t += delta_t;
-    }
-
-    return NULL;
-}
-
-void rx_tc_init(void)
-{
-    tc.ctrl[0] = (struct test_ctrl_s)
-                 {"F", &tc_freq, 0, 200000000, 1000,   // 0 to 200 MHx
-                  {}, "HZ", 
-                  SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
-    tc.ctrl[1] = (struct test_ctrl_s)
-                 {"F_OFF", &tc_freq_offset, -600000, 600000, 1000,
-                  {}, "HZ", 
-                  SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
-    tc.ctrl[2] = (struct test_ctrl_s)
-                 {"LPF_CUT", &tc_lpf_cutoff, 1000, 500000, 1000,
-                  {}, "HZ", 
-                  SDL_EVENT_KEY_LEFT_ARROW+ALT, SDL_EVENT_KEY_RIGHT_ARROW+ALT};
-    tc.ctrl[3] = (struct test_ctrl_s)
-                 {"VOLUME", &tc_volume, 0, 100, 1,
-                  {}, NULL,
-                  SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
-    tc.ctrl[4] = (struct test_ctrl_s)
-                 {"DEMOD", &tc_demod, 0, 1, 1,
-                  {"AM", "FM"}, NULL, 
-                  '<', '>'};
-    tc.ctrl[5] = (struct test_ctrl_s)
-                 {"RESET", &tc_reset, 0, 1, 1,
-                  {"", ""}, NULL, 
-                  SDL_EVENT_NONE, 'r'};
-
-    tc.ctrl[7] = (struct test_ctrl_s)
-                 {"K1", &tc_k1, 0.001, 0.100, .001,
-                  {}, NULL,
-                  '1', '2'};
-    tc.ctrl[8] = (struct test_ctrl_s)
-                 {"K2", &tc_k2, 0, 100, 1,    
-                  {}, NULL,
-                  '3', '4'};
-    tc.ctrl[9] = (struct test_ctrl_s)
-                 {"K3", &tc_k3, 0, 100, 1,
-                  {}, NULL,
-                  '5', '6'};
-
-    rx_tc_reset();
-}
-
-void rx_tc_reset(void)
-{
-    static bool first_call = true;
-
-    if (first_call) {
-        tc_demod = DEMOD_FM;
-        first_call = false;
-    }
-    if (strcmp(test_name, "rx_sdr") == 0) {
-        tc_freq = (tc_demod == DEMOD_AM ? 1030*KHZ : 100.7*MHZ);
-    } else {
-        tc_freq = (tc_demod == DEMOD_AM ? 500*KHZ : 800*KHZ);
-    }
-    tc_freq_offset  = 0;
-    tc_lpf_cutoff   = (tc_demod == DEMOD_AM ? 4000 : 60000);
-    tc_volume       = 10;
-    tc_reset        = 0;
-    tc_k1           = 0.004;
-    tc_k2           = 0;
-    tc_k3           = 0;
-}
-
-// - - - - - - - - -  RX FFT   - - - - - - - - - - - 
-
-#define FFT_N        240000
-#define FFT_INTERVAL 100000   // .1 sec
-
-void rx_fft_init(void)
-{
-    fft.data         = fftw_alloc_complex(FFT_N);
-    fft.data_fft     = fftw_alloc_complex(FFT_N);
-    fft.data_lpf     = fftw_alloc_complex(FFT_N);
-    fft.data_lpf_fft = fftw_alloc_complex(FFT_N);
-}
-
-void rx_fft_add_data(complex data, complex data_lpf)
-{
-    if (fft.n < FFT_N) {
-        fft.data[fft.n] = data;
-        fft.data_lpf[fft.n] = data_lpf;
-        fft.n++;
-    }
-}
-
-void *rx_fft_thread(void *cx)
-{
-    #define DATA_BLOCK_DURATION  ((double)FFT_N / SAMPLE_RATE)
-
-    double               yv_max;
-    unsigned long        tnow;
-    static unsigned long tlast;
-
-    if (strcmp(test_name, "rx_sim") == 0) {
-        yv_max = 150000;
-    } else {
-        yv_max = 4000;
-    }
-
-    while (true) {
-        tnow = microsec_timer();
-        if (fft.n != FFT_N || tnow-tlast < FFT_INTERVAL) {
-            usleep(10000);
-            continue;
-        }
-
-        fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
-        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, yv_max, tc_freq_offset, "DATA_FFT", 0, 0, 100, 30);
-
-        // xxx expand the plot?
-        fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, yv_max, 0, "DATA_LPF_FFT", 0, 30, 100, 30);
-        // xxx                                                           ^
-
-        tlast = tnow;
-        fft.n = 0;
-    }
-}
-
-// - - - - - - - - -  RX DEMODULATORS  - - - - - - - 
-
-void rx_demod_am(complex data_lpf)
-{
-    double        y;
-    static double yo;
-    static int    cnt;
-
-    // xxx improve the AM detector
-
-#if 0
-    // xxx AAA why is this not needed?
-    static const double delta_t = 1. / SAMPLE_RATE;
-    static const double w = 300000 * TWO_PI;  // xxx try 0
-    static double t;
-
-    data_lpf = data_lpf * cexp(I * w * t);
-    t += delta_t;
-#endif
-
-    y = cabs(data_lpf);
-    if (y > 0) {
-        // xxx check this
-        yo = yo + (y - yo) * tc_k1;
-    }
-
-    // xxx why 0.97
-    if (cnt++ == (int)(0.97 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo*tc_volume);  // xxx auto scale
-        cnt = 0;
-    }
-}
-
-void rx_demod_fm(complex data_lpf)
-{
-    static complex prev;
-    double yo;
-    static int cnt;
-    complex product;
-    static void *ma_cx=NULL;
-
-    product = data_lpf * conj(prev);
-    yo = atan2(cimag(product), creal(product));
-    prev = data_lpf;
-
-    yo = moving_avg(yo, 110, &ma_cx);
-
-    // xxx why 0.97
-    if (cnt++ == (int)(0.97 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo*tc_volume/10.);
-        cnt = 0;
-    }
-}
-
-// - - - - - - - - -  RX SIMULATOR - - - - - - - - - 
-
-void *rx_sim_thread(void *cx);
-
-void rx_sim_init(void)
-{
-    pthread_t tid;
-
-    pthread_create(&tid, NULL, rx_sim_thread, NULL);
-}
-
-void *rx_sim_thread(void *cx)
-{
-    int fd;
-    struct stat statbuf;
-    size_t file_offset, file_size, len;
-    double t, delta_t, antenna[MAX_DATA_CHUNK], w;
-    complex *data;
-
-    // open ANTENNA_FILENAME
-    fd = open(ANTENNA_FILENAME, O_RDONLY);
-    if (fd < 0) {
-        FATAL("failed open %s, %s\n", ANTENNA_FILENAME, strerror(errno));
-    }
-
-    // get size of ANTENNA_FILENAME
-    fstat(fd, &statbuf);
-    file_size = statbuf.st_size;
-    file_offset = 0;
-
-    // other inits
-    t = 0;
-    delta_t = (1. / SAMPLE_RATE);
-
-    // loop forever, 
-    // when end of file is reached start over from file begining
-    while (true) {
-        // wait for space to be available in Data array, 
-        while (MAX_DATA - (Tail - Head) < MAX_DATA_CHUNK) {
-            usleep(1000);
-        }
-
-        // read values from antenna file, these are real values
-        len = pread(fd, antenna, MAX_DATA_CHUNK*sizeof(double), file_offset);
-        if (len != MAX_DATA_CHUNK*sizeof(double)) {
-            FATAL("read %s, len=%ld, %s\n", ANTENNA_FILENAME, len, strerror(errno));
-        }
-        file_offset += len;
-        if (file_offset + len > file_size) {
-            file_offset = 0;
-        }
-
-        // frequency shift the antenna data, and 
-        // store result in Data[Tail], these are complex values
-        data = &Data[Tail % MAX_DATA];
-        w = TWO_PI * tc_freq;
-        for (int i = 0; i < MAX_DATA_CHUNK; i++) {
-            data[i] = antenna[i] * cexp(-I * w * t);
-            t += delta_t;
-        }
-
-        // increment Tail
-        Tail += MAX_DATA_CHUNK;
-    }
-
-    return NULL;
-}
-
-// - - - - - - - - -  RX SDR - - - - - - - - - - - - 
-
-void *rx_sdr_ctrl_thread(void *cx);
-void rx_sdr_cb(unsigned char *iq, size_t len);
-
-void rx_sdr_init(void)
-{
-    pthread_t tid;
-
-    pthread_create(&tid, NULL, rx_sdr_ctrl_thread, NULL);
-}
-
-void * rx_sdr_ctrl_thread(void *cx)
-{
-    double curr_freq;
-
-    curr_freq = tc_freq;
-
-    sdr_init(curr_freq, rx_sdr_cb);
-
-    while (true) {
-        if (curr_freq != tc_freq) {
-            NOTICE("SETTING FREQ %f\n", tc_freq);
-            sdr_set_freq(tc_freq);
-            curr_freq = tc_freq;
-        }
-
-        usleep(10000);
-    }
-
-    return NULL;
-}
-
-void rx_sdr_cb(unsigned char *iq, size_t len)
-{
-    int items=len/2, i, j;
-
-    if (MAX_DATA - (Tail - Head) < items) {
-        NOTICE("discarding sdr data\n");
-        return;
-    }
-
-    j = Tail % MAX_DATA;
-    for (i = 0; i < items; i++) {
-        Data[j] = ((iq[2*i+0] - 128.) + (iq[2*i+1] - 128.) * I) / 128.;  // xxx try without all the 128.
-        if (++j == MAX_DATA) j = 0;
-    }
-
-    Tail += items;
-}

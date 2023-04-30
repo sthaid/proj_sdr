@@ -2350,10 +2350,6 @@ void sdl_plot(rect_t *pane,
                       x_title, y_bottom+2,
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
 
-    // x axis: cursor
-    x_cursor = x_left + (x_span / xv_span) * (xv_cursor - xv_min);
-    sdl_render_point(pane, x_cursor, y_bottom, SDL_RED, 6);
-
     // y axis: line
     sdl_render_line(pane, 
                     x_origin-2, y_top,
@@ -2367,4 +2363,8 @@ void sdl_plot(rect_t *pane,
     sdl_render_printf(pane, 
                       0, y_bottom-ROW2Y(1,PLOT_FONTSZ)+0, 
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_min);
+
+    // x axis: cursor
+    x_cursor = x_left + (x_span / xv_span) * (xv_cursor - xv_min);
+    sdl_render_point(pane, x_cursor, y_bottom, SDL_RED, 6);
 }

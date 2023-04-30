@@ -1,14 +1,18 @@
 #include "common.h"
+// xxx make statucs
 
 //
 // defines
 //
 
+#define T_MAX 30   // duration of antenna.dat
+#define T_FFT 0.1  // duration of each fft
+
 #define MAX_STATION 20
 #define F_LPF     4000
 
-#define AM 1
-#define FM 2
+#define AM 0
+#define FM 1
 
 //
 // variables
@@ -32,14 +36,60 @@ static struct station_s {
 // prototypes
 //
 
+static void init_antenna(void);
+static double get_antenna(double t);
 static double get_station_signal(int id, double t);
-static void init_station_wav_file(int modulation, double carrier_freq, double carrier_amp, char *filename);
-static void init_station_sine_wave(int modulation, double carrier_freq, double carrier_amp, double sine_wave_freq);
-static void init_station_white_noise(int modulation, double carrier_freq, double carrier_amp);
 
-// -----------------  GET ANTENNA SIGNAL  ------------------------------
+// -----------------  ANTENNA TEST  -------------------------
 
-double get_antenna(double t)
+void *antenna_test(void *cx)
+{
+    double  *antenna, t;
+    complex *antenna_fft;
+    FILE    *fp;
+    int      n = 0;
+    int      max_n = nearbyint(SAMPLE_RATE * T_FFT);
+
+    init_antenna();
+
+    antenna     = fftw_alloc_real(max_n);
+    antenna_fft = fftw_alloc_complex(max_n);
+
+    // xxx
+    fp = fopen(ANTENNA_FILENAME, "w");
+    if (fp == NULL) {
+        FATAL("failed to create %s\n", ANTENNA_FILENAME);
+    }
+
+    // xxx
+    for (t = 0; t < T_MAX; t += DELTA_T) {
+        // xxx
+        antenna[n] = get_antenna(t);
+        n++;
+
+        // xxx
+        if (n == max_n) {
+            sprintf(tc.info, "Generating simulated antenna data: %0.1f secs", t);
+            fft_fwd_r2c(antenna, antenna_fft, n);
+            // xxx cursor at end of plot?
+            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, 0, SAMPLE_RATE, "ANTENNA_FFT", 0, 0, 50, 50);
+            fwrite(antenna, sizeof(double), n, fp);
+            n = 0;
+        }
+    }
+
+    sprintf(tc.info, "Done");
+
+    // xxxx
+    fclose(fp);
+
+    // xxx 
+    sdl_push_event(&(sdl_event_t){SDL_EVENT_QUIT});
+
+    return NULL;
+}
+
+static double get_antenna(double t)
 {
     double y = 0;
 
@@ -49,7 +99,13 @@ double get_antenna(double t)
     return y;
 }
 
-void init_antenna(void)
+// -----------------  INIT ANTENNA SIGNAL  -----------------------------
+
+static void init_station_wav_file(int modulation, double carrier_freq, double carrier_amp, char *filename);
+static void init_station_sine_wave(int modulation, double carrier_freq, double carrier_amp, double sine_wave_freq);
+static void init_station_white_noise(int modulation, double carrier_freq, double carrier_amp);
+
+static void init_antenna(void)
 {
     init_station_white_noise(AM, 420000, 1);
     init_station_wav_file(   AM, 460000, 1, "wav_files/one_bourbon_one_scotch_one_beer.wav");
@@ -59,8 +115,6 @@ void init_antenna(void)
 
     init_station_wav_file(   FM, 800000, 1, "wav_files/not_fade_away.wav");
 }
-
-// -----------------  GET STATION  -------------------------------------
 
 static double get_station_signal(int id, double t)
 {
@@ -81,9 +135,8 @@ static double get_station_signal(int id, double t)
         signal = (1 + data) * (A * sin(wc * t));
         break; }
     case FM: {
-        const double delta_t = (1. / 2400000);  // xxx should be in common.h
-        const double f_delta = 100000;          // 100 KHz ?
-        a->fm_data_integral += data * delta_t;
+        const double f_delta = 100000;  // 100 KHz
+        a->fm_data_integral += data * DELTA_T;
         signal = A * cos(wc * t + TWO_PI * f_delta * a->fm_data_integral);
         break; }
     default:

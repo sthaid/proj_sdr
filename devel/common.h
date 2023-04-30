@@ -22,11 +22,55 @@
 #include <pa.h>
 #include <filter.h>
 
-// ut_antenna.c
-void init_antenna(void);
-double get_antenna(double t);
+#define SAMPLE_RATE 2400000   // 2.4 MS/sec
+#define DELTA_T     (1. / SAMPLE_RATE)
+
+#define CTRL SDL_EVENT_KEY_CTRL
+#define ALT  SDL_EVENT_KEY_ALT
+
+#define ANTENNA_FILENAME "antenna.dat"
+
+#define MHZ 1000000
+#define KHZ 1000
+
+// ut.c
+#define MAX_CTRL 14
+#define MAX_CTRL_ENUM_NAMES 10
+typedef struct {
+    char name[100];
+    char info[100];
+    struct test_ctrl_s {
+        char *name;
+        double *val, min, max, step;
+        char *val_enum_names[MAX_CTRL_ENUM_NAMES];
+        char *units;
+        int decr_event;
+        int incr_event;
+    } ctrl[MAX_CTRL];
+} test_ctrl_t;
+
+extern test_ctrl_t tc;
+extern char       *test_name;
+
+void audio_out(double yo);
+
+void plot_real(int idx,
+               double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax,
+               char *title, char *x_units,
+               int x_pos, int y_pos, int x_width, int y_height);
+void plot_fft(int idx,
+              complex *fft, int n, double sample_rate, bool half_flag, double yv_max, double xv_cursor,
+              char *title,
+              int x_pos, int y_pos, int x_width, int y_height);
+
+// xxx
+void *plot_test(void *cx);
+void *filter_test(void *cx);
+void *antenna_test(void *cx);
+void *rx_test(void *cx);
 
 // sdr2.c
 void sdr_list_devices(void);
 void sdr_init(double f, void(*cb)(unsigned char *iq, size_t len));
 void sdr_set_freq(double f);
+

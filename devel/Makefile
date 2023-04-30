@@ -6,7 +6,7 @@ UTILS=../utils/fft.c ../utils/misc.c ../utils/png_rw.c ../utils/sdl.c ../utils/w
 
 all: $(TARGETS)
 
-ut: ut.c ut_antenna.c sdr2.c $(UTILS)
+ut: ut.c ut_plot_test.c ut_filter_test.c ut_antenna_test.c ut_rx_test.c sdr2.c $(UTILS)
 	gcc -g -O2 -Wall $(INCLUDE) -o $@ $^ $(LIBS)
 
 run: ut
