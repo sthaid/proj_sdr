@@ -2,6 +2,9 @@
 
 // xxx next do lsb
 
+#define USB 0
+#define LSB 1
+
 static int sample_rate = 40000;
 
 static double msg(double t);
@@ -15,11 +18,16 @@ void *ssb_test(void *cx)
     double   delta_t = (1. / sample_rate);
     double   yv_max  = 20000;
     double   step = 0;
+    double   which = USB;
 
     tc.ctrl[0] = (struct test_ctrl_s)
-                 {"STEP", &step, 0, 3, 1,
+                 {"STEP", &step, 0, 6, 1,
                   {}, NULL,
-                  SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
+                  SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
+    tc.ctrl[1] = (struct test_ctrl_s)
+                 {NULL, &which, 0, 1, 1,
+                  {"USB", "LSB"}, NULL,
+                  'u', 'l'};
 
     yc = fftw_alloc_complex(n);
     yr = fftw_alloc_real(n);
@@ -29,6 +37,10 @@ void *ssb_test(void *cx)
     bwi = create_bw_low_pass_filter(20, sample_rate, 2000);
     bwq = create_bw_low_pass_filter(20, sample_rate, 2000);
 
+    BWLowPass *bwi2, *bwq2;
+    bwi2 = create_bw_low_pass_filter(20, sample_rate, 2000);
+    bwq2 = create_bw_low_pass_filter(20, sample_rate, 2000);
+
 again:
     for (int i = 0; i < n; i++) {
         complex tmp = 0;
@@ -37,8 +49,10 @@ again:
         if (step >= 0)
             tmp = m;
 
-        if (step >= 1)
-            tmp = tmp * cexp(-I * (TWO_PI*2000) * t);
+        if (step >= 1) {
+            int sign = (which == USB ? -1 : 1);
+            tmp = tmp * cexp(sign * I * (TWO_PI*2000) * t);
+        }
 
         if (step >= 2)
             tmp = bw_low_pass(bwi, creal(tmp)) +
@@ -46,6 +60,20 @@ again:
 
         if (step >= 3) 
             tmp = tmp * cexp(I * (TWO_PI*10000) * t);
+
+        // --- demod ---
+
+        if (step >= 4) 
+            tmp = tmp * cexp(-I * (TWO_PI*10000) * t);
+
+        if (step >= 5)
+            tmp = bw_low_pass(bwi2, creal(tmp)) +
+                  bw_low_pass(bwq2, cimag(tmp)) * I;
+
+        if (step >= 6) {
+            int sign = (which == USB ? 1 : -1);
+            tmp = tmp * cexp(sign * I * (TWO_PI*2000) * t);
+        }
 
         yr[i] = creal(tmp);
         yc[i] = tmp;
@@ -56,7 +84,7 @@ again:
     fft_fwd_c2c(yc, fft, n);
     plot_fft(0, fft, n, sample_rate, false, yv_max, 0, "FFT_COMPLEX", 0, 0, 100, 25);
 
-    if (step == 0 || step == 3) {
+    if (step == 0 || step == 3 || step == 6) {
         zero_complex(fft,n);
         fft_fwd_r2c(yr, fft, n);
         plot_fft(1, fft, n, sample_rate, false, yv_max, 0, "FFT_REAL", 0, 25, 100, 25);
