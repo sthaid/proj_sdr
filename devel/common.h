@@ -66,6 +66,7 @@ void plot_fft(int idx,
 // xxx
 void *plot_test(void *cx);
 void *filter_test(void *cx);
+void *ssb_test(void *cx);
 void *antenna_test(void *cx);
 void *rx_test(void *cx);
 

@@ -114,6 +114,12 @@ https://www.dsprelated.com/showarticle/192.php
 https://rahsoft.com/2022/10/17/understanding-90%cb%9a-phase-shift-and-hilbert-transform/
 https://www.youtube.com/watch?v=JuuKF1RFvBM  # quadrature mixer
 
+Radio Bands
+-----------
+
+Amateur Radio
+  https://www.arrl.org/files/file/Regulatory/Band%20Chart/Band%20Chart%20-%2011X17%20Color.pdf
+
 misc notes
 ----------
 

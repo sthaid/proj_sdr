@@ -85,6 +85,7 @@ static struct test_s {
 } tests[] = {
         { "plot",    plot_test  },
         { "filter",  filter_test   },
+        { "ssb",     ssb_test   },
         { "antenna", antenna_test   },
         { "rx_sim",  rx_test    },
         { "rx_sdr",  rx_test    },
