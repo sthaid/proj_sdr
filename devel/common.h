@@ -54,6 +54,7 @@ extern char       *test_name;
 
 void audio_out(double yo);
 
+void plot_clear(int idx);
 void plot_real(int idx,
                double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax,
                char *title, char *x_units,

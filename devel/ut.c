@@ -347,6 +347,12 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
 
 // -----------------  PLOT HELPERS  ------------------------
 
+void plot_clear(int idx)
+{
+    plots_t *p = &plots[idx];
+    p->title = NULL;
+}
+
 void plot_real(int idx, 
                double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax, 
                char *title, char *x_units,

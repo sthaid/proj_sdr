@@ -89,8 +89,7 @@ again:
         fft_fwd_r2c(yr, fft, n);
         plot_fft(1, fft, n, sample_rate, false, yv_max, 0, "FFT_REAL", 0, 25, 100, 25);
     } else {
-        // clear the plot,  xxx need better way
-        plot_fft(1, fft, n, sample_rate, false, yv_max, 0, NULL, 0, 25, 100, 25);
+        plot_clear(1);
     }
 
     usleep(10000);
