@@ -13,6 +13,8 @@
 
 #define AM 0
 #define FM 1
+#define LSB 2
+#define USB 3
 
 //
 // variables
@@ -107,13 +109,12 @@ static void init_station_white_noise(int modulation, double carrier_freq, double
 
 static void init_antenna(void)
 {
-    init_station_white_noise(AM, 420000, 1);
-    init_station_wav_file(   AM, 460000, 1, "wav_files/one_bourbon_one_scotch_one_beer.wav");
-    init_station_wav_file(   AM, 500000, 1, "wav_files/super_critical.wav");
-    init_station_wav_file(   AM, 540000, 1, "wav_files/proud_mary.wav");
-    init_station_sine_wave(  AM, 580000, 1, 500);
-
-    init_station_wav_file(   FM, 800000, 1, "wav_files/not_fade_away.wav");
+    init_station_white_noise(AM,  420000, 1);
+    init_station_wav_file(   AM,  460000, 1, "wav_files/one_bourbon_one_scotch_one_beer.wav");
+    init_station_wav_file(   AM,  500000, 1, "wav_files/super_critical.wav");
+    init_station_wav_file(   USB, 580000, 2, "wav_files/blue_sky.wav");
+    init_station_wav_file(   LSB, 620000, 2, "wav_files/quick_brown_fox.wav");
+    init_station_wav_file(   FM,  700000, 20, "wav_files/not_fade_away.wav");
 }
 
 static double get_station_signal(int id, double t)
@@ -121,6 +122,8 @@ static double get_station_signal(int id, double t)
     int idx, mod;
     double signal, A, fc, wc, data;
     struct station_s *a;
+
+    static BWLowPass *bwi[99], *bwq[99];
 
     a    = &station[id];
     idx  = (unsigned long)nearbyint(t * a->audio_sample_rate) % a->audio_n;
@@ -130,6 +133,11 @@ static double get_station_signal(int id, double t)
     wc   = TWO_PI * fc;
     mod  = a->modulation;
 
+    if (bwi[id] == NULL) {
+        bwi[id] = create_bw_low_pass_filter(20, SAMPLE_RATE, 2000);
+        bwq[id] = create_bw_low_pass_filter(20, SAMPLE_RATE, 2000);
+    }
+
     switch (mod) {
     case AM: {
         signal = (1 + data) * (A * sin(wc * t));
@@ -138,6 +146,15 @@ static double get_station_signal(int id, double t)
         const double f_delta = 100000;  // 100 KHz
         a->fm_data_integral += data * DELTA_T;
         signal = A * cos(wc * t + TWO_PI * f_delta * a->fm_data_integral);
+        break; }
+    case USB: case LSB: {
+        int sign = (mod == USB ? -1 : +1);
+        complex tmp;
+        tmp = data * cexp(sign * I * (TWO_PI*2000) * t);
+        tmp = bw_low_pass(bwi[id], creal(tmp)) + 
+              bw_low_pass(bwq[id], cimag(tmp)) * I;
+        tmp = tmp * cexp(I * wc * t);
+        signal = A * creal(tmp);
         break; }
     default:
         FATAL("invalid modulation %d\n", mod);
