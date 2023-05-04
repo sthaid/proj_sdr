@@ -33,6 +33,8 @@
 #define MHZ 1000000
 #define KHZ 1000
 
+#define ATTRIB_UNUSED __attribute__ ((unused))
+
 // ut.c
 #define MAX_CTRL 14
 #define MAX_CTRL_ENUM_NAMES 10
