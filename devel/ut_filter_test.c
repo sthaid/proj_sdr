@@ -79,7 +79,8 @@ void *filter_test(void *cx)
             yv_max = 30;
             break;
         case WAV_FILE:
-            init_using_wav_file(in_real, max, "wav_files/super_critical.wav");
+            //init_using_wav_file(in_real, max, "wav_files/super_critical.wav");
+            init_using_wav_file(in_real, max, "wav_files/blue_sky.wav");
             yv_max = 15;
             break;
         default:
@@ -169,7 +170,7 @@ static void init_using_wav_file(double *wav, int n, char *filename)
     double *data;
 
     ret = read_wav_file(filename, &data, &num_chan, &num_items, &sample_rate);
-    if (ret != 0 || num_chan != 1 || sample_rate < 21000 || sample_rate > 23000) {
+    if (ret != 0 || num_chan != 1 || sample_rate < 20000 || sample_rate > 25000) {
         FATAL("read_wav_file ret=%d num_chan=%d sample_rate=%d\n", ret, num_chan, sample_rate);
     }
 

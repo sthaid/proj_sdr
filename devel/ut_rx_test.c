@@ -1,19 +1,26 @@
 #include "common.h"
 
+// xxx add audio fft and audio time dom
+
 // defines
 
 #define MAX_DATA_CHUNK  131072
 #define MAX_DATA        (4*MAX_DATA_CHUNK)
 
-#define DEMOD_AM 0
-#define DEMOD_FM 1
+#define DEMOD_AM  0
+#define DEMOD_USB 1
+#define DEMOD_LSB 2
+#define DEMOD_FM  3
 #define DEMOD_STR(x) \
     ((x) == DEMOD_AM ? "AM": \
+     (x) == DEMOD_USB ? "USB": \
+     (x) == DEMOD_LSB ? "LSB": \
      (x) == DEMOD_FM ? "FM": \
                        "????")
 
 // typedefs
 
+// xxx zoom the plot ffts
 typedef struct {
     complex *data;
     complex *data_fft;
@@ -32,7 +39,7 @@ static fft_t         fft;
 
 static double        tc_freq;
 static double        tc_freq_offset;
-static double        tc_demod;
+static double        tc_demod = DEMOD_AM;
 static double        tc_lpf_cutoff;
 static double        tc_volume;
 static double        tc_reset;
@@ -51,6 +58,7 @@ static void *rx_fft_thread(void *cx);
 
 static void rx_demod_am(complex data_lpf);
 static void rx_demod_fm(complex data_lpf);
+static void rx_demod_ssb(complex data_lpf);
 
 static void rx_sdr_init(void);
 static void rx_sim_init(void);
@@ -68,6 +76,7 @@ void *rx_test(void *cx)
     double     t=0;
     int cnt=0;
     double curr_lpf_cutoff = 0;
+    int curr_tc_demod = -1;
 
     rx_tc_init();
     rx_fft_init();
@@ -81,15 +90,16 @@ void *rx_test(void *cx)
     pthread_create(&tid, NULL, rx_fft_thread, NULL);
 
     while (true) {
-        if (tc_reset) {
+        if (tc_reset || tc_demod != curr_tc_demod) {
             rx_tc_reset();
+            curr_tc_demod = tc_demod;
         }
 
         if (curr_lpf_cutoff != tc_lpf_cutoff) {
             if (bwi) free_bw_low_pass(bwi);
             if (bwq) free_bw_low_pass(bwq);
-            bwi = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_lpf_cutoff); 
-            bwq = create_bw_low_pass_filter(8, SAMPLE_RATE, tc_lpf_cutoff);
+            bwi = create_bw_low_pass_filter(20, SAMPLE_RATE, tc_lpf_cutoff); 
+            bwq = create_bw_low_pass_filter(20, SAMPLE_RATE, tc_lpf_cutoff);
             curr_lpf_cutoff = tc_lpf_cutoff;
         }
 
@@ -109,7 +119,7 @@ void *rx_test(void *cx)
 
         if (tc_freq_offset) {
             double w = TWO_PI * tc_freq_offset;
-            data = data_orig * cexp(-I * w * t);
+            data = data_orig * cexp(+I * w * t);
         } else {
             data = data_orig;
         }
@@ -125,6 +135,14 @@ void *rx_test(void *cx)
             break;
         case DEMOD_FM:
             rx_demod_fm(data_lpf);
+            break;
+        case DEMOD_USB:
+            data_lpf = data_lpf * cexp(I * (TWO_PI*2000) * t);
+            rx_demod_ssb(data_lpf); // xxx make sep routines for usb and lsb
+            break;
+        case DEMOD_LSB:
+            data_lpf = data_lpf * cexp(-I * (TWO_PI*2000) * t);
+            rx_demod_ssb(data_lpf);
             break;
         default:
             FATAL("invalid demod %f\n", tc_demod);
@@ -148,7 +166,7 @@ static void rx_tc_init(void)
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
     tc.ctrl[1] = (struct test_ctrl_s)
-                 {"F_OFF", &tc_freq_offset, -600000, 600000, 1000,
+                 {"F_OFF", &tc_freq_offset, -600000, 600000, 100,
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
     tc.ctrl[2] = (struct test_ctrl_s)
@@ -156,12 +174,12 @@ static void rx_tc_init(void)
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+ALT, SDL_EVENT_KEY_RIGHT_ARROW+ALT};
     tc.ctrl[3] = (struct test_ctrl_s)
-                 {"VOLUME", &tc_volume, 0, 100, 1,
+                 {"VOLUME", &tc_volume, 0.1, 10, 0.1,
                   {}, NULL,
                   SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
     tc.ctrl[4] = (struct test_ctrl_s)
-                 {"DEMOD", &tc_demod, 0, 1, 1,
-                  {"AM", "FM"}, NULL, 
+                 {"DEMOD", &tc_demod, 0, 3, 1,
+                  {"AM", "USB", "LSB", "FM"}, NULL, 
                   '<', '>'};
     tc.ctrl[5] = (struct test_ctrl_s)
                  {"RESET", &tc_reset, 0, 1, 1,
@@ -189,14 +207,20 @@ static void rx_tc_reset(void)
     if (strcmp(test_name, "rx_sdr") == 0) {
         tc_freq = (tc_demod == DEMOD_AM ? 1030*KHZ : 100.7*MHZ);
     } else {
-        tc_freq = (tc_demod == DEMOD_AM ? 500*KHZ : 800*KHZ);
+        tc_freq = (tc_demod == DEMOD_AM  ? 500*KHZ :
+                   tc_demod == DEMOD_FM  ? 700*KHZ :
+                   tc_demod == DEMOD_USB ? 580*KHZ :
+                   tc_demod == DEMOD_LSB ? 620*KHZ :
+                                           500*KHZ);
     }
     tc_freq_offset  = 0;
-    tc_lpf_cutoff   = (tc_demod == DEMOD_AM ? 4000 : 60000);
-    tc_volume       = 10;
+    tc_lpf_cutoff   = (tc_demod == DEMOD_AM ? 4000  :
+                       tc_demod == DEMOD_FM ? 60000 :
+                                              2000);  // usb,lsb
+    tc_volume       = 1;
     tc_reset        = 0;
     tc_k1           = 0.004;
-    tc_k2           = 1000;
+    tc_k2           = 0;
     tc_k3           = 0;
 }
 
@@ -261,24 +285,48 @@ static void *rx_fft_thread(void *cx)
 static void rx_demod_am(complex data_lpf)
 {
     double        yo;
-    static int    cnt;
+    static int    cnt, cnt1;
     static void *ma_cx;
-    static int current;
 
-    // xxx improve the AM detector
+    yo = creal(data_lpf) + cimag(data_lpf);  // xxx or cabs
+    //yo = cabs(data_lpf);
 
-    yo = cabs(data_lpf);
-    if (tc_k2 != current) {
-        NOTICE("XXX %f\n", tc_k2);
-        ma_cx = NULL;
-        current = tc_k2;
-    }
-    yo = moving_avg(yo, current, &ma_cx); 
+    yo = moving_avg(yo, 1000, &ma_cx); 
+    // xxx zero adjust ?
 
     // xxx why 0.97
     if (cnt++ == (int)(0.95 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo*tc_volume);  // xxx auto scale
+        double tmp = yo * tc_volume;
+        audio_out(tmp);  // xxx auto scale
         cnt = 0;
+        if (cnt1++ == 22000) {
+            NOTICE("AUDIO %f\n", tmp);
+            cnt1 = 0;
+        }
+    }
+}
+
+static void rx_demod_ssb(complex data_lpf)
+{
+    double        yo;
+    static int    cnt, cnt1;
+    static void  *ma_cx;
+
+    yo = creal(data_lpf) + cimag(data_lpf);  // xxx or cabs
+    //yo = cabs(data_lpf);
+
+    yo = moving_avg(yo, 1000, &ma_cx); 
+    // xxx zero adjust ?
+    
+    // xxx why 0.97
+    if (cnt++ == (int)(0.95 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
+        double tmp = yo * tc_volume;
+        audio_out(tmp);  // xxx auto scale
+        cnt = 0;
+        if (cnt1++ == 22000) {
+            NOTICE("AUDIO %f\n", tmp);
+            cnt1 = 0;
+        }
     }
 }
 

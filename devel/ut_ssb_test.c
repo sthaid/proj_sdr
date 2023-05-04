@@ -85,7 +85,7 @@ void *ssb_test(void *cx)
                 if (curr_step == 3) 
                     sprintf(tc.info, "modulating - msg shifted to f=0 and filtered and shifted to f");
                 tmp = tmp * cexp(I * (TWO_PI*10000) * t);
-                tmp = creal(tmp);
+                tmp = creal(tmp);  // xxx try adding cimag, and in antenna.c
             }
 
             // --- demod ---

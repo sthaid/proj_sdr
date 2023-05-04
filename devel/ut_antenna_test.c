@@ -1,5 +1,4 @@
 #include "common.h"
-// xxx make statucs
 
 //
 // defines
@@ -103,18 +102,19 @@ static double get_antenna(double t)
 
 // -----------------  INIT ANTENNA SIGNAL  -----------------------------
 
-static void init_station_wav_file(int modulation, double carrier_freq, double carrier_amp, char *filename);
-static void init_station_sine_wave(int modulation, double carrier_freq, double carrier_amp, double sine_wave_freq);
-static void init_station_white_noise(int modulation, double carrier_freq, double carrier_amp);
+static void init_station_wav_file(int modulation, double carrier_freq, double carrier_amp, char *filename) ATTRIB_UNUSED;
+static void init_station_sine_wave(int modulation, double carrier_freq, double carrier_amp, double sine_wave_freq) ATTRIB_UNUSED;
+static void init_station_white_noise(int modulation, double carrier_freq, double carrier_amp) ATTRIB_UNUSED;
 
 static void init_antenna(void)
 {
     init_station_white_noise(AM,  420000, 1);
     init_station_wav_file(   AM,  460000, 1, "wav_files/one_bourbon_one_scotch_one_beer.wav");
     init_station_wav_file(   AM,  500000, 1, "wav_files/super_critical.wav");
-    init_station_wav_file(   USB, 580000, 2, "wav_files/blue_sky.wav");
-    init_station_wav_file(   LSB, 620000, 2, "wav_files/quick_brown_fox.wav");
-    init_station_wav_file(   FM,  700000, 20, "wav_files/not_fade_away.wav");
+    init_station_wav_file(   AM,  540000, 1, "wav_files/proud_mary.wav");
+    init_station_wav_file(   USB, 580000, 4, "wav_files/blue_sky.wav");
+    init_station_wav_file(   LSB, 620000, 4, "wav_files/blue_sky.wav");
+    init_station_wav_file(   FM,  700000, 15, "wav_files/not_fade_away.wav");
 }
 
 static double get_station_signal(int id, double t)
@@ -147,10 +147,17 @@ static double get_station_signal(int id, double t)
         a->fm_data_integral += data * DELTA_T;
         signal = A * cos(wc * t + TWO_PI * f_delta * a->fm_data_integral);
         break; }
-    case USB: case LSB: {
-        int sign = (mod == USB ? -1 : +1);
+    case USB: {
         complex tmp;
-        tmp = data * cexp(sign * I * (TWO_PI*2000) * t);
+        tmp = data * cexp(-I * (TWO_PI*2000) * t);
+        tmp = bw_low_pass(bwi[id], creal(tmp)) + 
+              bw_low_pass(bwq[id], cimag(tmp)) * I;
+        tmp = tmp * cexp(I * wc * t);
+        signal = A * creal(tmp);
+        break; }
+    case LSB: {
+        complex tmp;
+        tmp = data * cexp(I * (TWO_PI*2000) * t);  // xxx combine
         tmp = bw_low_pass(bwi[id], creal(tmp)) + 
               bw_low_pass(bwq[id], cimag(tmp)) * I;
         tmp = tmp * cexp(I * wc * t);

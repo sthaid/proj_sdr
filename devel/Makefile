@@ -15,4 +15,4 @@ run: ut
 	#./ut filter
 	#./ut rx_sim
 	#./ut rx_sdr
-	./ut antenna
+	./ut rx_sim
