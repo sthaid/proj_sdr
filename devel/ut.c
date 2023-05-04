@@ -24,7 +24,6 @@
 #define ALT  SDL_EVENT_KEY_ALT
 
 #define MAX_PLOT       10
-#define MAX_PLOT_DATA  250000
 
 #define min(a,b) ((a) < (b) ? (a) : (b))
 
@@ -33,7 +32,7 @@
 //
 
 typedef struct {
-    double  data[MAX_PLOT_DATA];
+    double  *data;
     int     n;
     double  xv_min;
     double  xv_max;
@@ -360,11 +359,9 @@ void plot_real(int idx,
 {
     plots_t *p = &plots[idx];
 
-    if (n > MAX_PLOT_DATA) {
-        FATAL("plot n=%d\n", n);
-    }
-
     pthread_mutex_lock(&mutex);
+    free(p->data);
+    p->data = malloc(n*sizeof(double));
     for (int i = 0; i < n; i++) {
         p->data[i] = data[i];
     }
@@ -391,11 +388,9 @@ void plot_fft(int idx,
 {
     plots_t *p = &plots[idx];
 
-    if (n > MAX_PLOT_DATA) {
-        FATAL("plot n=%d\n", n);
-    }
-
     pthread_mutex_lock(&mutex);
+    free(p->data);
+    p->data = malloc(n*sizeof(double));
     if (!half_flag) {
         int j=0;
         for (int i = n/2; i < n; i++) {
