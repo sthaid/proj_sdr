@@ -63,9 +63,6 @@ static void rx_demod_ssb(complex data_lpf);
 static void rx_sdr_init(void);
 static void rx_sim_init(void);
 
-// xxx
-// - exapand the graph to just part of the fft
-
 // -----------------  RX TEST  -----------------------------
 
 void *rx_test(void *cx)
@@ -150,7 +147,6 @@ void *rx_test(void *cx)
         }
 
         Head++;
-
         t += DELTA_T;
     }
 
@@ -187,15 +183,15 @@ static void rx_tc_init(void)
                   SDL_EVENT_NONE, 'r'};
 
     tc.ctrl[7] = (struct test_ctrl_s)
-                 {"K1", &tc_k1, 0.001, 0.100, .001,
+                 {"K1", &tc_k1, 0, 1, .1,
                   {}, NULL,
                   '1', '2'};
     tc.ctrl[8] = (struct test_ctrl_s)
-                 {"K2", &tc_k2, 10, 5000, 10,    
+                 {"K2", &tc_k2, 0, 1, .1,
                   {}, NULL,
                   '3', '4'};
     tc.ctrl[9] = (struct test_ctrl_s)
-                 {"K3", &tc_k3, 0, 100, 1,
+                 {"K3", &tc_k3, 0, 1, .1,
                   {}, NULL,
                   '5', '6'};
 
@@ -219,9 +215,9 @@ static void rx_tc_reset(void)
                                               2000);  // usb,lsb
     tc_volume       = 1;
     tc_reset        = 0;
-    tc_k1           = 0.004;
-    tc_k2           = 0;
-    tc_k3           = 0;
+    tc_k1           = 0;  // not used
+    tc_k2           = 0;  // not used
+    tc_k3           = 0;  // not used
 }
 
 // -----------------  RX FFT  ------------------------------
@@ -271,7 +267,8 @@ static void *rx_fft_thread(void *cx)
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
         plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, yv_max, 0, "DATA_LPF_FFT", 0, 30, 100, 30);
-        // xxx                                                           ^
+
+        // xxx add audio fft
 
         tlast = tnow;
         fft.n = 0;
@@ -285,7 +282,7 @@ static void *rx_fft_thread(void *cx)
 static void rx_demod_am(complex data_lpf)
 {
     double        yo;
-    static int    cnt, cnt1;
+    static int    cnt;
     static void *ma_cx;
 
     yo = creal(data_lpf) + cimag(data_lpf);  // xxx or cabs
@@ -296,20 +293,15 @@ static void rx_demod_am(complex data_lpf)
 
     // xxx why 0.97
     if (cnt++ == (int)(0.95 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        double tmp = yo * tc_volume;
-        audio_out(tmp);  // xxx auto scale
+        audio_out(yo * tc_volume);  // xxx auto scale
         cnt = 0;
-        if (cnt1++ == 22000) {
-            NOTICE("AUDIO %f\n", tmp);
-            cnt1 = 0;
-        }
     }
 }
 
 static void rx_demod_ssb(complex data_lpf)
 {
     double        yo;
-    static int    cnt, cnt1;
+    static int    cnt;
     static void  *ma_cx;
 
     yo = creal(data_lpf) + cimag(data_lpf);  // xxx or cabs
@@ -317,16 +309,12 @@ static void rx_demod_ssb(complex data_lpf)
 
     yo = moving_avg(yo, 1000, &ma_cx); 
     // xxx zero adjust ?
+    // xxx better way to downsample?
     
     // xxx why 0.97
     if (cnt++ == (int)(0.95 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        double tmp = yo * tc_volume;
-        audio_out(tmp);  // xxx auto scale
+        audio_out(yo * tc_volume);  // xxx auto scale
         cnt = 0;
-        if (cnt1++ == 22000) {
-            NOTICE("AUDIO %f\n", tmp);
-            cnt1 = 0;
-        }
     }
 }
 
@@ -367,7 +355,7 @@ static void *rx_sim_thread(void *cx)
     int fd;
     struct stat statbuf;
     size_t file_offset, file_size, len;
-    double t, antenna[MAX_DATA_CHUNK], w;
+    double t=0, antenna[MAX_DATA_CHUNK], w;
     complex *data;
 
     // open ANTENNA_FILENAME
@@ -380,9 +368,6 @@ static void *rx_sim_thread(void *cx)
     fstat(fd, &statbuf);
     file_size = statbuf.st_size;
     file_offset = 0;
-
-    // other inits
-    t = 0;
 
     // loop forever, 
     // when end of file is reached start over from file begining
@@ -445,6 +430,8 @@ static void * rx_sdr_ctrl_thread(void *cx)
             curr_freq = tc_freq;
         }
 
+        // xxx add more sdr controls, such as gain
+
         usleep(10000);
     }
 
@@ -462,8 +449,8 @@ static void rx_sdr_cb(unsigned char *iq, size_t len)
 
     j = Tail % MAX_DATA;
     for (i = 0; i < items; i++) {
-        Data[j] = ((iq[2*i+0] - 128.) + (iq[2*i+1] - 128.) * I) / 128.;  // xxx try without all the 128.
-        if (++j == MAX_DATA) j = 0;
+        Data[j++] = ((iq[2*i+0] - 128.) + (iq[2*i+1] - 128.) * I) / 128.;  // xxx try without all the 128.
+        if (j == MAX_DATA) j = 0;
     }
 
     Tail += items;

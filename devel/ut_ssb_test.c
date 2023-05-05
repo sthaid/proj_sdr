@@ -3,27 +3,38 @@
 #define USB 0
 #define LSB 1
 
-static int sample_rate = 40000;
+// config settings
+static const int sample_rate = 40000;
+static const int f           = 10000;
+static const int n           = 10 * sample_rate;  // 10 sec
 
-static void init_msg2(double *msg, int n);
+// test control 
+static double    tc_step        = 0;
+static double    tc_which       = USB;
+static double    tc_freq_offset = 0;
+
+// prototypes
+static void init_msg(double *msg, int n);
+
+// - - - - - - - - - - - - - - - - - - - - - 
 
 void *ssb_test(void *cx)
 {
     complex *yc, *fft;
-    double   *yr;
-    double   t       = 0;
-    int      n       = 10 * sample_rate;  // 10 sec
-    double   delta_t = (1. / sample_rate);
-    double   yv_max    = 2500;
-    double   tc_step = 0;
-    double   tc_which = USB;
-    double   tc_freq_offset = 0;
+    double  *yr;
     double  *msg;
+    double   t;
+    double   yv_max;
     double   curr_step;
     double   curr_freq_offset;
+    double   delta_t = (1. / sample_rate);
+
+    t = 0;
+    yv_max = 2500;  //xxx determine automatically
+    delta_t = (1. / sample_rate);
 
     msg = calloc(n, sizeof(double));
-    init_msg2(msg, n);
+    init_msg(msg, n);
 
     tc.ctrl[0] = (struct test_ctrl_s)
                  {"STEP", &tc_step, 0, 6, 1,
@@ -84,7 +95,7 @@ void *ssb_test(void *cx)
             if (curr_step >= 3) {
                 if (curr_step == 3) 
                     sprintf(tc.info, "modulating - msg shifted to f=0 and filtered and shifted to f");
-                tmp = tmp * cexp(I * (TWO_PI*10000) * t);
+                tmp = tmp * cexp(I * (TWO_PI*f) * t);
                 tmp = creal(tmp);  // xxx try adding cimag, and in antenna.c
             }
 
@@ -93,7 +104,7 @@ void *ssb_test(void *cx)
             if (curr_step >= 4) {
                 if (curr_step == 4) 
                     sprintf(tc.info, "demodulating - shift back to f=0");
-                tmp = tmp * cexp(-I * (TWO_PI*(10000+curr_freq_offset)) * t);
+                tmp = tmp * cexp(-I * (TWO_PI*(f+curr_freq_offset)) * t);
             }
 
             if (curr_step >= 5) {
@@ -112,7 +123,7 @@ void *ssb_test(void *cx)
 
             // save the real and complex results, to be used below
             // to plot fft and to output audio
-            yr[i] = creal(tmp) + cimag(tmp);
+            yr[i] = creal(tmp) + cimag(tmp);  // xxx try with and without cimag
             yc[i] = tmp;
 
             // advance time
@@ -146,7 +157,7 @@ void *ssb_test(void *cx)
     return NULL;
 }
 
-static void init_msg2(double *wav, int n)
+static void init_msg(double *wav, int n)
 {
     char *filename = "wav_files/blue_sky.wav";
     int ret, num_chan, num_items, sample_rate;

@@ -56,35 +56,38 @@ void *antenna_test(void *cx)
     antenna     = fftw_alloc_real(max_n);
     antenna_fft = fftw_alloc_complex(max_n);
 
-    // xxx
+    // open antenna data file for writing
     fp = fopen(ANTENNA_FILENAME, "w");
     if (fp == NULL) {
         FATAL("failed to create %s\n", ANTENNA_FILENAME);
     }
 
-    // xxx
+    // loop over duration over simulated antenna data to be created
     for (t = 0; t < T_MAX; t += DELTA_T) {
-        // xxx
-        antenna[n] = get_antenna(t);
-        n++;
+        // get simulaed antenna data for time 't'
+        antenna[n++] = get_antenna(t);
 
-        // xxx
+        // if have accumulaed T_FFT (0.1s) of antenna data then
+        // - compute and plot fft of the 0.1s of data
+        // - write the data fo the file
         if (n == max_n) {
             sprintf(tc.info, "Generating simulated antenna data: %0.1f secs", t);
+
             fft_fwd_r2c(antenna, antenna_fft, n);
-            // xxx cursor at end of plot?
-            plot_fft(0, antenna_fft, n, SAMPLE_RATE, true, 0, SAMPLE_RATE, "ANTENNA_FFT", 0, 0, 50, 50);
+            plot_fft(0,   antenna_fft, n, SAMPLE_RATE,   true, 0, SDL_PLOT_NO_CURSOR, "ANTENNA_FFT",   0, 0, 50, 50);
+
             fwrite(antenna, sizeof(double), n, fp);
+
             n = 0;
         }
     }
 
     sprintf(tc.info, "Done");
 
-    // xxxx
+    // close file
     fclose(fp);
 
-    // xxx 
+    // push SDL_EVENT_QUIT to cause the program to terminate
     sdl_push_event(&(sdl_event_t){SDL_EVENT_QUIT});
 
     return NULL;
@@ -133,31 +136,29 @@ static double get_station_signal(int id, double t)
     wc   = TWO_PI * fc;
     mod  = a->modulation;
 
-    if (bwi[id] == NULL) {
+    if (bwi[id] == NULL && (mod == USB || mod == LSB)) {
         bwi[id] = create_bw_low_pass_filter(20, SAMPLE_RATE, 2000);
         bwq[id] = create_bw_low_pass_filter(20, SAMPLE_RATE, 2000);
     }
 
     switch (mod) {
     case AM: {
+        // xxx comment
         signal = (1 + data) * (A * sin(wc * t));
         break; }
     case FM: {
+        // xxx comment
         const double f_delta = 100000;  // 100 KHz
         a->fm_data_integral += data * DELTA_T;
         signal = A * cos(wc * t + TWO_PI * f_delta * a->fm_data_integral);
         break; }
-    case USB: {
+    case USB: case LSB: {
+        // Weaver modulator
+        // https://en.wikipedia.org/wiki/Single-sideband_modulation
+        // https://panoradio-sdr.de/ssb-demodulation/
         complex tmp;
-        tmp = data * cexp(-I * (TWO_PI*2000) * t);
-        tmp = bw_low_pass(bwi[id], creal(tmp)) + 
-              bw_low_pass(bwq[id], cimag(tmp)) * I;
-        tmp = tmp * cexp(I * wc * t);
-        signal = A * creal(tmp);
-        break; }
-    case LSB: {
-        complex tmp;
-        tmp = data * cexp(I * (TWO_PI*2000) * t);  // xxx combine
+        double sign = (mod == USB ? -1 : 1);
+        tmp = data * cexp(sign * I * (TWO_PI*2000) * t);
         tmp = bw_low_pass(bwi[id], creal(tmp)) + 
               bw_low_pass(bwq[id], cimag(tmp)) * I;
         tmp = tmp * cexp(I * wc * t);
@@ -193,7 +194,7 @@ static void init_station_wav_file(int modulation, double carrier_freq, double ca
     memcpy(audio_data2, audio_data, num_items*sizeof(double));
     free(audio_data);
 
-    a->audio_n           = num_items;     // duration is length of wav file
+    a->audio_n           = num_items;
     a->audio_sample_rate = sample_rate;
     a->audio_data        = audio_data2;
     a->carrier_freq      = carrier_freq;

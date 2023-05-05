@@ -1,19 +1,25 @@
 #include "common.h"
 
 // xxx try bpf too
+// xxx 2nd plot cursor
 
-static void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate);
-static void init_using_white_noise(double *wn, int n);
-static void init_using_wav_file(double *wav, int n, char *filename);
+#define WAV_FILENAME "wav_files/super_critical.wav"
+//#define WAV_FILENAME "wav_files/blue_sky.wav"
+
+static void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate, double scale);
+static void init_using_white_noise(double *wn, int n, double scale);
+static void add_white_noise(double *data, int n, double scale);
+static void init_using_wav_file(double *wav, int n, char *filename, double scale);
 
 // -----------------  FILTER TEST  ------------------------
 
 void *filter_test(void *cx)
 {
-    #define SINE_WAVE   0
-    #define SINE_WAVES  1
-    #define WHITE_NOISE 2
-    #define WAV_FILE    3
+    #define SINE_WAVE                  0
+    #define SINE_WAVES                 1
+    #define WHITE_NOISE                2
+    #define WAV_FILE                   3
+    #define WAV_FILE_PLUS_WHITE_NOISE  4
 
     #define DEFAULT_CUTOFF 4000
     #define DEFAULT_ORDER  8
@@ -23,13 +29,13 @@ void *filter_test(void *cx)
     int        n           = .1 * sample_rate;    // .1 secs of data processed at a time
     int        total       = 0;
 
-    double     tc_mode = SINE_WAVES;
+    double     tc_mode = SINE_WAVE;
     double     tc_cutoff = DEFAULT_CUTOFF;
     double     tc_order  = DEFAULT_ORDER;
     double     tc_reset = 0;
 
-    double    *in_real         = fftw_alloc_real(max);
-    double    *in              = fftw_alloc_real(n);
+    double    *in_real_total   = fftw_alloc_real(max);
+    double    *in_real         = fftw_alloc_real(n);
     double    *in_filtered     = fftw_alloc_real(n);
     complex   *in_fft          = fftw_alloc_complex(n);
     complex   *in_filtered_fft = fftw_alloc_complex(n);
@@ -37,14 +43,14 @@ void *filter_test(void *cx)
     BWLowPass *bwlpf = NULL;
     int        bwlpf_cutoff = 0;
     int        bwlpf_order  = 0;
-    int        current_mode;
 
-    double     yv_max;
+    int        current_mode;
+    double     scale, scale_wn, yv_max;
 
     // init test controls
     tc.ctrl[0] = (struct test_ctrl_s)
-                 {"MODE", &tc_mode, SINE_WAVE, WAV_FILE, 1, 
-                  {"SINE_WAVE", "SINE_WAVES", "WHITE_NOISE", "WAV_FILE"}, "", 
+                 {"MODE", &tc_mode, SINE_WAVE, WAV_FILE_PLUS_WHITE_NOISE, 1, 
+                  {"SINE_WAVE", "SINE_WAVES", "WHITE_NOISE", "WAV_FILE", "WAV+NOISE"}, "", 
                   SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
     tc.ctrl[1] = (struct test_ctrl_s)
                  {"CUTOFF", &tc_cutoff, 100, 10000, 100,
@@ -64,24 +70,31 @@ void *filter_test(void *cx)
         // - sine waves
         // - white noise
         // - wav file
+        yv_max = 100;
+
         current_mode = tc_mode;
         switch (current_mode) {
         case SINE_WAVE:
-            init_using_sine_waves(in_real, max, 1000, 1000, 0, sample_rate);
-            yv_max = 1000;
+            scale = 0.05;
+            init_using_sine_waves(in_real_total, max, 1000, 1000, 0, sample_rate, scale);
             break;
         case SINE_WAVES:
-            init_using_sine_waves(in_real, max, 0, 10000, 500, sample_rate);
-            yv_max = 1000;
+            scale = 0.05;
+            init_using_sine_waves(in_real_total, max, 0, 10000, 500, sample_rate, scale);
             break;
         case WHITE_NOISE:
-            init_using_white_noise(in_real, max);
-            yv_max = 30;
+            scale = 0.5;
+            init_using_white_noise(in_real_total, max, scale);
             break;
         case WAV_FILE:
-            //init_using_wav_file(in_real, max, "wav_files/super_critical.wav");
-            init_using_wav_file(in_real, max, "wav_files/blue_sky.wav");
-            yv_max = 15;
+            scale = 4.0;
+            init_using_wav_file(in_real_total, max, WAV_FILENAME, scale);
+            break;
+        case WAV_FILE_PLUS_WHITE_NOISE:
+            scale = 4.0;
+            scale_wn = 0.1;
+            init_using_wav_file(in_real_total, max, WAV_FILENAME, scale);
+            add_white_noise(in_real_total, max, scale_wn);
             break;
         default:
             FATAL("invalid current_mode %d\n", current_mode);
@@ -108,19 +121,19 @@ void *filter_test(void *cx)
                 bwlpf_order  = tc_order;
             }
 
-            // copy .1 secs of data from 'in_real' to 'in'
+            // copy .1 secs of data from 'in_real_total' to 'in'
             for (int i = 0; i < n; i++) {
-                in[i] = in_real[(total+i)%max];
+                in_real[i] = in_real_total[(total+i)%max];
             }
             total += n;
 
             // apply low pass filter of 'in', output to 'in_filtered'
             for (int i = 0; i < n; i++) {
-                in_filtered[i] = bw_low_pass(bwlpf, in[i]);
+                in_filtered[i] = bw_low_pass(bwlpf, in_real[i]);
             }
 
-            // plot fft of 'in'
-            fft_fwd_r2c(in, in_fft, n);
+            // plot fft of 'in_real'
+            fft_fwd_r2c(in_real, in_fft, n);
             plot_fft(0, in_fft, n, sample_rate, true, yv_max, tc_cutoff, "FFT", 0, 0, 50, 25);
 
             // plot fft of 'in_filtered'
@@ -137,9 +150,11 @@ void *filter_test(void *cx)
 
 // -----------------  LOCAL ROUTINES  ---------------------
 
-static void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate)
+static void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate,
+                                  double scale)
 {
     int f;
+    int nr_sine_waves=0;
 
     zero_real(sw,n);
 
@@ -152,19 +167,35 @@ static void init_using_sine_waves(double *sw, int n, int freq_first, int freq_la
             sw[i] += (w ? sin(w * t) : 0.5);
             t += dt;
         }
+        nr_sine_waves++;
 
         if (freq_step == 0) break;
     }
-}
 
-static void init_using_white_noise(double *wn, int n)
-{
     for (int i = 0; i < n; i++) {
-        wn[i] = ((double)random() / RAND_MAX) - 0.5;
+        //sw[i] *= (scale / nr_sine_waves);
+        sw[i] *= scale;
     }
 }
 
-static void init_using_wav_file(double *wav, int n, char *filename)
+#define RAND_0_TO_1       ((double)random() / RAND_MAX)
+#define RAND_MINUS_1_TO_1 ((RAND_0_TO_1 - 0.5) * 2)
+
+static void init_using_white_noise(double *wn, int n, double scale)
+{
+    for (int i = 0; i < n; i++) {
+        wn[i] = scale * RAND_MINUS_1_TO_1;
+    }
+}
+
+static void add_white_noise(double *data, int n, double scale)
+{
+    for (int i = 0; i < n; i++) {
+        data[i] += scale * RAND_MINUS_1_TO_1;
+    }
+}
+
+static void init_using_wav_file(double *wav, int n, char *filename, double scale)
 {
     int ret, num_chan, num_items, sample_rate;
     double *data;
@@ -175,7 +206,7 @@ static void init_using_wav_file(double *wav, int n, char *filename)
     }
 
     for (int i = 0; i < n; i++) {
-        wav[i] = data[i%num_items];
+        wav[i] = scale * data[i%num_items];
     }
     
     free(data);

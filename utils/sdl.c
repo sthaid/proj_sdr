@@ -2365,6 +2365,15 @@ void sdl_plot(rect_t *pane,
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_min);
 
     // x axis: cursor
-    x_cursor = x_left + (x_span / xv_span) * (xv_cursor - xv_min);
-    sdl_render_point(pane, x_cursor, y_bottom, SDL_RED, 6);
+    if (xv_cursor != SDL_PLOT_NO_CURSOR) {
+        x_cursor = x_left + (x_span / xv_span) * (xv_cursor - xv_min);
+#if 1  // xxx which one?
+        sdl_render_point(pane, x_cursor, y_bottom, SDL_RED, 4);
+#else
+        sdl_render_line(pane, 
+                        x_cursor, y_top,
+                        x_cursor, y_bottom,
+                        SDL_RED);
+#endif
+    }
 }

@@ -1,15 +1,8 @@
 // xxx later
 // - comments and cleanup
+// - are _sync_cynchronize needed
 
-// xxx restore fm_receiver file
-
-// xxx are _sync_cynchronize needed
-
-// xxx check the fft code in ut_antenna.c
-
-// xxx AAA move all tests to other file, one for each
-
-// xxx
+// xxx first
 // - loc of red dot in plot_test
 
 #include "common.h"
@@ -353,8 +346,9 @@ void plot_clear(int idx)
 }
 
 void plot_real(int idx, 
-               double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax, 
-               char *title, char *x_units,
+               double *data, int n, 
+               double xvmin, double xvmax, double yvmin, double yvmax, 
+               double xv_cursor, char *title, char *x_units,
                int x_pos, int y_pos, int x_width, int y_height)
 {
     plots_t *p = &plots[idx];
@@ -365,25 +359,26 @@ void plot_real(int idx,
     for (int i = 0; i < n; i++) {
         p->data[i] = data[i];
     }
-    p->n       = n;
-    p->xv_min  = xvmin;
-    p->xv_max  = xvmax;
-    p->yv_min  = yvmin;
-    p->yv_max  = yvmax;
-    p->flags   = 0;
-    p->title   = title;
-    p->x_units = x_units;
-    p->x_pos   = x_pos;
-    p->y_pos   = y_pos;
-    p->x_width = x_width;
-    p->y_height= y_height;
+    p->n         = n;
+    p->xv_min    = xvmin;
+    p->xv_max    = xvmax;
+    p->yv_min    = yvmin;
+    p->yv_max    = yvmax;
+    p->xv_cursor = xv_cursor;
+    p->flags     = 0;
+    p->title     = title;
+    p->x_units   = x_units;
+    p->x_pos     = x_pos;
+    p->y_pos     = y_pos;
+    p->x_width   = x_width;
+    p->y_height  = y_height;
     pthread_mutex_unlock(&mutex);
 }
 
 // to auto scale use max=0
 void plot_fft(int idx, 
-              complex *fft, int n, double sample_rate, bool half_flag, double yv_max, double xv_cursor,
-              char *title,
+              complex *fft, int n, double sample_rate, 
+              bool half_flag, double yv_max, double xv_cursor, char *title,
               int x_pos, int y_pos, int x_width, int y_height)
 {
     plots_t *p = &plots[idx];
@@ -410,25 +405,27 @@ void plot_fft(int idx,
         normalize(p->data, n, 0, 1);
         yv_max = 1;
     }
-    p->n       = n;
-    p->xv_min  = (!half_flag ? -sample_rate/2 : 0);
-    p->xv_max  = sample_rate/2;
-    p->yv_min  = 0;
-    p->yv_max  = yv_max;
+    p->n         = n;
+    p->xv_min    = (!half_flag ? -sample_rate/2 : 0);
+    p->xv_max    = sample_rate/2;
+    p->yv_min    = 0;
+    p->yv_max    = yv_max;
     p->xv_cursor = xv_cursor;
-    p->flags   = SDL_PLOT_FLAG_BARS;
-    p->title   = title;
-    p->x_units = "HZ";
-    p->x_pos   = x_pos;
-    p->y_pos   = y_pos;
-    p->x_width = x_width;
-    p->y_height= y_height;
+    p->flags     = SDL_PLOT_FLAG_BARS;
+    p->title     = title;
+    p->x_units   = "HZ";
+    p->x_pos     = x_pos;
+    p->y_pos     = y_pos;
+    p->x_width   = x_width;
+    p->y_height  = y_height;
     pthread_mutex_unlock(&mutex);
 }
 
 // -----------------  AUDIO OUTPUT--------------------------
 
 #ifndef USE_PA
+
+xxx not used
 
 static void init_audio_out(void)
 {
@@ -445,6 +442,8 @@ void audio_out(double yo)
     static int max;
 
     double ma;
+
+    // xxx make this same as the other, or delete this
 
     ma = moving_avg(yo, MAX_MA, &ma_cx);
     out[max++] = yo - ma;
@@ -479,16 +478,27 @@ static void init_audio_out(void)
 
 void audio_out(double yo)
 {
-    #define MAX_MA 1000
-    static void *ma_cx;
-    double ma;
+    #define MAX_MA 10000  // xxx define needed
 
+    static void *ma_cx;
+    static int   cnt;
+
+    // wait for room in circular audio output data buffer
     while (ao_tail - ao_head == MAX_AO_BUFF) {
         usleep(1000);
     }
 
-    ma = moving_avg(yo, MAX_MA, &ma_cx);
-    ao_buff[ao_tail%MAX_AO_BUFF] = yo - ma;
+    // center yo at zero
+    yo -= moving_avg(yo, MAX_MA, &ma_cx);
+
+    // print audio out value once per sec
+    if (cnt++ == 22000) {  // xxx define needed
+        NOTICE("AUDIO %f\n", yo);
+        cnt = 0;
+    }
+
+    // add audio out data vale to the tail of the audio out buffer    
+    ao_buff[ao_tail%MAX_AO_BUFF] = yo;
     ao_tail++;
 }
 

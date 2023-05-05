@@ -58,12 +58,13 @@ void audio_out(double yo);
 
 void plot_clear(int idx);
 void plot_real(int idx,
-               double *data, int n, double xvmin, double xvmax, double yvmin, double yvmax,
-               char *title, char *x_units,
+               double *data, int n,
+               double xvmin, double xvmax, double yvmin, double yvmax,
+               double xv_cursor, char *title, char *x_units,
                int x_pos, int y_pos, int x_width, int y_height);
 void plot_fft(int idx,
-              complex *fft, int n, double sample_rate, bool half_flag, double yv_max, double xv_cursor,
-              char *title,
+              complex *fft, int n, double sample_rate,
+              bool half_flag, double yv_max, double xv_cursor, char *title,
               int x_pos, int y_pos, int x_width, int y_height);
 
 // xxx
