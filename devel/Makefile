@@ -13,6 +13,5 @@ run: ut
 	#./ut plot
 	#./ut antenna
 	#./ut filter
-	#./ut rx_sim
-	#./ut rx_sdr
 	./ut rx_sim
+	#./ut rx_sdr

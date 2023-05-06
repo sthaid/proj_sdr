@@ -33,6 +33,8 @@
 #define MHZ 1000000
 #define KHZ 1000
 
+#define NOC SDL_PLOT_NO_CURSOR
+
 #define ATTRIB_UNUSED __attribute__ ((unused))
 
 // ut.c
@@ -60,11 +62,11 @@ void plot_clear(int idx);
 void plot_real(int idx,
                double *data, int n,
                double xvmin, double xvmax, double yvmin, double yvmax,
-               double xv_cursor, char *title, char *x_units,
+               double xv_blue_cursor, double xv_red_cursor, char *title, char *x_units,
                int x_pos, int y_pos, int x_width, int y_height);
 void plot_fft(int idx,
               complex *fft, int n, double sample_rate,
-              bool half_flag, double yv_max, double xv_cursor, char *title,
+              bool half_flag, double yv_max, double xv_blue_cursor, double xv_red_cursor, char *title,
               int x_pos, int y_pos, int x_width, int y_height);
 
 // xxx

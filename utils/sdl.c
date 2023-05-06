@@ -2207,7 +2207,7 @@ void sdl_update_iyuv_texture(texture_t texture,
 void sdl_plot(rect_t *pane, 
               int x_pos, int y_pos, int x_width, int y_height,  // 0 - 100 percent
               double *data, int n, 
-              double xv_min, double xv_max, double xv_cursor,
+              double xv_min, double xv_max, double xv_blue_cursor, double xv_red_cursor,
               double yv_min, double yv_max,
               unsigned int flags,
               char *title, char *x_units)
@@ -2225,7 +2225,6 @@ void sdl_plot(rect_t *pane,
     int x_left, x_right, y_top, y_bottom;
     int x_span, y_span;
     int x_origin, y_origin;
-    int x_cursor;
 
     int x_title;
     int x, i;
@@ -2364,16 +2363,22 @@ void sdl_plot(rect_t *pane,
                       0, y_bottom-ROW2Y(1,PLOT_FONTSZ)+0, 
                       PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_min);
 
-    // x axis: cursor
-    if (xv_cursor != SDL_PLOT_NO_CURSOR) {
-        x_cursor = x_left + (x_span / xv_span) * (xv_cursor - xv_min);
+    // x axis: cursors
+    if (xv_blue_cursor != SDL_PLOT_NO_CURSOR) {
+        int x_cursor = x_left + (x_span / xv_span) * (xv_blue_cursor - xv_min);
+#if 1  // xxx which one?
+        sdl_render_point(pane, x_cursor, y_bottom, SDL_BLUE, 4);
+#else
+        sdl_render_line(pane, x_cursor, y_top, x_cursor, y_bottom, SDL_BLUE);
+#endif
+    }
+
+    if (xv_red_cursor != SDL_PLOT_NO_CURSOR) {
+        int x_cursor = x_left + (x_span / xv_span) * (xv_red_cursor - xv_min);
 #if 1  // xxx which one?
         sdl_render_point(pane, x_cursor, y_bottom, SDL_RED, 4);
 #else
-        sdl_render_line(pane, 
-                        x_cursor, y_top,
-                        x_cursor, y_bottom,
-                        SDL_RED);
+        sdl_render_line(pane, x_cursor, y_top, x_cursor, y_bottom, SDL_RED);
 #endif
     }
 }

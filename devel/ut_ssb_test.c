@@ -132,13 +132,17 @@ void *ssb_test(void *cx)
 
         // plot the complex fft
         fft_fwd_c2c(yc, fft, n);
-        plot_fft(0, fft, n, sample_rate, false, yv_max, 0, "FFT_COMPLEX", 0, 0, 100, 25);
+        plot_fft(0, fft, n, sample_rate, 
+                 false, yv_max, NOC, NOC, "FFT_COMPLEX", 
+                 0, 0, 100, 25);
 
         // plot the real fft, on steps where it is appropriate
         if (curr_step == 0 || curr_step == 3 || curr_step == 6) {
             zero_complex(fft,n);
             fft_fwd_r2c(yr, fft, n);
-            plot_fft(1, fft, n, sample_rate, false, yv_max, 0, "FFT_REAL", 0, 25, 100, 25);
+            plot_fft(1, fft, n, sample_rate, 
+                 false, yv_max, NOC, NOC, "FFT_REAL", 
+                 0, 25, 100, 25);
         } else {
             plot_clear(1);
         }

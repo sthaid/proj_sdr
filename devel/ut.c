@@ -29,7 +29,8 @@ typedef struct {
     int     n;
     double  xv_min;
     double  xv_max;
-    double  xv_cursor;
+    double  xv_blue_cursor;
+    double  xv_red_cursor;
     double  yv_min;
     double  yv_max;
     unsigned int flags;
@@ -186,7 +187,7 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                 sdl_plot(pane,
                          p->x_pos, p->y_pos, p->x_width, p->y_height,
                          p->data, p->n,
-                         p->xv_min, p->xv_max, p->xv_cursor,
+                         p->xv_min, p->xv_max, p->xv_blue_cursor, p->xv_red_cursor,
                          p->yv_min, p->yv_max,
                          p->flags, p->title, p->x_units);
             }
@@ -348,7 +349,7 @@ void plot_clear(int idx)
 void plot_real(int idx, 
                double *data, int n, 
                double xvmin, double xvmax, double yvmin, double yvmax, 
-               double xv_cursor, char *title, char *x_units,
+               double xv_blue_cursor, double xv_red_cursor, char *title, char *x_units,
                int x_pos, int y_pos, int x_width, int y_height)
 {
     plots_t *p = &plots[idx];
@@ -364,7 +365,8 @@ void plot_real(int idx,
     p->xv_max    = xvmax;
     p->yv_min    = yvmin;
     p->yv_max    = yvmax;
-    p->xv_cursor = xv_cursor;
+    p->xv_blue_cursor = xv_blue_cursor;
+    p->xv_red_cursor = xv_red_cursor;
     p->flags     = 0;
     p->title     = title;
     p->x_units   = x_units;
@@ -378,7 +380,7 @@ void plot_real(int idx,
 // to auto scale use max=0
 void plot_fft(int idx, 
               complex *fft, int n, double sample_rate, 
-              bool half_flag, double yv_max, double xv_cursor, char *title,
+              bool half_flag, double yv_max, double xv_blue_cursor, double xv_red_cursor, char *title,
               int x_pos, int y_pos, int x_width, int y_height)
 {
     plots_t *p = &plots[idx];
@@ -410,7 +412,8 @@ void plot_fft(int idx,
     p->xv_max    = sample_rate/2;
     p->yv_min    = 0;
     p->yv_max    = yv_max;
-    p->xv_cursor = xv_cursor;
+    p->xv_blue_cursor = xv_blue_cursor;
+    p->xv_red_cursor = xv_red_cursor;
     p->flags     = SDL_PLOT_FLAG_BARS;
     p->title     = title;
     p->x_units   = "HZ";

@@ -74,7 +74,9 @@ void *antenna_test(void *cx)
             sprintf(tc.info, "Generating simulated antenna data: %0.1f secs", t);
 
             fft_fwd_r2c(antenna, antenna_fft, n);
-            plot_fft(0,   antenna_fft, n, SAMPLE_RATE,   true, 0, SDL_PLOT_NO_CURSOR, "ANTENNA_FFT",   0, 0, 50, 50);
+            plot_fft(0, antenna_fft, n, SAMPLE_RATE,
+                     true, 0, NOC, NOC, "ANTENNA_FFT",   
+                     0, 0, 50, 50);
 
             fwrite(antenna, sizeof(double), n, fp);
 

@@ -262,11 +262,15 @@ static void *rx_fft_thread(void *cx)
         }
 
         fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
-        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, false, yv_max, tc_freq_offset, "DATA_FFT", 0, 0, 100, 30);
+        plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, 
+                 false, yv_max, tc_freq_offset, NOC, "DATA_FFT", 
+                 0, 0, 100, 30);
 
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, false, yv_max, 0, "DATA_LPF_FFT", 0, 30, 100, 30);
+        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, 
+                 false, yv_max, NOC, NOC, "DATA_LPF_FFT", 
+                 0, 30, 100, 30);
 
         // xxx add audio fft
 
