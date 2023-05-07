@@ -66,7 +66,7 @@ void plot_real(int idx,
                int x_pos, int y_pos, int x_width, int y_height);
 void plot_fft(int idx,
               complex *fft, int n, double sample_rate,
-              bool half_flag, double yv_max, double xv_blue_cursor, double xv_red_cursor, char *title,
+              double xv_min, double xv_max, double yv_max, double xv_blue_cursor, double xv_red_cursor, char *title,
               int x_pos, int y_pos, int x_width, int y_height);
 
 // xxx

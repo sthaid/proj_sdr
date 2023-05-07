@@ -188,13 +188,13 @@ void *filter_test(void *cx)
             // plot fft of 'in_real'
             fft_fwd_r2c(in_real, in_fft, n);
             plot_fft(0, in_fft, n, sample_rate, 
-                     true, yv_max, NOC, NOC, "FFT",
+                     0, sample_rate/2, yv_max, NOC, NOC, "FFT",
                      0, 0, 50, 25);
 
             // plot fft of 'in_filtered'
             fft_fwd_r2c(in_filtered, in_filtered_fft, n);
             plot_fft(1, in_filtered_fft, n, sample_rate, 
-                     true, yv_max, xv_blue_cursor, xv_red_cursor, "FFT",
+                     0, sample_rate/2, yv_max, xv_blue_cursor, xv_red_cursor, "FFT",
                      0, 25, 50, 25);
 
             // play the filtered audio

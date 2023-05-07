@@ -75,7 +75,7 @@ void *antenna_test(void *cx)
 
             fft_fwd_r2c(antenna, antenna_fft, n);
             plot_fft(0, antenna_fft, n, SAMPLE_RATE,
-                     true, 0, NOC, NOC, "ANTENNA_FFT",   
+                     0, SAMPLE_RATE/2, 0, NOC, NOC, "ANTENNA_FFT",   
                      0, 0, 50, 50);
 
             fwrite(antenna, sizeof(double), n, fp);

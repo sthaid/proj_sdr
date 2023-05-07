@@ -116,7 +116,7 @@ void *rx_test(void *cx)
 
         if (tc_freq_offset) {
             double w = TWO_PI * tc_freq_offset;
-            data = data_orig * cexp(+I * w * t);
+            data = data_orig * cexp(-I * w * t);
         } else {
             data = data_orig;
         }
@@ -126,6 +126,7 @@ void *rx_test(void *cx)
 
         rx_fft_add_data(data_orig, data_lpf);
 
+// xxx single demod routine for all of these
         switch ((int)tc_demod) {
         case DEMOD_AM:
             rx_demod_am(data_lpf);
@@ -244,15 +245,16 @@ static void rx_fft_add_data(complex data, complex data_lpf)
 
 static void *rx_fft_thread(void *cx)
 {
-    double               yv_max;
+    double               yv_max1, yv_max2;
     unsigned long        tnow;
     static unsigned long tlast;
 
     if (strcmp(test_name, "rx_sim") == 0) {
-        yv_max = 150000;
+        yv_max1 = 150000;
     } else {
-        yv_max = 4000;
+        yv_max1 = 4000;
     }
+    yv_max2 = yv_max1 / 5;
 
     while (true) {
         tnow = microsec_timer();
@@ -263,14 +265,20 @@ static void *rx_fft_thread(void *cx)
 
         fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
         plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, 
-                 false, yv_max, tc_freq_offset, NOC, "DATA_FFT", 
+                 -SAMPLE_RATE/2, SAMPLE_RATE/2, yv_max1, tc_freq_offset, NOC, "DATA_FFT", 
                  0, 0, 100, 30);
 
         // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
+#if 0
         plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, 
-                 false, yv_max, NOC, NOC, "DATA_LPF_FFT", 
+                 -SAMPLE_RATE/2, SAMPLE_RATE/2, yv_max2, NOC, NOC, "DATA_LPF_FFT", 
                  0, 30, 100, 30);
+#else
+        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, 
+                 -10*KHZ, 10*KHZ, yv_max2, 0, NOC, "DATA_LPF_FFT", 
+                 0, 30, 100, 30);
+#endif
 
         // xxx add audio fft
 
@@ -289,8 +297,8 @@ static void rx_demod_am(complex data_lpf)
     static int    cnt;
     static void *ma_cx;
 
-    yo = creal(data_lpf) + cimag(data_lpf);  // xxx or cabs
-    //yo = cabs(data_lpf);
+    //yo = creal(data_lpf) + cimag(data_lpf);  // xxx or cabs
+    yo = cabs(data_lpf);
 
     yo = moving_avg(yo, 1000, &ma_cx); 
     // xxx zero adjust ?
@@ -308,8 +316,11 @@ static void rx_demod_ssb(complex data_lpf)
     static int    cnt;
     static void  *ma_cx;
 
-    yo = creal(data_lpf) + cimag(data_lpf);  // xxx or cabs
-    //yo = cabs(data_lpf);
+    if (tc_k1 == 0) {
+        yo = creal(data_lpf) + cimag(data_lpf);
+    } else {
+        yo = cabs(data_lpf);
+    }
 
     yo = moving_avg(yo, 1000, &ma_cx); 
     // xxx zero adjust ?

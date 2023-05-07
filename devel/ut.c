@@ -378,38 +378,53 @@ void plot_real(int idx,
 }
 
 // to auto scale use max=0
+// xv_min to xv_max must be in range -sample_rate/2 to sample_rate/2
 void plot_fft(int idx, 
               complex *fft, int n, double sample_rate, 
-              bool half_flag, double yv_max, double xv_blue_cursor, double xv_red_cursor, char *title,
+              double xv_min, double xv_max, double yv_max, double xv_blue_cursor, double xv_red_cursor, char *title,
               int x_pos, int y_pos, int x_width, int y_height)
 {
     plots_t *p = &plots[idx];
+    int i, nn, jj;
+
+    if (xv_min < -sample_rate/2 || xv_max > sample_rate/2) {
+        FATAL("sample_rate=%f xvmin=%f xv_max=%f\n", sample_rate, xv_min, xv_max);
+    }
+
+    nn = nearbyint(n * ((xv_max - xv_min) / sample_rate));
+    if (nn <= 0 || nn > n) {
+        FATAL("nn=%d sample_rate=%f xvmin=%f xv_max=%f\n", nn, sample_rate, xv_min, xv_max);
+    }
+
+    if (xv_min >= 0) {
+        jj = nearbyint(xv_min * (n / sample_rate));
+    } else {
+        jj = nearbyint(n + xv_min * (n / sample_rate));
+        if (jj == n) jj = n-1;
+        if (jj < n/2) jj = n/2;
+    }
+    if (jj < 0 || jj >= n) {
+        FATAL("jj=%d sample_rate=%f xvmin=%f xv_max=%f\n", jj, sample_rate, xv_min, xv_max);
+    }
 
     pthread_mutex_lock(&mutex);
+
     free(p->data);
-    p->data = malloc(n*sizeof(double));
-    if (!half_flag) {
-        int j=0;
-        for (int i = n/2; i < n; i++) {
-            p->data[j++] = cabs(fft[i]);
-        }
-        for (int i = 0; i < n/2; i++) {
-            p->data[j++] = cabs(fft[i]);
-        }
-        if (j != n) FATAL("n=%d j=%d\n", n, j);
-    } else {
-        n /= 2;
-        for (int i = 0; i < n; i++) {
-            p->data[i] = cabs(fft[i]);
-        }
+    p->data = malloc(nn*sizeof(double));
+
+    for (i = 0; i < nn; i++) {
+        p->data[i] = cabs(fft[jj++]);
+        if (jj == n) jj = 0;
     }
+
     if (yv_max == 0) {
-        normalize(p->data, n, 0, 1);
+        normalize(p->data, nn, 0, 1);
         yv_max = 1;
     }
-    p->n         = n;
-    p->xv_min    = (!half_flag ? -sample_rate/2 : 0);
-    p->xv_max    = sample_rate/2;
+
+    p->n         = nn;
+    p->xv_min    = xv_min;
+    p->xv_max    = xv_max;
     p->yv_min    = 0;
     p->yv_max    = yv_max;
     p->xv_blue_cursor = xv_blue_cursor;
