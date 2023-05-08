@@ -25,6 +25,8 @@
 #define SAMPLE_RATE 2400000   // 2.4 MS/sec
 #define DELTA_T     (1. / SAMPLE_RATE)
 
+#define AUDIO_SAMPLE_RATE 22000
+
 #define CTRL SDL_EVENT_KEY_CTRL
 #define ALT  SDL_EVENT_KEY_ALT
 

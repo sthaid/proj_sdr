@@ -510,7 +510,7 @@ void audio_out(double yo)
     yo -= moving_avg(yo, MAX_MA, &ma_cx);
 
     // print audio out value once per sec
-    if (cnt++ == 22000) {  // xxx define needed
+    if (cnt++ == AUDIO_SAMPLE_RATE) {
         NOTICE("AUDIO %f\n", yo);
         cnt = 0;
     }
@@ -524,7 +524,7 @@ static void *pa_play_thread(void*cx)
 {
     int ret;
     int num_chan = 1;
-    int sample_rate = 22000;  //xxx define
+    int sample_rate = AUDIO_SAMPLE_RATE;
 
     ret = pa_play2(DEFAULT_OUTPUT_DEVICE, num_chan, sample_rate, PA_FLOAT32, pa_play_cb, NULL);
     if (ret != 0) {

@@ -20,12 +20,13 @@
 
 // typedefs
 
-// xxx zoom the plot ffts
 typedef struct {
     complex *data;
     complex *data_fft;
     complex *data_lpf;
     complex *data_lpf_fft;
+    double  *data_demod;
+    complex *data_demod_fft;
     int      n;
 } fft_t;
 
@@ -39,26 +40,27 @@ static fft_t         fft;
 
 static double        tc_freq;
 static double        tc_freq_offset;
-static double        tc_demod = DEMOD_AM;
-static double        tc_lpf_cutoff;
+static double        tc_demod;
 static double        tc_volume;
-static double        tc_reset;
+static double        tc_lpf_am;
+static double        tc_lpf_fm;
+static double        tc_lpf_ssb;
 static double        tc_k1;
-static double        tc_k2;
-static double        tc_k3;
+//static double        tc_k2;
+//static double        tc_k3;
 
 // prototypes
 
+//xxx names
+static complex freq_shift(complex x, double f_shift, double t);
+static complex lpf(complex x, double f_cut);
+static void downsample_and_audio_out(double x);
+
 static void rx_tc_init(void);
-static void rx_tc_reset(void);
 
-static void rx_fft_init(void);
-static void rx_fft_add_data(complex data, complex data_lpf);
-static void *rx_fft_thread(void *cx);
-
-static void rx_demod_am(complex data_lpf);
-static void rx_demod_fm(complex data_lpf);
-static void rx_demod_ssb(complex data_lpf);
+static void rx_display_init(void);
+static void rx_display_add_fft(complex data, complex data_lpf, double data_demod);
+static void *rx_display_thread(void *cx);
 
 static void rx_sdr_init(void);
 static void rx_sim_init(void);
@@ -67,91 +69,120 @@ static void rx_sim_init(void);
 
 void *rx_test(void *cx)
 {
-    pthread_t  tid;
-    BWLowPass *bwi=NULL, *bwq=NULL;
-    complex    data_orig, data, data_lpf;
+    complex    data, data_freq_shift, data_lpf;
+    double     data_demod;
+    complex    tmp, prev=0, product;
     double     t=0;
-    int cnt=0;
-    double curr_lpf_cutoff = 0;
-    int curr_tc_demod = -1;
+    bool       sim_mode = (strcmp(test_name, "rx_sim") == 0);
 
     rx_tc_init();
-    rx_fft_init();
+    rx_display_init();
 
-    if (strcmp(test_name, "rx_sim") == 0) {
+    tc_freq_offset = 0;
+    tc_volume      = .1;
+    tc_lpf_am      = 4000;
+    tc_lpf_fm      = 60000;
+    tc_lpf_ssb     = 2000;
+
+    if (sim_mode) {
+        tc_demod = DEMOD_FM;
+        tc_freq = 700 * KHZ;
+        //tc_demod = DEMOD_AM;
+        //tc_freq = 500 * KHZ;
         rx_sim_init();
     } else {
+        tc_demod = DEMOD_FM;
+        tc_freq = 100.7 * MHZ;
         rx_sdr_init();
     }
 
-    pthread_create(&tid, NULL, rx_fft_thread, NULL);
-
     while (true) {
-        if (tc_reset || tc_demod != curr_tc_demod) {
-            rx_tc_reset();
-            curr_tc_demod = tc_demod;
-        }
-
-        if (curr_lpf_cutoff != tc_lpf_cutoff) {
-            if (bwi) free_bw_low_pass(bwi);
-            if (bwq) free_bw_low_pass(bwq);
-            bwi = create_bw_low_pass_filter(20, SAMPLE_RATE, tc_lpf_cutoff); 
-            bwq = create_bw_low_pass_filter(20, SAMPLE_RATE, tc_lpf_cutoff);
-            curr_lpf_cutoff = tc_lpf_cutoff;
-        }
-
-        if (cnt++ >= SAMPLE_RATE/10) {
-            sprintf(tc.info, "FREQ = %0.3f MHz  DEMOD = %s",
-                    (tc_freq + tc_freq_offset) / MHZ,
-                    DEMOD_STR(tc_demod));
-            cnt = 0;
-        }
-
         if (Head == Tail) {
             usleep(1000);
             continue;
         }
 
-        data_orig = Data[Head % MAX_DATA];
+        data = Data[Head % MAX_DATA];
 
-        if (tc_freq_offset) {
-            double w = TWO_PI * tc_freq_offset;
-            data = data_orig * cexp(-I * w * t);
-        } else {
-            data = data_orig;
-        }
+        data_freq_shift = freq_shift(data, -tc_freq_offset, t);
 
-        data_lpf = bw_low_pass(bwi, creal(data)) +
-                   bw_low_pass(bwq, cimag(data)) * I;
-
-        rx_fft_add_data(data_orig, data_lpf);
-
-// xxx single demod routine for all of these
         switch ((int)tc_demod) {
-        case DEMOD_AM:
-            rx_demod_am(data_lpf);
-            break;
-        case DEMOD_FM:
-            rx_demod_fm(data_lpf);
-            break;
-        case DEMOD_USB:
-            data_lpf = data_lpf * cexp(I * (TWO_PI*2000) * t);
-            rx_demod_ssb(data_lpf); // xxx make sep routines for usb and lsb
-            break;
-        case DEMOD_LSB:
-            data_lpf = data_lpf * cexp(-I * (TWO_PI*2000) * t);
-            rx_demod_ssb(data_lpf);
-            break;
+        case DEMOD_AM: {
+            data_lpf = lpf(data_freq_shift, tc_lpf_am);
+            data_demod = cabs(data_lpf);
+            data_demod *= 10;  // xxx
+            break; }
+        case DEMOD_USB: {
+            data_lpf = lpf(data_freq_shift, tc_lpf_ssb);
+            tmp = freq_shift(data_lpf, 2000, t);
+            data_demod = creal(tmp) + cimag(tmp);  // xxx or cabs?
+            break; }
+        case DEMOD_LSB: {
+            data_lpf = lpf(data_freq_shift, tc_lpf_ssb);
+            tmp = freq_shift(data_lpf, -2000, t);
+            data_demod = creal(tmp) + cimag(tmp);  // xxx or cabs?
+            break; }
+        case DEMOD_FM: {
+            data_lpf = lpf(data_freq_shift, tc_lpf_fm);
+            product = data_lpf * conj(prev);
+            prev = data_lpf;
+            data_demod = atan2(cimag(product), creal(product));
+            data_demod *= 10;  // xxx
+            break; }
         default:
             FATAL("invalid demod %f\n", tc_demod);
             break;
         }
+
+        downsample_and_audio_out(data_demod);
+
+        //xxx 
+        rx_display_add_fft(data, data_lpf, data_demod);
 
         Head++;
         t += DELTA_T;
     }
 
     return NULL;
+}
+
+static complex freq_shift(complex x, double f_shift, double t)
+{
+    if (f_shift == 0) {
+        return x;
+    }
+
+    return x * cexp(I * (TWO_PI * f_shift) * t);
+}
+
+static complex lpf(complex x, double f_cut)
+{
+    static double curr_f_cut;
+    static BWLowPass *bwi, *bwq;
+
+    if (f_cut != curr_f_cut) {
+        curr_f_cut = f_cut;
+        if (bwi) free_bw_low_pass(bwi);
+        if (bwq) free_bw_low_pass(bwq);
+        bwi = create_bw_low_pass_filter(20, SAMPLE_RATE, f_cut); 
+        bwq = create_bw_low_pass_filter(20, SAMPLE_RATE, f_cut);
+    }
+
+    return bw_low_pass(bwi, creal(x)) + bw_low_pass(bwq, cimag(x)) * I;
+}
+
+static void downsample_and_audio_out(double x)
+{
+    static int cnt;
+    static void *ma_cx;
+    double ma;
+
+    ma = moving_avg(x, 1000, &ma_cx); 
+
+    if (cnt++ == (SAMPLE_RATE / AUDIO_SAMPLE_RATE)) {
+        audio_out(ma * tc_volume);  // xxx auto volume scale
+        cnt = 0;
+    }
 }
 
 // -----------------  RX TEST CONTROL  ---------------------
@@ -167,26 +198,31 @@ static void rx_tc_init(void)
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
     tc.ctrl[2] = (struct test_ctrl_s)
-                 {"LPF_CUT", &tc_lpf_cutoff, 1000, 500000, 1000,
-                  {}, "HZ", 
-                  SDL_EVENT_KEY_LEFT_ARROW+ALT, SDL_EVENT_KEY_RIGHT_ARROW+ALT};
-    tc.ctrl[3] = (struct test_ctrl_s)
-                 {"VOLUME", &tc_volume, 0.1, 10, 0.1,
+                 {"VOLUME", &tc_volume, 0.01, 2.00, 0.01,
                   {}, NULL,
                   SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
-    tc.ctrl[4] = (struct test_ctrl_s)
+    tc.ctrl[3] = (struct test_ctrl_s)
                  {"DEMOD", &tc_demod, 0, 3, 1,
                   {"AM", "USB", "LSB", "FM"}, NULL, 
                   '<', '>'};
+    tc.ctrl[4] = (struct test_ctrl_s)
+                 {"LPF_AM", &tc_lpf_am, 1000, 500000, 100,
+                  {}, "HZ", 
+                  '1', '2'};
     tc.ctrl[5] = (struct test_ctrl_s)
-                 {"RESET", &tc_reset, 0, 1, 1,
-                  {"", ""}, NULL, 
-                  SDL_EVENT_NONE, 'r'};
+                 {"LPF_FM", &tc_lpf_fm, 1000, 500000, 100,
+                  {}, "HZ", 
+                  '3', '4'};
+    tc.ctrl[6] = (struct test_ctrl_s)
+                 {"LPF_SSB", &tc_lpf_ssb, 1000, 500000, 100,
+                  {}, "HZ", 
+                  '5', '6'};
 
     tc.ctrl[7] = (struct test_ctrl_s)
                  {"K1", &tc_k1, 0, 1, .1,
                   {}, NULL,
-                  '1', '2'};
+                  'f', 'F'};
+#if 0
     tc.ctrl[8] = (struct test_ctrl_s)
                  {"K2", &tc_k2, 0, 1, .1,
                   {}, NULL,
@@ -195,90 +231,80 @@ static void rx_tc_init(void)
                  {"K3", &tc_k3, 0, 1, .1,
                   {}, NULL,
                   '5', '6'};
-
-    rx_tc_reset();
+#endif
 }
 
-static void rx_tc_reset(void)
-{
-    if (strcmp(test_name, "rx_sdr") == 0) {
-        tc_freq = (tc_demod == DEMOD_AM ? 1030*KHZ : 100.7*MHZ);
-    } else {
-        tc_freq = (tc_demod == DEMOD_AM  ? 500*KHZ :
-                   tc_demod == DEMOD_FM  ? 700*KHZ :
-                   tc_demod == DEMOD_USB ? 580*KHZ :
-                   tc_demod == DEMOD_LSB ? 620*KHZ :
-                                           500*KHZ);
-    }
-    tc_freq_offset  = 0;
-    tc_lpf_cutoff   = (tc_demod == DEMOD_AM ? 4000  :
-                       tc_demod == DEMOD_FM ? 60000 :
-                                              2000);  // usb,lsb
-    tc_volume       = 1;
-    tc_reset        = 0;
-    tc_k1           = 0;  // not used
-    tc_k2           = 0;  // not used
-    tc_k3           = 0;  // not used
-}
+// -----------------  RX DISPLAY  --------------------------
 
-// -----------------  RX FFT  ------------------------------
+// xxx display section
 
 #define FFT_N           240000
 #define FFT_INTERVAL_US 100000   // .1 sec
 
-static void rx_fft_init(void)
+static void rx_display_init(void)
 {
-    fft.data         = fftw_alloc_complex(FFT_N);
-    fft.data_fft     = fftw_alloc_complex(FFT_N);
-    fft.data_lpf     = fftw_alloc_complex(FFT_N);
-    fft.data_lpf_fft = fftw_alloc_complex(FFT_N);
+    pthread_t tid;
+
+    fft.data           = fftw_alloc_complex(FFT_N);
+    fft.data_fft       = fftw_alloc_complex(FFT_N);
+    fft.data_lpf       = fftw_alloc_complex(FFT_N);
+    fft.data_lpf_fft   = fftw_alloc_complex(FFT_N);
+    fft.data_demod     = fftw_alloc_real(FFT_N);
+    fft.data_demod_fft = fftw_alloc_complex(FFT_N);
+
+    pthread_create(&tid, NULL, rx_display_thread, NULL);
 }
 
-static void rx_fft_add_data(complex data, complex data_lpf)
+static void rx_display_add_fft(complex data, complex data_lpf, double data_demod)
 {
     if (fft.n < FFT_N) {
         fft.data[fft.n] = data;
         fft.data_lpf[fft.n] = data_lpf;
+        fft.data_demod[fft.n] = data_demod;
         fft.n++;
     }
 }
 
-static void *rx_fft_thread(void *cx)
+static void *rx_display_thread(void *cx)
 {
-    double               yv_max1, yv_max2;
+    double               yv_max0, yv_max1, yv_max2;
+    double               range0, range1, range2;
     unsigned long        tnow;
     static unsigned long tlast;
 
-    if (strcmp(test_name, "rx_sim") == 0) {
-        yv_max1 = 150000;
-    } else {
-        yv_max1 = 4000;
-    }
-    yv_max2 = yv_max1 / 5;
-
     while (true) {
+        yv_max0 = 150000;
+        yv_max1 =  (tc_demod == DEMOD_FM ? 200000 : 30000);
+        yv_max2 =  30000;
+
+        range0 = SAMPLE_RATE/2;
+        range1 = (tc_demod == DEMOD_FM ? 100*KHZ : 10*KHZ);
+        range2 = 10*KHZ;
+
         tnow = microsec_timer();
         if (fft.n != FFT_N || tnow-tlast < FFT_INTERVAL_US) {
             usleep(10000);
             continue;
         }
 
+        sprintf(tc.info, "FREQ = %0.3f MHz  DEMOD = %s",
+                (tc_freq + tc_freq_offset) / MHZ,
+                DEMOD_STR(tc_demod));
+
         fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
         plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, 
-                 -SAMPLE_RATE/2, SAMPLE_RATE/2, yv_max1, tc_freq_offset, NOC, "DATA_FFT", 
-                 0, 0, 100, 30);
+                 -range0, range0, yv_max0, tc_freq_offset, NOC, "DATA_FFT", 
+                 0, 0, 100, 25);
 
-        // xxx expand the plot?
         fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-#if 0
         plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, 
-                 -SAMPLE_RATE/2, SAMPLE_RATE/2, yv_max2, NOC, NOC, "DATA_LPF_FFT", 
-                 0, 30, 100, 30);
-#else
-        plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, 
-                 -10*KHZ, 10*KHZ, yv_max2, 0, NOC, "DATA_LPF_FFT", 
-                 0, 30, 100, 30);
-#endif
+                 -range1, range1, yv_max1, 0, NOC, "DATA_LPF_FFT", 
+                 0, 25, 100, 25);
+
+        fft_fwd_r2c(fft.data_demod, fft.data_demod_fft, fft.n);
+        plot_fft(2, fft.data_demod_fft, fft.n, SAMPLE_RATE, 
+                 -range2, range2, yv_max2, 0, NOC, "DATA_DEMOD_FFT", 
+                 0, 50, 100, 25);
 
         // xxx add audio fft
 
@@ -287,71 +313,6 @@ static void *rx_fft_thread(void *cx)
     }
 
     return NULL;
-}
-
-// -----------------  RX DEMODULATORS  ---------------------
-
-static void rx_demod_am(complex data_lpf)
-{
-    double        yo;
-    static int    cnt;
-    static void *ma_cx;
-
-    //yo = creal(data_lpf) + cimag(data_lpf);  // xxx or cabs
-    yo = cabs(data_lpf);
-
-    yo = moving_avg(yo, 1000, &ma_cx); 
-    // xxx zero adjust ?
-
-    // xxx why 0.97
-    if (cnt++ == (int)(0.95 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo * tc_volume);  // xxx auto scale
-        cnt = 0;
-    }
-}
-
-static void rx_demod_ssb(complex data_lpf)
-{
-    double        yo;
-    static int    cnt;
-    static void  *ma_cx;
-
-    if (tc_k1 == 0) {
-        yo = creal(data_lpf) + cimag(data_lpf);
-    } else {
-        yo = cabs(data_lpf);
-    }
-
-    yo = moving_avg(yo, 1000, &ma_cx); 
-    // xxx zero adjust ?
-    // xxx better way to downsample?
-    
-    // xxx why 0.97
-    if (cnt++ == (int)(0.95 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo * tc_volume);  // xxx auto scale
-        cnt = 0;
-    }
-}
-
-static void rx_demod_fm(complex data_lpf)
-{
-    static complex prev;
-    double yo;
-    static int cnt;
-    complex product;
-    static void *ma_cx=NULL;
-
-    product = data_lpf * conj(prev);
-    yo = atan2(cimag(product), creal(product));
-    prev = data_lpf;
-
-    yo = moving_avg(yo, 110, &ma_cx);
-
-    // xxx why 0.97
-    if (cnt++ == (int)(0.97 * SAMPLE_RATE / 22000)) {  // xxx 22000 is the aplay rate
-        audio_out(yo*tc_volume/10.);
-        cnt = 0;
-    }
 }
 
 // -----------------  RX SIMULATOR  ------------------------
