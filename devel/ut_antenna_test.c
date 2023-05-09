@@ -8,7 +8,8 @@
 #define T_FFT 0.1  // duration of each fft
 
 #define MAX_STATION 20
-#define F_LPF     4000
+
+#define F_LPF  (modulation == FM ? 20000 : 4000)
 
 #define AM 0
 #define FM 1
@@ -119,7 +120,7 @@ static void init_antenna(void)
     init_station_wav_file(   AM,  540000, 1, "wav_files/proud_mary.wav");
     init_station_wav_file(   USB, 580000, 4, "wav_files/blue_sky.wav");
     init_station_wav_file(   LSB, 620000, 4, "wav_files/blue_sky.wav");
-    init_station_wav_file(   FM,  700000, 15, "wav_files/not_fade_away.wav");
+    init_station_wav_file(   FM,  800000, 15, "wav_files/not_fade_away.wav");
 }
 
 static double get_station_signal(int id, double t)
@@ -150,7 +151,7 @@ static double get_station_signal(int id, double t)
         break; }
     case FM: {
         // xxx comment
-        const double f_delta = 100000;  // 100 KHz
+        const double f_delta = 100*KHZ;
         a->fm_data_integral += data * DELTA_T;
         signal = A * cos(wc * t + TWO_PI * f_delta * a->fm_data_integral);
         break; }
