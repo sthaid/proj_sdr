@@ -30,6 +30,8 @@ static unsigned long Head;
 static unsigned long Tail;
 static complex       Data[MAX_DATA];
 
+static bool          sim_mode;
+
 static double        tc_freq;
 static double        tc_freq_offset;
 static double        tc_demod;
@@ -65,8 +67,9 @@ void *rx_test(void *cx)
     double     data_demod;
     complex    tmp, prev=0, product;
     double     t=0;
-    bool       sim_mode = (strcmp(test_name, "rx_sim") == 0);
     double     volume_scale[] = { [DEMOD_AM]=5, [DEMOD_USB]=1, [DEMOD_LSB]=1, [DEMOD_FM]=10 };
+
+    sim_mode = (strcmp(test_name, "rx_sim") == 0);
 
     tc_init();
     display_init();
@@ -74,7 +77,7 @@ void *rx_test(void *cx)
     tc_freq_offset = 0;
     tc_volume      = .1;
     tc_lpf_am      = 4000;
-    tc_lpf_fm      = 60000;
+    tc_lpf_fm      = 70000;
     tc_lpf_ssb     = 2000;
 
     if (sim_mode) {
@@ -83,7 +86,7 @@ void *rx_test(void *cx)
         sim_test_init();
     } else {
         tc_demod = DEMOD_FM;
-        tc_freq = 100.7 * MHZ;
+        tc_freq = 103.3 * MHZ;
         sdr_test_init();
     }
 
@@ -177,7 +180,7 @@ static void downsample_and_audio_out(double x)
     static void *ma_cx;
     double ma;
 
-    #define NUM_DS (SAMPLE_RATE / AUDIO_SAMPLE_RATE)
+    #define NUM_DS ((int)(0.97 * SAMPLE_RATE / AUDIO_SAMPLE_RATE))
 
     ma = moving_avg(x, NUM_DS, &ma_cx); 
 
@@ -287,14 +290,16 @@ static void *display_thread(void *cx)
 
         // if fft data set is available then calculate and plot the ffts
         if (fft.n == FFT_N) {
-            yv_max = 150000;
+            yv_max = (sim_mode ? 150000 
+                               : 4000);
             range  = SAMPLE_RATE/2;
             fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
             plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, 
                      -range, range, yv_max, tc_freq_offset, NOC, "DATA_FFT", 
                      0, 0, 100, 25);
 
-            yv_max =  (tc_demod == DEMOD_FM ? 200000 : 30000);
+            yv_max =  (sim_mode ? (tc_demod == DEMOD_FM ? 200000 : 30000) 
+                                : (4000));
             range  = (tc_demod == DEMOD_FM ? 100*KHZ : 10*KHZ);
             fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
             plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, 
