@@ -1,5 +1,10 @@
 #include "common.h"
 
+// xxx
+// - print max audio
+// - don't fft while changing freq
+// - print full freq
+
 //
 // defines
 //
@@ -32,7 +37,7 @@ static complex       Data[MAX_DATA];
 
 static bool          sim_mode;
 
-static double        tc_freq;
+static double        tc_freq_ctr;
 static double        tc_freq_offset;
 static double        tc_demod;
 static double        tc_volume;
@@ -82,11 +87,11 @@ void *rx_test(void *cx)
 
     if (sim_mode) {
         tc_demod = DEMOD_FM;
-        tc_freq = 800 * KHZ;
+        tc_freq_ctr = 800 * KHZ;
         sim_test_init();
     } else {
         tc_demod = DEMOD_FM;
-        tc_freq = 103.3 * MHZ;
+        tc_freq_ctr = 103.3 * MHZ;
         sdr_test_init();
     }
 
@@ -193,7 +198,7 @@ static void downsample_and_audio_out(double x)
 static void tc_init(void)
 {
     tc.ctrl[0] = (struct test_ctrl_s)
-                 {"F", &tc_freq, 0, 200*MHZ, 10*KHZ,   // 0 to 200 MHx
+                 {"F", &tc_freq_ctr, 0, 200*MHZ, 10*KHZ,   // 0 to 200 MHx
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW, SDL_EVENT_KEY_RIGHT_ARROW};
     tc.ctrl[1] = (struct test_ctrl_s)
@@ -284,8 +289,8 @@ static void *display_thread(void *cx)
 
     while (true) {
         // display info
-        sprintf(tc.info, "FREQ = %0.3f MHz  DEMOD = %s",
-                (tc_freq + tc_freq_offset) / MHZ,
+        sprintf(tc.info, "FREQ = %0.6f MHz  DEMOD = %s",
+                (tc_freq_ctr + tc_freq_offset) / MHZ,
                 DEMOD_STR(tc_demod));
 
         // if fft data set is available then calculate and plot the ffts
@@ -374,7 +379,7 @@ static void *sim_thread(void *cx)
         // frequency shift the antenna data, and 
         // store result in Data[Tail], these are complex values
         data = &Data[Tail % MAX_DATA];
-        w = TWO_PI * tc_freq;
+        w = TWO_PI * tc_freq_ctr;
         for (int i = 0; i < MAX_DATA_CHUNK; i++) {
             data[i] = antenna[i] * cexp(-I * w * t);
             t += DELTA_T;
@@ -401,17 +406,15 @@ static void sdr_test_init(void)
 
 static void * sdr_ctrl_thread(void *cx)
 {
-    double curr_freq;
+    double curr_freq_ctr = tc_freq_ctr;
 
-    curr_freq = tc_freq;
-
-    sdr_init(curr_freq, sdr_cb);
+    sdr_init(curr_freq_ctr, sdr_cb);
 
     while (true) {
-        if (curr_freq != tc_freq) {
-            NOTICE("SETTING FREQ %f\n", tc_freq);
-            sdr_set_freq(tc_freq);
-            curr_freq = tc_freq;
+        if (curr_freq_ctr != tc_freq_ctr) {
+            NOTICE("SETTING FREQ %f\n", tc_freq_ctr);
+            sdr_set_freq(tc_freq_ctr);
+            curr_freq_ctr = tc_freq_ctr;
         }
 
         // xxx add more sdr controls, such as gain
