@@ -54,12 +54,12 @@ void *ssb_test(void *cx)
     fft = fftw_alloc_complex(n);
 
     BWLowPass *bwi, *bwq;
-    bwi = create_bw_low_pass_filter(20, sample_rate, 2000);
-    bwq = create_bw_low_pass_filter(20, sample_rate, 2000);
+    bwi = create_bw_low_pass_filter(LPF_ORDER, sample_rate, 2000);
+    bwq = create_bw_low_pass_filter(LPF_ORDER, sample_rate, 2000);
 
     BWLowPass *bwi2, *bwq2;
-    bwi2 = create_bw_low_pass_filter(20, sample_rate, 2000);
-    bwq2 = create_bw_low_pass_filter(20, sample_rate, 2000);
+    bwi2 = create_bw_low_pass_filter(LPF_ORDER, sample_rate, 2000);
+    bwq2 = create_bw_low_pass_filter(LPF_ORDER, sample_rate, 2000);
 
     while (true) {
         tc.info[0] = '\0';

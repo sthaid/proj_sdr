@@ -140,8 +140,8 @@ static double get_station_signal(int id, double t)
     mod  = a->modulation;
 
     if (bwi[id] == NULL && (mod == USB || mod == LSB)) {
-        bwi[id] = create_bw_low_pass_filter(20, SAMPLE_RATE, 2000);
-        bwq[id] = create_bw_low_pass_filter(20, SAMPLE_RATE, 2000);
+        bwi[id] = create_bw_low_pass_filter(LPF_ORDER, SAMPLE_RATE, 2000);
+        bwq[id] = create_bw_low_pass_filter(LPF_ORDER, SAMPLE_RATE, 2000);
     }
 
     switch (mod) {

@@ -164,8 +164,6 @@ static complex lpf(complex x, double f_cut)
     static double curr_f_cut;
     static BWLowPass *bwi, *bwq;
 
-    #define LPF_ORDER 20
-
     if (f_cut != curr_f_cut) {
         curr_f_cut = f_cut;
         if (bwi) free_bw_low_pass(bwi);

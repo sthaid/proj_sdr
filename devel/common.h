@@ -22,19 +22,20 @@
 #include <pa.h>
 #include <filter.h>
 
+#define MHZ 1000000
+#define KHZ 1000
+
 #define SAMPLE_RATE 2400000   // 2.4 MS/sec
 #define DELTA_T     (1. / SAMPLE_RATE)
 
 #define AUDIO_SAMPLE_RATE 22000
 
-#define CTRL SDL_EVENT_KEY_CTRL
-#define ALT  SDL_EVENT_KEY_ALT
+#define LPF_ORDER 20
 
 #define ANTENNA_FILENAME "antenna.dat"
 
-#define MHZ 1000000
-#define KHZ 1000
-
+#define CTRL SDL_EVENT_KEY_CTRL
+#define ALT  SDL_EVENT_KEY_ALT
 #define NOC SDL_PLOT_NO_CURSOR
 
 #define ATTRIB_UNUSED __attribute__ ((unused))
