@@ -1,9 +1,7 @@
 #include "common.h"
 
 // xxx
-// - print max audio
 // - don't fft while changing freq
-// - print full freq
 
 //
 // defines
@@ -436,7 +434,7 @@ static void sdr_cb(unsigned char *iq, size_t len)
 
     j = Tail % MAX_DATA;
     for (i = 0; i < items; i++) {
-        Data[j++] = ((iq[2*i+0] - 128.) + (iq[2*i+1] - 128.) * I) / 128.;  // xxx try without all the 128.
+        Data[j++] = ((iq[2*i+0] - 128.) + (iq[2*i+1] - 128.) * I) / 128.;
         if (j == MAX_DATA) j = 0;
     }
 

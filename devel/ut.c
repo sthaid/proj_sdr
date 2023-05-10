@@ -441,9 +441,9 @@ void plot_fft(int idx,
 
 // -----------------  AUDIO OUTPUT--------------------------
 
-#ifndef USE_PA
+static void print_max_audio_values(double yo);
 
-xxx not used
+#ifndef USE_PA
 
 static void init_audio_out(void)
 {
@@ -452,25 +452,23 @@ static void init_audio_out(void)
 
 void audio_out(double yo)
 {
-    #define MAX_MA 1000
+    #define MAX_MA  10000
     #define MAX_OUT 1000
 
     static void *ma_cx;
     static float out[MAX_OUT];
     static int max;
 
-    double ma;
+    // center yo at zero
+    yo -= moving_avg(yo, MAX_MA, &ma_cx);
 
-    // xxx make this same as the other, or delete this
+    // print max audio value
+    print_max_audio_values(yo);
 
-    ma = moving_avg(yo, MAX_MA, &ma_cx);
-    out[max++] = yo - ma;
-
+    // write audio to stdout, once every MAX_OUT values
+    out[max++] = yo;
     if (max == MAX_OUT) {
         fwrite(out, sizeof(float), MAX_OUT, stdout);
-        //double out_min, out_max, out_avg;
-        //average_float(out, MAX_OUT, &out_min, &out_max, &out_avg);
-        //fprintf(stderr, "min=%f max=%f avg=%f\n", out_min, out_max, out_avg);
         max = 0;
     }
 }
@@ -496,10 +494,9 @@ static void init_audio_out(void)
 
 void audio_out(double yo)
 {
-    #define MAX_MA 10000  // xxx define needed
+    #define MAX_MA 10000
 
     static void *ma_cx;
-    static int   cnt;
 
     // wait for room in circular audio output data buffer
     while (ao_tail - ao_head == MAX_AO_BUFF) {
@@ -509,11 +506,8 @@ void audio_out(double yo)
     // center yo at zero
     yo -= moving_avg(yo, MAX_MA, &ma_cx);
 
-    // print audio out value once per sec
-    if (cnt++ == AUDIO_SAMPLE_RATE) {
-        NOTICE("AUDIO %f\n", yo);
-        cnt = 0;
-    }
+    // print max audio value
+    print_max_audio_values(yo);
 
     // add audio out data vale to the tail of the audio out buffer    
     ao_buff[ao_tail%MAX_AO_BUFF] = yo;
@@ -549,3 +543,21 @@ static int pa_play_cb(void *data, void *cx_arg)
 }
 
 #endif
+
+static void print_max_audio_values(double yo)
+{
+    static double max_yo, max_yo_abs;
+    static int cnt;
+
+    if (fabs(yo) > max_yo_abs) {
+        max_yo_abs = fabs(yo);
+        max_yo = yo;
+    }
+
+    if (++cnt > 5*AUDIO_SAMPLE_RATE) {
+        NOTICE("LARGEST AUDIO VAL = %f\n", max_yo);
+        max_yo_abs = 0;
+        max_yo = 0;
+        cnt = 0;
+    }
+}
