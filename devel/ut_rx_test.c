@@ -304,6 +304,7 @@ static void *display_thread(void *cx)
                                : 4000);
             range  = SAMPLE_RATE/4;
             fft_fwd_c2c(fft.data, fft.data_fft, fft_n);
+            fft.data_fft[0] = 0;  // xxx?
             plot_fft(0, fft.data_fft, fft_n, SAMPLE_RATE, 
                      -range, range, yv_max, tc_freq_offset, NOC, "DATA_FFT", 
                      0, 0, 100, 25);
@@ -312,6 +313,7 @@ static void *display_thread(void *cx)
                                 : (4000));
             range  = (tc_demod == DEMOD_FM ? 100*KHZ : 10*KHZ);
             fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft_n);
+            fft.data_lpf_fft[0] = 0;  // xxx?
             plot_fft(1, fft.data_lpf_fft, fft_n, SAMPLE_RATE, 
                      -range, range, yv_max, 0, NOC, "DATA_LPF_FFT", 
                      0, 25, 100, 25);
@@ -319,6 +321,7 @@ static void *display_thread(void *cx)
             yv_max = 30000;
             range  = 10*KHZ;
             fft_fwd_r2c(fft.data_demod, fft.data_demod_fft, fft_n);
+            fft.data_demod_fft[0] = 0;  // xxx?
             plot_fft(2, fft.data_demod_fft, fft_n, SAMPLE_RATE, 
                      -range, range, yv_max, 0, NOC, "DATA_DEMOD_FFT", 
                      0, 50, 100, 25);
@@ -352,6 +355,7 @@ static void *sim_thread(void *cx)
     size_t file_offset, file_size, len;
     double t=0, antenna[MAX_DATA_CHUNK], w;
     complex *data;
+    int freq_ctr = tc_freq_ctr;
 
     // open ANTENNA_FILENAME
     fd = open(ANTENNA_FILENAME, O_RDONLY);
@@ -382,12 +386,19 @@ static void *sim_thread(void *cx)
             file_offset = 0;
         }
 
-        // xxx use fft.pause here too
+        // xxx comment
+        if (tc_freq_ctr != freq_ctr && fft.updated) {
+            if (tc_fft_pause > 0) {
+                fft.pause = tc_fft_pause;
+                fft.updated = false;
+            }
+            freq_ctr = tc_freq_ctr;
+        }
 
         // frequency shift the antenna data, and 
         // store result in Data[Tail], these are complex values
         data = &Data[Tail % MAX_DATA];
-        w = TWO_PI * tc_freq_ctr;
+        w = TWO_PI * freq_ctr;
         for (int i = 0; i < MAX_DATA_CHUNK; i++) {
             data[i] = antenna[i] * cexp(-I * w * t);
             t += DELTA_T;
