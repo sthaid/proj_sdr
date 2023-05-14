@@ -223,15 +223,13 @@ int pane_hndlr(pane_cx_t * pane_cx, int request, void * init_params, sdl_event_t
                     p += sprintf(p, "%s ", x->val_enum_names[tmp]);
                 }
             } else {
-                double v = *x->val;
-                if (fabs(v) < 1e3) {
-                    p += sprintf(p, "%0.3f ", v);
-                } else if (fabs(v) < 10e6) {
-                    p += sprintf(p, "%0.1f K", v/1000);
-                } else if (fabs(v) < 10e9) {
-                    p += sprintf(p, "%0.1f M", v/1000000);
+                int v = *x->val;
+                if (abs(v) < 1000) {
+                    p += sprintf(p, "%d ", v);
+                } else if (abs(v) < 10e6) {
+                    p += sprintf(p, "%0.3f K", v/1000.);
                 } else {
-                    p += sprintf(p, "%g ", *x->val);
+                    p += sprintf(p, "%0.3f M", v/1000000.);
                 }
             }
             if (x->units) {

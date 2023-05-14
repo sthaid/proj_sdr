@@ -48,7 +48,7 @@ typedef struct {
     char info[100];
     struct test_ctrl_s {
         char *name;
-        double *val, min, max, step;
+        int *val, min, max, step;
         char *val_enum_names[MAX_CTRL_ENUM_NAMES];
         char *units;
         int decr_event;

@@ -1,25 +1,25 @@
 #include "common.h"
 
 // xxx
-// - don't fft while changing freq
+// - better way to change freqs fast
 
 //
 // defines
 //
 
 #define MAX_DATA_CHUNK  131072
-#define MAX_DATA        (4*MAX_DATA_CHUNK)
+#define MAX_DATA        (2*MAX_DATA_CHUNK)
 
 #define DEMOD_AM  0
 #define DEMOD_USB 1
 #define DEMOD_LSB 2
 #define DEMOD_FM  3
 #define DEMOD_STR(x) \
-    ((x) == DEMOD_AM ? "AM": \
+    ((x) == DEMOD_AM  ? "AM": \
      (x) == DEMOD_USB ? "USB": \
      (x) == DEMOD_LSB ? "LSB": \
-     (x) == DEMOD_FM ? "FM": \
-                       "????")
+     (x) == DEMOD_FM  ? "FM": \
+                        "????")
 
 #define BAND_NONE 0
 #define BAND_AM   1
@@ -39,17 +39,15 @@ static complex       Data[MAX_DATA];
 
 static bool          sim_mode;
 
-static double        tc_freq_ctr;
-static double        tc_freq_offset;
-static double        tc_demod;
-static double        tc_volume;
-static double        tc_lpf_am;
-static double        tc_lpf_fm;
-static double        tc_lpf_ssb;
-static double        tc_band;
-//static double        tc_k1;
-//static double        tc_k2;
-//static double        tc_k3;
+static int           tc_freq_ctr;
+static int           tc_freq_offset;
+static int           tc_demod;
+static int           tc_volume;
+static int           tc_lpf_am;
+static int           tc_lpf_fm;
+static int           tc_lpf_ssb;
+static int           tc_band;
+static int           tc_fft_pause;
 
 //
 // prototypes
@@ -83,11 +81,11 @@ void *rx_test(void *cx)
     display_init();
 
     tc_freq_offset = 0;
-    tc_volume      = .1;
+    tc_volume      = 10;
     tc_lpf_am      = 4000;
     tc_lpf_fm      = 70000;
     tc_lpf_ssb     = 2000;
-
+    tc_fft_pause   = 300000;
     if (sim_mode) {
         tc_demod = DEMOD_FM;
         tc_freq_ctr = 800 * KHZ;
@@ -114,13 +112,13 @@ void *rx_test(void *cx)
         data_freq_shift = freq_shift(data, -tc_freq_offset, t);
 
         // demodulate
-        switch ((int)tc_demod) {
+        switch (tc_demod) {
         case DEMOD_AM: {
             data_lpf = lpf(data_freq_shift, tc_lpf_am);
             data_demod = cabs(data_lpf);
             break; }
         case DEMOD_USB: case DEMOD_LSB: {
-            double shift = (((int)tc_demod) == DEMOD_USB ? 2000 : -2000);
+            double shift = (tc_demod == DEMOD_USB ? 2000 : -2000);
             data_lpf = lpf(data_freq_shift, tc_lpf_ssb);
             tmp = freq_shift(data_lpf, shift, t);
             data_demod = creal(tmp) + cimag(tmp);
@@ -132,12 +130,12 @@ void *rx_test(void *cx)
             data_demod = atan2(cimag(product), creal(product));
             break; }
         default:
-            FATAL("invalid tc_demod %f\n", tc_demod);
+            FATAL("invalid tc_demod %d\n", tc_demod);
             break;
         }
 
         // scale the demodulated data volume
-        data_demod = data_demod * volume_scale[(int)tc_demod];
+        data_demod = data_demod * volume_scale[tc_demod];
 
         // downsample and output the audio
         downsample_and_audio_out(data_demod);
@@ -189,7 +187,7 @@ static void downsample_and_audio_out(double x)
     ma = moving_avg(x, NUM_DS, &ma_cx); 
 
     if (cnt++ == NUM_DS) {
-        audio_out(ma * tc_volume);
+        audio_out(ma * (tc_volume / 100.));
         cnt = 0;
     }
 }
@@ -205,7 +203,7 @@ static void tc_init(void)
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+CTRL, SDL_EVENT_KEY_RIGHT_ARROW+CTRL};
     tc.ctrl[2] = (struct test_ctrl_s)
-                 {"VOLUME", &tc_volume, 0.01, 2.00, 0.01,
+                 {"VOLUME", &tc_volume, 0, 100, 1,
                   {}, NULL,
                   SDL_EVENT_KEY_DOWN_ARROW, SDL_EVENT_KEY_UP_ARROW};
     tc.ctrl[3] = (struct test_ctrl_s)
@@ -226,27 +224,17 @@ static void tc_init(void)
                   '5', '6'};
 
     tc.ctrl[7] = (struct test_ctrl_s)
-                 {"F", &tc_freq_ctr, 0, 200*MHZ, 100*KHZ,   // 0 to 200 MHx
+                 {"F", &tc_freq_ctr, 0, 200*MHZ, 100*KHZ,
                   {}, "HZ", 
                   SDL_EVENT_KEY_LEFT_ARROW+ALT, SDL_EVENT_KEY_RIGHT_ARROW+ALT};
     tc.ctrl[8] = (struct test_ctrl_s)
                  {"BAND", &tc_band, BAND_NONE, BAND_FM, 1,
                   {"NONE", "AM", "FM"}, NULL,
                   '[', ']'};
-#if 0
-    tc.ctrl[7] = (struct test_ctrl_s)
-                 {"K1", &tc_k1, 0, 1, .1,
+    tc.ctrl[13] = (struct test_ctrl_s)
+                 {"FFT_PAUSE", &tc_fft_pause, 0, 1000000, 10000,
                   {}, NULL,
-                  'f', 'F'};
-    tc.ctrl[8] = (struct test_ctrl_s)
-                 {"K2", &tc_k2, 0, 1, .1,
-                  {}, NULL,
-                  '3', '4'};
-    tc.ctrl[9] = (struct test_ctrl_s)
-                 {"K3", &tc_k3, 0, 1, .1,
-                  {}, NULL,
-                  '5', '6'};
-#endif
+                  'p', 'P'};
 }
 
 // -----------------  RX DISPLAY  --------------------------
@@ -261,6 +249,8 @@ static struct {
     complex *data_fft;
     complex *data_lpf_fft;
     complex *data_demod_fft;
+    int  pause;
+    bool updated;
 } fft;
 
 static void display_init(void)
@@ -279,6 +269,12 @@ static void display_init(void)
 
 static void display_add_fft(complex data, complex data_lpf, double data_demod)
 {
+    if (fft.pause > 0) {
+        fft.pause--;
+        fft.n = 0;
+        return;
+    }
+
     if (fft.n < FFT_N) {
         fft.data[fft.n] = data;
         fft.data_lpf[fft.n] = data_lpf;
@@ -293,42 +289,42 @@ static void display_add_fft(complex data, complex data_lpf, double data_demod)
 static void *display_thread(void *cx)
 {
     double yv_max, range;
+    int fft_n;
 
     while (true) {
         // display info
         sprintf(tc.info, "FREQ = %0.6f MHz  DEMOD = %s",
-                (tc_freq_ctr + tc_freq_offset) / MHZ,
+                (double)(tc_freq_ctr + tc_freq_offset) / MHZ,
                 DEMOD_STR(tc_demod));
 
         // if fft data set is available then calculate and plot the ffts
-        if (fft.n == FFT_N) {
+        fft_n = fft.n;
+        if (fft_n == FFT_N) {
             yv_max = (sim_mode ? 150000 
                                : 4000);
             range  = SAMPLE_RATE/4;
-            fft_fwd_c2c(fft.data, fft.data_fft, fft.n);
-            fft.data_fft[0] = (fft.data_fft[1] + fft.data_fft[fft.n-1]) / 2; // xxx ?
-            plot_fft(0, fft.data_fft, fft.n, SAMPLE_RATE, 
+            fft_fwd_c2c(fft.data, fft.data_fft, fft_n);
+            plot_fft(0, fft.data_fft, fft_n, SAMPLE_RATE, 
                      -range, range, yv_max, tc_freq_offset, NOC, "DATA_FFT", 
                      0, 0, 100, 25);
 
             yv_max =  (sim_mode ? (tc_demod == DEMOD_FM ? 200000 : 30000) 
                                 : (4000));
             range  = (tc_demod == DEMOD_FM ? 100*KHZ : 10*KHZ);
-            fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft.n);
-            fft.data_lpf_fft[0] = (fft.data_lpf_fft[1] + fft.data_lpf_fft[fft.n-1]) / 2; // xxx ?
-            plot_fft(1, fft.data_lpf_fft, fft.n, SAMPLE_RATE, 
+            fft_fwd_c2c(fft.data_lpf, fft.data_lpf_fft, fft_n);
+            plot_fft(1, fft.data_lpf_fft, fft_n, SAMPLE_RATE, 
                      -range, range, yv_max, 0, NOC, "DATA_LPF_FFT", 
                      0, 25, 100, 25);
 
             yv_max = 30000;
             range  = 10*KHZ;
-            fft_fwd_r2c(fft.data_demod, fft.data_demod_fft, fft.n);
-            fft.data_demod_fft[0] = (fft.data_demod_fft[1] + fft.data_demod_fft[fft.n-1]) / 2; // xxx ?
-            plot_fft(2, fft.data_demod_fft, fft.n, SAMPLE_RATE, 
+            fft_fwd_r2c(fft.data_demod, fft.data_demod_fft, fft_n);
+            plot_fft(2, fft.data_demod_fft, fft_n, SAMPLE_RATE, 
                      -range, range, yv_max, 0, NOC, "DATA_DEMOD_FFT", 
                      0, 50, 100, 25);
 
             fft.n = 0;
+            fft.updated = true;
         }
 
         // delay 10 ms
@@ -386,6 +382,8 @@ static void *sim_thread(void *cx)
             file_offset = 0;
         }
 
+        // xxx use fft.pause here too
+
         // frequency shift the antenna data, and 
         // store result in Data[Tail], these are complex values
         data = &Data[Tail % MAX_DATA];
@@ -416,21 +414,23 @@ static void sdr_test_init(void)
 
 static void * sdr_ctrl_thread(void *cx)
 {
-    double curr_freq_ctr = tc_freq_ctr;
-    double curr_band     = tc_band;
+    int last_band = tc_band;
+    int last_freq_ctr = tc_freq_ctr;
 
-    sdr_init(curr_freq_ctr, sdr_cb);
+    sdr_init(tc_freq_ctr, sdr_cb);
 
     while (true) {
-        if (curr_freq_ctr != tc_freq_ctr) {
-            NOTICE("SETTING FREQ %f\n", tc_freq_ctr);
+        if (tc_freq_ctr != last_freq_ctr && fft.updated) {
+            if (tc_fft_pause > 0) {
+                fft.pause = tc_fft_pause;
+                fft.updated = false;
+            }
             sdr_set_freq(tc_freq_ctr);
-            curr_freq_ctr = tc_freq_ctr;
+            last_freq_ctr = tc_freq_ctr;
         }
 
-        if (curr_band != tc_band) {
-            NOTICE("SETTING BAND %f\n", tc_band);
-            switch ((int)tc_band) {
+        if (last_band != tc_band) {
+            switch (tc_band) {
             case BAND_AM:
                 tc_freq_ctr = 1.030 * MHZ;
                 tc_freq_offset = 0;
@@ -442,7 +442,9 @@ static void * sdr_ctrl_thread(void *cx)
                 tc_demod = DEMOD_FM;
                 break;
             }
-            curr_band = tc_band;
+            sdr_set_freq(tc_freq_ctr);
+            last_band = tc_band;
+            last_freq_ctr = tc_freq_ctr;
         }
 
         // xxx add more sdr controls, such as gain

@@ -1,6 +1,5 @@
 #include "common.h"
 
-
 static void init_using_sine_waves(double *sw, int n, int freq_first, int freq_last, int freq_step, int sample_rate, double scale);
 static void init_using_white_noise(double *wn, int n, double scale);
 static void add_white_noise(double *data, int n, double scale);
@@ -31,12 +30,12 @@ void *filter_test(void *cx)
     int        n           = .1 * sample_rate;    // .1 secs of data processed at a time
     int        total       = 0;
 
-    double     tc_mode   = SINE_WAVES;
-    double     tc_filter = LPF;
-    double     tc_f1     = DEFAULT_F1;
-    double     tc_f2     = DEFAULT_F2;
-    double     tc_order  = DEFAULT_ORDER;
-    double     tc_reset  = 0;
+    int        tc_mode   = SINE_WAVES;
+    int        tc_filter = LPF;
+    int        tc_f1     = DEFAULT_F1;
+    int        tc_f2     = DEFAULT_F2;
+    int        tc_order  = DEFAULT_ORDER;
+    int        tc_reset  = 0;
 
     double    *in_real_total   = fftw_alloc_real(max);
     double    *in_real         = fftw_alloc_real(n);
@@ -152,7 +151,7 @@ void *filter_test(void *cx)
                 } else if (tc_filter == HPF) {
                     bwhpf = create_bw_high_pass_filter(tc_order, sample_rate, tc_f2);
                 } else {
-                    FATAL("invalid tc_filter %g\n", tc_filter);
+                    FATAL("invalid tc_filter %d\n", tc_filter);
                 }
                 curr_filter = tc_filter;
                 curr_order = tc_order;

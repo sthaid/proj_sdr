@@ -9,7 +9,7 @@
 #define NOTICE(fmt, args...) do { log_msg("NOTICE", fmt, ## args); } while (0)
 #define WARN(fmt, args...)   do { log_msg("WARN", fmt, ## args); } while (0)
 #define ERROR(fmt, args...)  do { log_msg("ERROR", fmt, ## args); } while (0)
-#define FATAL(fmt, args...)  do { log_msg("FATAL", fmt, ## args); exit(1); } while (0)
+#define FATAL(fmt, args...)  do { log_msg("FATAL", fmt, ## args); log_msg("FATAL", "%s %d\n", __FILE__, __LINE__); exit(1); } while (0)
 #define DEBUG(fmt, args...)  do { if (false) log_msg("FATAL", fmt, ## args); } while (0)
 
 extern char *progname;

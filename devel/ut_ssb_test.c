@@ -9,9 +9,9 @@ static const int f           = 10000;
 static const int n           = 10 * sample_rate;  // 10 sec
 
 // test control 
-static double    tc_step        = 0;
-static double    tc_which       = USB;
-static double    tc_freq_offset = 0;
+static int    tc_step        = 0;
+static int    tc_which       = USB;
+static int    tc_freq_offset = 0;
 
 // prototypes
 static void init_msg(double *msg, int n);
