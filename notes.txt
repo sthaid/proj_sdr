@@ -3,6 +3,111 @@ https://www.nooelec.com/store/ham-it-up-plus.html
 https://www.amazon.com/dp/B076CYK8XZ?psc=1&smid=A2JO7YP9I9Y3D6&ref_=chk_typ_imgToDp
 Ham It Up Plus - HF/MF/LF/VLF/ULF Upconverter w/TCXO
 
+xxxxxxxxxxx antenna.txt xxxxxxxxxxxxxxxx
+
+**** Insulatores
+https://www.ebay.com/itm/373461650382?chn=ps&_trkparms=ispr%3D1&amdata=enc%3A1moE_T57kTUu1RfZ3mTAxAQ59&norover=1&mkevt=1&mkrid=711-117182-37290-0&mkcid=2&mkscid=101&itemid=373461650382&targetid=1584739239974&device=c&mktype=&googleloc=9001861&poi=&campaignid=15275224983&mkgroupid=131097072938&rlsatarget=pla-1584739239974&abcId=9300697&merchantid=6510254&gclid=CjwKCAjw6vyiBhB_EiwAQJRopuwaq-meh3dLSdl8w-bj5nklZwfQ5YbjWHu1AwjKQIpNq7WkFLYSlhoCEAIQAvD_BwE
+
+
+**** wire
+https://www.amazon.com/gp/product/B003J6AXC2/ref=ox_sc_act_title_1?smid=ATVPDKIKX0DER&psc=1
+
+
+**** sma cable
+https://www.amazon.com/Superbat-coaxial-Bulkhead-Adapter-Equipment/dp/B09X358K65/ref=sxin_16_pa_sp_search_thematic_sspa?content-id=amzn1.sym.9aaeff48-3310-46df-94ec-ea59eda4c869%3Aamzn1.sym.9aaeff48-3310-46df-94ec-ea59eda4c869&crid=3QVI84KR68L75&cv_ct_cx=sma%2Bcable&keywords=sma%2Bcable&pd_rd_i=B07FC8PVZS&pd_rd_r=f0492822-9cb7-4ac6-bd06-fa7efecfe086&pd_rd_w=q5JTd&pd_rd_wg=8idHv&pf_rd_p=9aaeff48-3310-46df-94ec-ea59eda4c869&pf_rd_r=689TCS9F5NNBC0K6MVBK&qid=1684026520&sbo=RZvfv%2F%2FHxDF%2BO5021pAnSA%3D%3D&sprefix=sma%2Bcable%2Caps%2C110&sr=1-1-2b34d040-5c83-4b7f-ba01-15975dfb8828-spons&spLa=ZW5jcnlwdGVkUXVhbGlmaWVyPUExMDFXOTJHT1c5VURFJmVuY3J5cHRlZElkPUEwNzIxOTM0M0FZRVZJNTJEVklSWSZlbmNyeXB0ZWRBZElkPUEwMTU4MzU4MkZUVE9ZOFhOVjFYWiZ3aWRnZXROYW1lPXNwX3NlYXJjaF90aGVtYXRpYyZhY3Rpb249Y2xpY2tSZWRpcmVjdCZkb05vdExvZ0NsaWNrPXRydWU&th=1
+
+
+*** info from ebay
+Dipole, Inverted Vee, End Feed and Long Wire Antenna Insulators
+You get 3 Antenna Insulators - enough for center and both ends
+Works great for Dipoles, Inverted Vees, End Fed and Random Wire antennas! Bring your Shortwave receiver to life by making a good antenna.
+
+Use these to insulate the ends of your wires making up your ground plane on elevated vertical antennas.
+
+Slim line construction in Ceramic - Heavy Duty Design.
+
+Insulators are approximately 2-1/2 inches in length with the diameter about 1 inch. Ribbed construction of the insulator provides increased surface path to reduce RF leakage. Approximately 3/16 inch hole for antenna wire.
+
+Keep some of these insulators, a roll of light weight wire, and some coax cable together and you are all set to make a handy antenna for emergency operations, in a time of need for bugging out for your ham rig or shortwave receiver, or as a camping antenna. Perfect for bug out bags and shelters. Keep some in the camper or RV with some wire and use them for temporary antennas when parked or camping.
+
+The formula for building dipole antennas is 468/Freq (in MHz) and then divide by 2 to get each leg length, ie: for 40 meters it would be something like 468/7.050 for 66.38ft/2 = 33.2 feet per leg. For a Inverted Vee antenna deduct about 5% from each leg's length.
+
+W5SWL SKU: 721405427680
+
+**** random wire antenna length
+https://udel.edu/~mm/ham/randomWire/#:~:text=A%20standard%20recommendation%20(see%20QST,on%20the%20topic%20and%20experiment.
+
+The graph below shows lengths to avoid for different collections of bands. The fewer bands, the fewer high impedance regions to avoid. You also want the antenna to be at least 1/4 wavelength long for each band you plan to use. For instance, to work 40m be sure the antenna is at least 10m or 33' long. Use only the white gaps for your antenna lengths, and if you're using different ham bands than in these examples, modify and rerun the program as I did, above, for my K1. If you want all the bands from 80m up, W3EDP's 84' antenna, 17' counterpoise is probably the way to go. Notice from column f that there is no length giving low impendance for all US ham bands. You have to give up a band or two, like 60m and 6m, as shown in the column e.
+
+*** balum
+long line or random  1:9 balum
+https://www.amazon.com/cart/smart-wagon?newItems=7d5f3941-1512-45e6-99d2-5add607cf654,1&ref_=sw_refresh
+
+
+
+
+https://www.balundesigns.com/content/Wire%20Lengths%20for%204%20and%209-1%20ununs.pdf
+
+You may also use the unun with no counterpoise or ground if your feedline is at least 25+ feet long. In this
+configuration the coax shield will act as your counterpoise and there should be no ground at the unun. With
+this installation there is a high probability of common mode currents on the shield so a good 1:1 choke balun
+should be installed in the feedline at or near the point it enters your operating position. 
+
+72 ft is good here  with a 9"1 ratio
+
+
+
+balun
+https://www.amazon.com/Shortwave-Furniture-Unbalanced-Reinforcement-Equipment/dp/B08SR5TF98/ref=sr_1_3?crid=1YGYR3CU1AX85&keywords=9%3A1+unun&qid=1684029758&sprefix=9+1+unun%2Caps%2C111&sr=8-3
+
+===============
+===============
+===============
+===============
+
+Buy
+- insulator
+https://www.ebay.com/itm/373461650382?chn=ps&_trkparms=ispr%3D1&amdata=enc%3A1moE_T57kTUu1RfZ3mTAxAQ59&norover=1&mkevt=1&mkrid=711-117182-37290-0&mkcid=2&mkscid=101&itemid=373461650382&targetid=1584739239974&device=c&mktype=&googleloc=9001861&poi=&campaignid=15275224983&mkgroupid=131097072938&rlsatarget=pla-1584739239974&abcId=9300697&merchantid=6510254&gclid=CjwKCAjw6vyiBhB_EiwAQJRopuwaq-meh3dLSdl8w-bj5nklZwfQ5YbjWHu1AwjKQIpNq7WkFLYSlhoCEAIQAvD_BwE
+- wire
+https://www.amazon.com/gp/product/B003J6AXC2/ref=ox_sc_act_title_1?smid=ATVPDKIKX0DER&psc=1
+- balun
+https://www.amazon.com/gp/product/B08LH66S25/ref=sw_img_1?smid=A3BKS5ISMXVHBW&th=1
+- coax
+https://www.amazon.com/Coaxial-Connector-Adapter-Extender-Satellite/dp/B091CL2C82/ref=sr_1_4?keywords=coax%2Bcable&qid=1684112611&s=industrial&sr=1-4&th=1
+- coax to sma adapter
+https://www.amazon.com/exgoofit-F-Type-Coaxial-Adapter-Connector/dp/B07D28P28J/ref=sr_1_3?crid=14D7VV2W320IZ&keywords=coax+to+sma+adapter&qid=1684112182&sprefix=coax+to+sma+adapter%2Caps%2C111&sr=8-3
+
+wire length 72 ft
+feedline  25+ ft
+
+
+======= INFO ==========
+
+https://www.balundesigns.com/content/Wire%20Lengths%20for%204%20and%209-1%20ununs.pdf
+
+You may also use the unun with no counterpoise or ground if your feedline is at least 25+ feet long. In this
+configuration the coax shield will act as your counterpoise and there should be no ground at the unun.
+
+Please keep in mind this design is a compromise antenna and intended primarily for use by those living in
+restricted antenna areas or for temporary / emergency installations where simplicity and broad HF coverage is
+important.
+Recommended Wire Lengths for 9:1 ratio (in feet) for Coverage of 160m through 10m
+53 59 72 88.5 98.5 124.5 146 162 175
+*                   *
+
+Values in color (*) are best overall lengths to use for optimum HF spectrum coverage.
+
+
+
+https://udel.edu/~mm/ham/randomWire/#:~:text=A%20standard%20recommendation%20
+
+shows that 72 ft is a good length
+
+
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx  START  xxxxxxxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
 
 Amazon Order
 ------------
