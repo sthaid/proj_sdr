@@ -12,10 +12,10 @@ void *filter_test(void *cx)
     #define WAV_FILENAME "wav_files/super_critical.wav"  // xxx add tc for filename
     //#define WAV_FILENAME "wav_files/blue_sky.wav"
 
-    #define SINE_WAVES                 1
-    #define WHITE_NOISE                2
-    #define WAV_FILE                   3
-    #define WAV_FILE_PLUS_WHITE_NOISE  4
+    #define SINE_WAVES                 0
+    #define WHITE_NOISE                1
+    #define WAV_FILE                   2
+    #define WAV_FILE_PLUS_WHITE_NOISE  3
 
     #define LPF  0
     #define BPF  1
