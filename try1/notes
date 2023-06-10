@@ -1,0 +1,59 @@
+==============
+ctrls
+============
+
+startup in last state
+
+scan whatever is displayed, using the 's' cmd; <esc> to stop
+
+z will toggle zoom, between 
+- off  = displaying all selected bands
+- on   = display the active band
+- on-zoom  = display active band, just the 1 MHZ
+
+switch between bands with
+- click on the display
+- tab, ctrl tab
+
+
+==============
+outline   
+==============
+
+main
+
+config
+- reads and writes config settings
+
+sdr
+- interface with radio
+
+display
+- sdl routines
+
+
+audio
+
+fft
+
+
+common.h
+- data structs, global vars and routines
+
+
+main()
+{
+    call init routines
+
+    while true
+        if display has changed
+            update display
+
+        while ctrl event avail
+            process ctrl event
+
+        if exit requested
+            terminate
+    end
+}
+
