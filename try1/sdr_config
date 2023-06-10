@@ -2,7 +2,7 @@ xxxxxxxxxxxxx config xxxxxxxxxxxxxxxxxxx
 
 # comment
 # blank line ignored
-
+#                                           intvl  rounding
 BAND    AM      0.535 1.705 1.030   am      0.01 0.01
 1.030 WBZ
  
@@ -24,9 +24,16 @@ xxxxxxxxxxxxx settings xxxxxxxxxxxxxxxxx
 write out when pgm terminates
         
 VOL         66 unmuted
-BAND        AM   0  1.030  0  am       # not selected
-BAND        FM   1  100.3  0  fm       # selected
-BAND        80M  2  3.5    0  fm       # selected/active
+
+#              flags  freq    squelch
+BAND        AM   0    1.030     0
+BAND        FM   1    100.3     0
+BAND        80M  3    3.5       0
+
+flags
+0x0001  displayed
+0x0002  active
+0xff00  demod mask
 
 
 
