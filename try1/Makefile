@@ -1,13 +1,11 @@
-LIBS    = -lm -lportaudio -lfftw3 -lSDL2 -lSDL2_ttf -lrtlsdr
+LIBS    = -lm -lportaudio -lfftw3 -lSDL2 -lSDL2_ttf -lrtlsdr -lpng
 INCLUDE = -I./utils -I/usr/include/SDL2
 FLAGS   = -g -O2 -Wall
 
-UTILS = utils/misc.c
-
-sdr: common.h $(UTILS:.c=.h)
+UTILS = utils/misc.c utils/sdl.c utils/png_rw.c
 
 sdr: main.c config.c display.c $(UTILS)
 	gcc $(FLAGS) $(INCLUDE) -o $@ $^ $(LIBS)
 
 clean:
-	rm sdr
+	rm -f sdr

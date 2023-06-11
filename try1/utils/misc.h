@@ -1,3 +1,6 @@
+#ifndef __MISC_H__
+#define __MISC_H__
+
 #include <stdarg.h>
 #include <complex.h>
 
@@ -6,7 +9,7 @@
 #define NOTICE(fmt, args...) do { log_msg("NOTICE", fmt, ## args); } while (0)
 #define WARN(fmt, args...)   do { log_msg("WARN", fmt, ## args); } while (0)
 #define ERROR(fmt, args...)  do { log_msg("ERROR", fmt, ## args); } while (0)
-#define DEBUG(fmt, args...)  do { if (false) log_msg("FATAL", fmt, ## args); } while (0)
+#define DEBUG(fmt, args...)  do { if (0) log_msg("FATAL", fmt, ## args); } while (0)
 
 #define FATAL(fmt, args...)  do { log_msg("FATAL", fmt, ## args); log_msg("FATAL", "%s %d\n", __FILE__, __LINE__); exit(1); } while (0)
 
@@ -34,3 +37,4 @@ void remove_leading_whitespace(char *s);
 void zero_real(double *data, int n);
 void zero_complex(complex *data, int n);
 
+#endif

@@ -45,6 +45,7 @@ typedef struct {
 
 //
 // variables
+// xxx all used?
 //
 
 static SDL_Window     * sdl_window;
@@ -61,9 +62,6 @@ static char           * sdl_font_path;
 static sdl_event_reg_t  sdl_event_reg_tbl[MAX_EVENT_REG_TBL];
 static int32_t          sdl_event_max;
 static sdl_event_t      sdl_push_ev;
-
-static struct pane_list_head_s * sdl_pane_list_head[10];
-static int              sdl_pane_list_head_idx;
 
 static uint32_t         sdl_color_to_rgba[MAX_SDL_COLOR_TO_RGBA] = {
                             PIXEL_PURPLE, 
@@ -85,22 +83,8 @@ static uint32_t         sdl_color_to_rgba[MAX_SDL_COLOR_TO_RGBA] = {
 
 static void exit_handler(void);
 static void font_init(int32_t ptsize);
-
-static char *get_print_screen_filename(void);
-
-static void pane_terminate(struct pane_list_head_s * pane_list_head, pane_cx_t * pane_cx);
-static rect_t init_pane(int32_t x_disp, int32_t y_disp, int32_t w, int32_t h,
-                        int32_t border_style, int32_t border_color, bool clear,
-                        rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_x);
-static rect_t get_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
-                       int32_t border_style);
-
+static char *get_print_screen_filename(void); // xxx move
 static void set_color(int32_t color); 
-
-static int find_1_intersect(point_t *p1, point_t *p2, rect_t *pane, point_t *p_intersect);
-static int find_n_intersect(point_t *p1, point_t *p2, rect_t *pane, point_t *p_intersect);
-static int find_x_intersect(point_t *p1, point_t *p2, double X, point_t *p_intersect);
-static int find_y_intersect(point_t *p1, point_t *p2, double Y, point_t *p_intersect);
 
 // 
 // inline procedures
@@ -108,11 +92,11 @@ static int find_y_intersect(point_t *p1, point_t *p2, double Y, point_t *p_inter
 
 static inline uint32_t _bswap32(uint32_t a)
 {
-  a = ((a & 0x000000FF) << 24) |
-      ((a & 0x0000FF00) <<  8) |
-      ((a & 0x00FF0000) >>  8) |
-      ((a & 0xFF000000) >> 24);
-  return a;
+    a = ((a & 0x000000FF) << 24) |
+        ((a & 0x0000FF00) <<  8) |
+        ((a & 0x00FF0000) >>  8) |
+        ((a & 0xFF000000) >> 24);
+    return a;
 }
 
 // -----------------  SDL INIT & MISC ROUTINES  ------------------------- 
@@ -147,7 +131,7 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool fullscreen, bool resizeable, bool 
         ERROR("SDL_CreateWindowAndRenderer failed\n");
         return -1;
     }
-    sdl_poll_event();
+    //xxx sdl_poll_event();
 
     // get the actual window size, which will be returned to caller and
     // also saved in vars sdl_win_width/height
@@ -182,6 +166,7 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool fullscreen, bool resizeable, bool 
     DEBUG("using font %s\n", sdl_font_path);
 
     // currently the SDL Text Input feature is not being used here
+    // xxx how does this wokr0
     SDL_StopTextInput();
 
     // if caller requests swap_white_black then swap the white and black
@@ -338,6 +323,7 @@ void sdl_print_screen(char *file_name, bool flash_display, rect_t * rect_arg)
     free(pixels);
 }
 
+// xxx call from print_scr
 static char *get_print_screen_filename(void)
 {
     struct tm tm;
@@ -353,385 +339,13 @@ static char *get_print_screen_filename(void)
     return filename;
 }
 
-// -----------------  PANE MANAGER  ------------------------------------- 
-
-void sdl_pane_manager(void *display_cx,                        // optional, context
-                      void (*display_start)(void *display_cx), // optional, called prior to pane handlers
-                      void (*display_end)(void *display_cx),   // optional, called after pane handlers
-                      int64_t redraw_interval_us,              // 0=continuous, -1=never, else us
-                      int32_t count,                           // number of pane handler varargs that follow
-                      ...)                                     // pane_handler, init_params, x_disp, y_disp, w, h, border_style
-{
-    #define FG_PANE_CX (TAILQ_LAST(&pane_list_head,pane_list_head_s))
-
-    #define SDL_EVENT_PANE_SELECT            0xffffff01
-    #define SDL_EVENT_PANE_BACKGROUND        0xffffff02
-    #define SDL_EVENT_PANE_MOVE              0xffffff03
-    #define SDL_EVENT_PANE_TERMINATE         0xffffff04
-
-    va_list ap; 
-    pane_cx_t *pane_cx, *pane_cx_next;
-    int32_t ret, i, win_width, win_height;
-    bool redraw;
-    uint64_t start_us;
-    sdl_event_t * event;
-    struct pane_list_head_s pane_list_head;
-    rect_t loc_full_pane, loc_bar_move, loc_bar_terminate;
-    bool call_pane_handler;
-
-    // at least one pane must be provided 
-    if (count <= 0) {
-        FATAL("count %d must be > 0\n", count);
-    }
-
-    // create the pane(s)
-    TAILQ_INIT(&pane_list_head);
-    va_start(ap, count);
-    for (i = 0; i < count; i++) {
-        pane_handler_t pane_handler = va_arg(ap, void*);
-        void         * init_params  = va_arg(ap, void*);
-        int32_t        x_disp       = va_arg(ap, int32_t);
-        int32_t        y_disp       = va_arg(ap, int32_t);
-        int32_t        w_total      = va_arg(ap, int32_t);
-        int32_t        h_total      = va_arg(ap, int32_t);
-        int32_t        border_style = va_arg(ap, int32_t);
-        sdl_pane_create(&pane_list_head, pane_handler, init_params, x_disp, y_disp, w_total, h_total, 
-                        border_style, display_cx);
-    }
-    va_end(ap);
-
-    // make pane_list_head available for scrutiny by sdl_poll_event
-    sdl_pane_list_head[sdl_pane_list_head_idx++] = &pane_list_head;
-
-    // loop 
-    while (true) {
-        // if no panes or the global program_quit flag is set then break
-        if (TAILQ_EMPTY(&pane_list_head) || sdl_program_quit) {
-            break;
-        }
-
-        // init
-        start_us = microsec_timer();
-        sdl_display_init(&win_width, &win_height, NULL);
-        redraw = false;
-
-        // call display_start, if supplied 
-        if (display_start) {
-            display_start(display_cx);
-        }
-
-        // call all pane_handler render
-        for (pane_cx = TAILQ_FIRST(&pane_list_head); pane_cx != NULL; pane_cx = pane_cx_next) {
-            pane_cx_next = TAILQ_NEXT(pane_cx, entries);
-
-            pane_cx->pane = init_pane(pane_cx->x_disp, pane_cx->y_disp, pane_cx->w_total, pane_cx->h_total,
-                                      pane_cx->border_style, 
-                                      pane_cx == FG_PANE_CX ? SDL_GREEN : SDL_BLUE,  
-                                      true,   // clear
-                                      &loc_full_pane, &loc_bar_move, &loc_bar_terminate);
-
-            sdl_register_event(&pane_cx->pane, &loc_full_pane, SDL_EVENT_PANE_SELECT, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-            sdl_register_event(&pane_cx->pane, &loc_full_pane, SDL_EVENT_PANE_BACKGROUND, SDL_EVENT_TYPE_MOUSE_RIGHT_CLICK, pane_cx);
-            sdl_register_event(&pane_cx->pane, &loc_bar_move, SDL_EVENT_PANE_MOVE, SDL_EVENT_TYPE_MOUSE_MOTION, pane_cx);
-            sdl_register_event(&pane_cx->pane, &loc_bar_terminate, SDL_EVENT_PANE_TERMINATE, SDL_EVENT_TYPE_MOUSE_CLICK, pane_cx);
-
-            ret = pane_cx->pane_handler(pane_cx, PANE_HANDLER_REQ_RENDER, NULL, NULL);
-
-            if (ret == PANE_HANDLER_RET_PANE_TERMINATE) {
-                pane_terminate(&pane_list_head, pane_cx);
-                redraw = true;
-            } else if (ret == PANE_HANDLER_RET_DISPLAY_REDRAW) {
-                redraw = true;
-            }
-        }
-
-        // call display_end, if supplied 
-        if (display_end) {
-            display_end(display_cx);
-        }
-
-        // if redraw has been requested or global program_quit flag is set then continue
-        if (redraw || sdl_program_quit) {
-            continue;
-        }
-
-        // present the display
-        sdl_display_present();
-
-        // handle events
-        while (true) {
-            call_pane_handler = false;
-            event = sdl_poll_event();
-
-            if (event->event_cx == NULL) {
-                if (IS_KEYBOARD_EVENT_ID(event->event_id)) {
-                    if (event->event_id == SDL_EVENT_KEY_ALT + 'r') {         // ALT-r: redraw
-                        redraw = true;
-                    } else if (event->event_id == SDL_EVENT_KEY_ALT + 'q') {  // ALT-q: program quit
-                        sdl_program_quit = true;
-                    } else if (event->event_id == SDL_EVENT_KEY_ALT + 'x') {  // ALT-x: terminate pane
-                        pane_terminate(&pane_list_head, FG_PANE_CX);
-                        redraw = true;
-                    } else if (event->event_id == SDL_EVENT_KEY_ALT + 'p'  || // ALT-p: print screen
-                               event->event_id == SDL_EVENT_KEY_CTRL + 'p') { // CTRL-p: print screen
-                        sdl_print_screen(get_print_screen_filename(),true,NULL);
-                        redraw = true;
-                    } else {   // pass keyboard event to the pane_handler
-                        call_pane_handler = true;
-                    }
-                } else if (event->event_id == SDL_EVENT_WIN_SIZE_CHANGE ||  
-                           event->event_id == SDL_EVENT_WIN_RESTORED) 
-                {
-                    redraw = true;
-                } else if (event->event_id == SDL_EVENT_QUIT) {
-                    sdl_program_quit = true;
-                }
-            }
-
-            if (event->event_cx != NULL) {
-                if ((pane_cx_t*)event->event_cx != FG_PANE_CX) {
-                    TAILQ_REMOVE(&pane_list_head, (pane_cx_t*)event->event_cx, entries);
-                    TAILQ_INSERT_TAIL(&pane_list_head, (pane_cx_t*)event->event_cx, entries);
-                    redraw = true;
-                }
-                if (event->event_id == SDL_EVENT_PANE_SELECT) {
-                    redraw = true;
-                } else if (event->event_id == SDL_EVENT_PANE_BACKGROUND) {
-                    pane_cx_t *pane_cx = (pane_cx_t*)event->event_cx;
-                    int32_t mouse_x = event->mouse_click.x + pane_cx->x_disp;
-                    int32_t mouse_y = event->mouse_click.y + pane_cx->y_disp;
-                    pane_cx_t *x;
-
-                    // remove this pane (the FG_PANE_CX) from the tail and put it on head;
-                    // so now pane will be furthest in background
-                    TAILQ_REMOVE(&pane_list_head, pane_cx, entries);
-                    TAILQ_INSERT_HEAD(&pane_list_head, pane_cx, entries);
-
-                    // try to find another pane to put in the foreground by searching
-                    // the pane list starting from the tail (foreground), looking
-                    // for a pane that contains the mouse click coordinates; 
-                    // if found then put that pane in foreground
-                    DEBUG("MOUSE %d %d\n", mouse_x,mouse_y);
-                    TAILQ_FOREACH_REVERSE(x, &pane_list_head, pane_list_head_s, entries) {
-                        DEBUG("%d %d %d %d\n", x->x_disp, x->y_disp, x->w_total, x->h_total);
-                        if ((mouse_x >= x->x_disp && mouse_x < x->x_disp + x->w_total) &&
-                            (mouse_y >= x->y_disp && mouse_y < x->y_disp + x->h_total))
-                        {
-                            TAILQ_REMOVE(&pane_list_head, x, entries);
-                            TAILQ_INSERT_TAIL(&pane_list_head, x, entries);
-                            break;
-                        }
-                    }
-
-                    // need to redraw
-                    redraw = true;
-                } else if (event->event_id == SDL_EVENT_PANE_MOVE) {
-                    FG_PANE_CX->x_disp += event->mouse_motion.delta_x;
-                    FG_PANE_CX->y_disp += event->mouse_motion.delta_y;
-                    redraw = true;
-                } else if (event->event_id == SDL_EVENT_PANE_TERMINATE) {
-                    pane_terminate(&pane_list_head, FG_PANE_CX);
-                    redraw = true;
-                } else {
-                    call_pane_handler = true;
-                }
-            } 
-
-            if (call_pane_handler) {
-                ret = FG_PANE_CX->pane_handler(FG_PANE_CX, PANE_HANDLER_REQ_EVENT, NULL, event);
-                if (ret == PANE_HANDLER_RET_PANE_TERMINATE) {
-                    pane_terminate(&pane_list_head, FG_PANE_CX);
-                    redraw = true;
-                } else if (ret == PANE_HANDLER_RET_DISPLAY_REDRAW) {
-                    redraw = true;
-                }
-            }
-
-            if ((redraw) || 
-                (redraw_interval_us != -1 && microsec_timer() >= start_us + redraw_interval_us) ||
-                (sdl_program_quit))
-            {
-                break;
-            }
-
-            usleep(1000);
-        }
-    }
-
-    // call all pane_handler terminate, and remove from pane_list
-    while ((pane_cx = pane_list_head.tqh_first) != NULL) {
-        pane_terminate(&pane_list_head, pane_cx);
-    }
-
-    // remove entry from sdl_pane_list_head
-    sdl_pane_list_head_idx--;
-}
-
-void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pane_handler, void * init_params,
-                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, int32_t border_style,
-                     void * display_cx)
-{
-    pane_cx_t * pane_cx;
-
-    // alloc and init a pane_cx
-    pane_cx = calloc(1, sizeof(pane_cx_t));
-    pane_cx->display_cx     = display_cx;
-    pane_cx->x_disp         = x_disp;
-    pane_cx->y_disp         = y_disp;
-    pane_cx->w_total        = w_total;
-    pane_cx->h_total        = h_total;
-    pane_cx->border_style   = border_style;
-    pane_cx->pane           = get_pane(x_disp, y_disp, w_total, h_total, border_style);
-    pane_cx->vars           = NULL;
-    pane_cx->pane_handler   = pane_handler;
-    pane_cx->pane_list_head = pane_list_head;
-
-    // add the pane to the tail of pane_list
-    TAILQ_INSERT_TAIL(pane_list_head, pane_cx, entries);
-
-    // call the pane_handler init
-    pane_handler(pane_cx, PANE_HANDLER_REQ_INITIALIZE, init_params, NULL);
-}
-
-void sdl_pane_update(pane_cx_t *pane_cx, 
-                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total)
-{
-    pane_cx->x_disp   = x_disp;
-    pane_cx->y_disp   = y_disp;
-    pane_cx->w_total  = w_total;
-    pane_cx->h_total  = h_total;
-    pane_cx->pane     = get_pane(x_disp, y_disp, w_total, h_total, pane_cx->border_style);
-}
-
-static void pane_terminate(struct pane_list_head_s * pane_list_head, pane_cx_t * pane_cx)
-{
-    // remove from pane_list
-    TAILQ_REMOVE(pane_list_head, pane_cx, entries);
-
-    // call pane_handler terminate
-    pane_cx->pane_handler(pane_cx, PANE_HANDLER_REQ_TERMINATE, NULL, NULL);
-
-    // free the pane_cx
-    free(pane_cx);
-}
-
-rect_t init_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
-                 int32_t border_style, int32_t border_color, bool clear,
-                 rect_t * loc_full_pane, rect_t * loc_bar_move, rect_t * loc_bar_terminate)
-{
-    rect_t locz  = {0, 0, 0, 0};  // zero
-    rect_t panez  = {0, 0, 0, 0};  // zero
-    rect_t locdummy;
-
-    if (loc_full_pane == NULL) {
-        loc_full_pane = &locdummy;
-    }
-    if (loc_bar_move == NULL) {
-        loc_bar_move = &locdummy;
-    }
-    if (loc_bar_terminate == NULL) {
-        loc_bar_terminate = &locdummy;
-    }
-
-    if (border_style == PANE_BORDER_STYLE_STANDARD) {
-        #define PANE_BORDER_WIDTH        2
-        #define PANE_BAR_HEIGHT          20
-        #define PANE_BAR_TERMINATE_WIDTH 20
-        rect_t pane  = { x_disp+PANE_BORDER_WIDTH, y_disp+PANE_BAR_HEIGHT, w_total-2*PANE_BORDER_WIDTH, h_total-PANE_BAR_HEIGHT-PANE_BORDER_WIDTH};
-        rect_t locf  = {-PANE_BORDER_WIDTH, -PANE_BAR_HEIGHT, w_total, h_total};   // full
-        rect_t locb  = {-PANE_BORDER_WIDTH, -PANE_BAR_HEIGHT, w_total, PANE_BAR_HEIGHT};  // bar
-        rect_t locbm = {-PANE_BORDER_WIDTH, -PANE_BAR_HEIGHT, w_total-PANE_BAR_TERMINATE_WIDTH, PANE_BAR_HEIGHT};  // bar-motion
-        rect_t locbt = {-PANE_BORDER_WIDTH+w_total-PANE_BAR_TERMINATE_WIDTH-PANE_BORDER_WIDTH, -PANE_BAR_HEIGHT+PANE_BORDER_WIDTH,  // bar-term
-                        PANE_BAR_TERMINATE_WIDTH, PANE_BAR_HEIGHT-2*PANE_BORDER_WIDTH};
-
-        if (clear) {
-            sdl_render_fill_rect(&pane, &locf, SDL_BLACK);
-        }
-        sdl_render_rect(&pane, &locf, PANE_BORDER_WIDTH, border_color);
-        sdl_render_fill_rect(&pane, &locb, border_color);
-        sdl_render_fill_rect(&pane, &locbt, SDL_RED);
-
-        *loc_full_pane = locf;
-        *loc_bar_move = locbm;
-        *loc_bar_terminate = locbt;
-
-        return pane;
-    }
-
-    if (border_style == PANE_BORDER_STYLE_MINIMAL) {
-        #define PANE_BORDER_WIDTH        2
-        rect_t pane  = { x_disp+PANE_BORDER_WIDTH, y_disp+PANE_BORDER_WIDTH, w_total-2*PANE_BORDER_WIDTH, h_total-2*PANE_BORDER_WIDTH};
-        rect_t locf  = {-PANE_BORDER_WIDTH, -PANE_BORDER_WIDTH, w_total, h_total};   // full
-
-        if (clear) {
-            sdl_render_fill_rect(&pane, &locf, SDL_BLACK);
-        }
-        sdl_render_rect(&pane, &locf, PANE_BORDER_WIDTH, border_color);
-
-        *loc_full_pane = locf;
-        *loc_bar_move = locz;
-        *loc_bar_terminate = locz;
-
-        return pane;
-    }
-
-    if (border_style == PANE_BORDER_STYLE_NONE) {
-        rect_t pane  = {x_disp, y_disp, w_total, h_total};
-        rect_t locf  = {0, 0, w_total, h_total};   // full
-
-        if (clear) {
-            sdl_render_fill_rect(&pane, &locf, SDL_BLACK);
-        }
-
-        *loc_full_pane = locf;
-        *loc_bar_move = locz;
-        *loc_bar_terminate = locz;
-
-        return pane;
-    }
-
-    FATAL("invalid border_style %d\n", border_style);
-    return panez;
-}
-
-rect_t get_pane(int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, int32_t border_style)
-{
-    rect_t panez  = {0, 0, 0, 0};  // zero
-
-    switch (border_style) {
-    case PANE_BORDER_STYLE_STANDARD: {
-        rect_t pane  = { x_disp+PANE_BORDER_WIDTH, y_disp+PANE_BAR_HEIGHT, w_total-2*PANE_BORDER_WIDTH, h_total-PANE_BAR_HEIGHT-PANE_BORDER_WIDTH};
-        return pane; }
-    case PANE_BORDER_STYLE_MINIMAL: {
-        rect_t pane  = { x_disp+PANE_BORDER_WIDTH, y_disp+PANE_BORDER_WIDTH, w_total-2*PANE_BORDER_WIDTH, h_total-2*PANE_BORDER_WIDTH};
-        return pane; }
-    case PANE_BORDER_STYLE_NONE: {
-        rect_t pane  = {x_disp, y_disp, w_total, h_total};
-        return pane; }
-    }
-
-    FATAL("invalid border_style %d\n", border_style);
-    return panez;
-}
-
 // -----------------  DISPLAY INIT AND PRESENT  ------------------------- 
 
-void sdl_display_init(int32_t * win_width, int32_t * win_height, bool * win_minimized)
+void sdl_display_init(void)
 {
     sdl_event_max = 0;
-
     set_color(SDL_BLACK);
     SDL_RenderClear(sdl_renderer);
-
-    if (win_width) {
-        *win_width = sdl_win_width;
-    }
-    if (win_height) {
-        *win_height = sdl_win_height;
-    }
-    if (win_minimized) {
-        *win_minimized = sdl_win_minimized;
-    }
 }
 
 void sdl_display_present(void)
@@ -819,16 +433,16 @@ void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b)
 
 // -----------------  FONT SUPPORT ROUTINES  ---------------------------- 
 
-int32_t sdl_pane_cols(rect_t * pane, int32_t font_ptsize)
+int32_t sdl_win_cols(int32_t font_ptsize)
 {
     font_init(font_ptsize);
-    return pane->w / sdl_font[font_ptsize].char_width;
+    return sdl_win_width / sdl_font[font_ptsize].char_width;
 }
 
-int32_t sdl_pane_rows(rect_t * pane, int32_t font_ptsize)
+int32_t sdl_win_rows(int32_t font_ptsize)
 {
     font_init(font_ptsize);
-    return pane->h / sdl_font[font_ptsize].char_height;
+    return sdl_win_height / sdl_font[font_ptsize].char_height;
 }
 
 int32_t sdl_font_char_width(int32_t font_ptsize)
@@ -845,7 +459,7 @@ int32_t sdl_font_char_height(int32_t font_ptsize)
 
 // -----------------  EVENT HANDLING  ----------------------------------- 
 
-void sdl_register_event(rect_t * pane, rect_t * loc, int32_t event_id, int32_t event_type, void * event_cx)
+void sdl_register_event(rect_t * loc, int32_t event_id, int32_t event_type, void * event_cx)
 {
     sdl_event_reg_t * e = &sdl_event_reg_tbl[sdl_event_max];
 
@@ -860,8 +474,8 @@ void sdl_register_event(rect_t * pane, rect_t * loc, int32_t event_id, int32_t e
 
     e->event_id = event_id;
     e->event_type = event_type;
-    e->disp_loc.x = pane->x + loc->x;
-    e->disp_loc.y = pane->y + loc->y;
+    e->disp_loc.x = loc->x;
+    e->disp_loc.y = loc->y;
     e->disp_loc.w = loc->w;
     e->disp_loc.h = loc->h;
     e->event_cx = event_cx;
@@ -869,24 +483,24 @@ void sdl_register_event(rect_t * pane, rect_t * loc, int32_t event_id, int32_t e
     sdl_event_max++;
 }
 
-void sdl_render_text_and_register_event(rect_t * pane, int32_t x, int32_t y,
+void sdl_render_text_and_register_event(int32_t x, int32_t y,
         int32_t font_ptsize, char * str, int32_t fg_color, int32_t bg_color, 
         int32_t event_id, int32_t event_type, void * event_cx)
 {
     rect_t loc_clipped;
-    loc_clipped = sdl_render_text(pane, x, y, font_ptsize, str, fg_color, bg_color);
+    loc_clipped = sdl_render_text(x, y, font_ptsize, str, fg_color, bg_color);
     if (loc_clipped.w == 0) {
         return;
     }
-    sdl_register_event(pane, &loc_clipped, event_id, event_type, event_cx);
+    sdl_register_event(&loc_clipped, event_id, event_type, event_cx);
 }
 
-void sdl_render_texture_and_register_event(rect_t * pane, int32_t x, int32_t y,
+void sdl_render_texture_and_register_event(int32_t x, int32_t y,
         texture_t texture, int32_t event_id, int32_t event_type, void * event_cx)
 {
     rect_t loc_clipped;
-    loc_clipped = sdl_render_texture(pane, x, y, texture);
-    sdl_register_event(pane, &loc_clipped, event_id, event_type, event_cx);
+    loc_clipped = sdl_render_texture(x, y, texture);
+    sdl_register_event(&loc_clipped, event_id, event_type, event_cx);
 }
 
 sdl_event_t * sdl_poll_event(void)
@@ -1197,44 +811,6 @@ sdl_event_t * sdl_poll_event(void)
             break; }
         }
 
-        // if using the pane manager AND
-        //    we have an event AND
-        //    we have an event_cx (which is a pane_cx when sdl_pane_manger is being used)
-        // then
-        //   Determine the pane_cx associated with the current mouse position;
-        //    that is the pane that is closest to the foreground.
-        //   If the pane found is not the pane associated with the event then
-        //    discard the event.
-        // endif
-        //
-        // In other words, if the pane associated with the event is not visible at the
-        // mouse position then the event is discarded.
-        if (sdl_pane_list_head_idx > 0 &&
-            event.event_id != SDL_EVENT_NONE &&
-            event.event_cx != NULL)
-        {
-            struct pane_list_head_s *pane_list_head = sdl_pane_list_head[sdl_pane_list_head_idx-1];
-            int mouse_x, mouse_y;
-            pane_cx_t *x, *found_pane_cx=NULL;
-
-            SDL_GetMouseState(&mouse_x, &mouse_y);
-            DEBUG("MOUSE %d %d\n", mouse_x,mouse_y);
-
-            TAILQ_FOREACH_REVERSE(x, pane_list_head, pane_list_head_s, entries) {
-                DEBUG("%d %d %d %d\n", x->x_disp, x->y_disp, x->w_total, x->h_total);
-                if ((mouse_x >= x->x_disp && mouse_x < x->x_disp + x->w_total) &&
-                    (mouse_y >= x->y_disp && mouse_y < x->y_disp + x->h_total))
-                {
-                    found_pane_cx = x;
-                    break;
-                }
-            }
-            if (found_pane_cx != event.event_cx) {
-                DEBUG("DISCARDING EVENT\n");
-                memset(&event, 0, sizeof(event));
-            }
-        }
-
         // break if event is set
         if (event.event_id != SDL_EVENT_NONE) {
             break; 
@@ -1256,7 +832,7 @@ void sdl_push_event(sdl_event_t *ev)
 
 // -----------------  RENDER TEXT  -------------------------------------- 
 
-rect_t sdl_render_text(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize, char * str, 
+rect_t sdl_render_text(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
                        int32_t fg_color, int32_t bg_color)
 {
     texture_t texture;
@@ -1276,24 +852,23 @@ rect_t sdl_render_text(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize,
     }
     sdl_query_texture(texture, &width, &height);
 
-    // determine the location within the pane that this
-    // texture is to be rendered
+    // determine the location that this texture is to be rendered
     loc.x = x;
     loc.y = y; 
     loc.w = width;
     loc.h = height;
 
     // render the texture
-    loc_clipped = sdl_render_scaled_texture(pane, &loc, texture);
+    loc_clipped = sdl_render_scaled_texture(&loc, texture);
 
     // clean up
     sdl_destroy_texture(texture);
 
-    // return the location of the text (possibly clipped), within the pane
+    // return the location of the text (possibly clipped)
     return loc_clipped;
 }
 
-void sdl_render_printf(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize,
+void sdl_render_printf(int32_t x, int32_t y, int32_t font_ptsize,
                        int32_t fg_color, int32_t bg_color, char * fmt, ...) 
 {
     char str[1000];
@@ -1303,21 +878,20 @@ void sdl_render_printf(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize,
     vsnprintf(str, sizeof(str), fmt, ap);
     va_end(ap);
 
-    sdl_render_text(pane, x, y, font_ptsize, str, fg_color, bg_color);
+    sdl_render_text(x, y, font_ptsize, str, fg_color, bg_color);
 }
 
 // -----------------  RENDER RECTANGLES  -------------------------------- 
 
-// xxx sdl_render_rect, and sdl_render_fill_rect needs to support clipping
-void sdl_render_rect(rect_t * pane, rect_t * loc, int32_t line_width, int32_t color)
+void sdl_render_rect(rect_t * loc, int32_t line_width, int32_t color)
 {
     SDL_Rect rect;
     int32_t i;
 
     set_color(color);
 
-    rect.x = pane->x + loc->x;
-    rect.y = pane->y + loc->y;
+    rect.x = loc->x;
+    rect.y = loc->y;
     rect.w = loc->w;
     rect.h = loc->h;
 
@@ -1333,14 +907,14 @@ void sdl_render_rect(rect_t * pane, rect_t * loc, int32_t line_width, int32_t co
     }
 }
 
-void sdl_render_fill_rect(rect_t * pane, rect_t * loc, int32_t color)
+void sdl_render_fill_rect(rect_t * loc, int32_t color)
 {
     SDL_Rect rect;
 
     set_color(color);
 
-    rect.x = pane->x + loc->x;
-    rect.y = pane->y + loc->y;
+    rect.x = loc->x;
+    rect.y = loc->y;
     rect.w = loc->w;
     rect.h = loc->h;
     SDL_RenderFillRect(sdl_renderer, &rect);
@@ -1348,31 +922,27 @@ void sdl_render_fill_rect(rect_t * pane, rect_t * loc, int32_t color)
 
 // -----------------  RENDER LINES  ------------------------------------- 
 
-void sdl_render_line(rect_t * pane, int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t color)
+// xxx need unit test pgm
+void sdl_render_line(int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t color)
 {
     point_t points[2] = { {x1,y1}, {x2,y2} };
-    sdl_render_lines(pane, points, 2, color);
+    sdl_render_lines(points, 2, color);
 }
 
-void sdl_render_lines(rect_t * pane, point_t * points, int32_t count, int32_t color)
+// xxx test this
+void sdl_render_lines(point_t * points, int32_t count, int32_t color)
 {
     #define MAX_SDL_POINTS 1000
 
-    SDL_Point sdl_points[MAX_SDL_POINTS];
-    int32_t   i, ret, max=0;
-    bool      point_is_within_pane;
-    bool      last_point_is_within_pane = true;
-    point_t   last_point;
-
     #define ADD_POINT_TO_ARRAY(_point) \
         do { \
-            sdl_points[max].x = (_point).x + pane->x; \
-            sdl_points[max].y = (_point).y + pane->y; \
+            sdl_points[max].x = (_point).x; \
+            sdl_points[max].y = (_point).y; \
             max++; \
     } while (0)
 
-    #define POINT_IS_WITHIN_PANE(_p, _pane) ((_p)->x >= 0 && (_p)->x < (_pane)->w && \
-                                             (_p)->y >= 0 && (_p)->y < (_pane)->h)
+    SDL_Point sdl_points[MAX_SDL_POINTS];
+    int32_t   i, max=0;
 
     // return if number of points supplied by caller is invalid
     if (count <= 1) {
@@ -1384,211 +954,24 @@ void sdl_render_lines(rect_t * pane, point_t * points, int32_t count, int32_t co
 
     // loop over points
     for (i = 0; i < count; i++) {
-        // determine if point is within the pane
-        point_is_within_pane = POINT_IS_WITHIN_PANE(&points[i], pane);
-        DEBUG("POINT %d = %d, %d   within=%d\n", i, points[i].x, points[i].y, point_is_within_pane);
+        ADD_POINT_TO_ARRAY(points[i]);
 
-        // if point is within pane
-        if (point_is_within_pane) {
-
-            // if there is no last point
-            //   add point to array
-            // else if last point is within pane
-            //   case is IN -> IN
-            //   add point to array
-            //   if array is full
-            //     render lines
-            //     add the last point in the list as the new first point in the list
-            //   endif
-            // else
-            //   case is OUT -> IN
-            //   assert point array is empty
-            //   find intersection at pane border 
-            //   add this intersecting point to the array, this is starting point
-            //   add the new point to the array too
-            // endif
-
-            if (i == 0) {
-                DEBUG("CASE i==0\n");
-                ADD_POINT_TO_ARRAY(points[i]);
-            } else if (last_point_is_within_pane) {
-                // case is IN -> IN
-                DEBUG("CASE  IN-> IN\n");
-                ADD_POINT_TO_ARRAY(points[i]);
-                if (max == MAX_SDL_POINTS) {
-                    SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
-                    max = 0;
-                    ADD_POINT_TO_ARRAY(points[i]);
-                }
-            } else {
-                // case is OUT -> IN 
-                point_t intersecting_point;
-                DEBUG("CASE  OUT -> IN\n");
-
-                assert(max == 0);
-                ret = find_1_intersect(&points[i], &last_point, pane, &intersecting_point);
-                if (ret == 1) {
-                    ADD_POINT_TO_ARRAY(intersecting_point);
-                }
-                ADD_POINT_TO_ARRAY(points[i]);
-            }
-
-        } else {   // point is not within pane
-
-            //   if there is no last point
-            //     nothing to do
-            //   else if last point is within pane
-            //     case is IN -> OUT
-            //     find intersection at pane border 
-            //     add this intersecting point to the array, this is ending point
-            //     render lines
-            //   else
-            //     case is OUT -> OUT
-            //     assert point array is empty
-            //     find intersection at pane border 
-            //     there should be either 0 or 2 intersections, or
-            //      possibly 1 when a line is very close to pane corner
-            //     if there are 2 intersections
-            //        draw the line between the 2 intersections
-            //     endif
-            //   endif
-
-            if (i == 0) {
-                // nothing to do
-            } else if (last_point_is_within_pane) {
-                // case is IN -> OUT
-                point_t intersecting_point;
-
-                DEBUG("CASE  IN -> OUT\n");
-                ret = find_1_intersect(&last_point, &points[i], pane, &intersecting_point);
-                if (ret == 1) {
-                    ADD_POINT_TO_ARRAY(intersecting_point);
-                }
-                SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
-                max = 0;
-            } else {
-                // case is OUT -> OUT
-                point_t intersecting_points[4];
-                DEBUG("CASE  OUT -> OUT\n");
-
-                assert(max == 0);
-                ret = find_n_intersect(&last_point, &points[i], pane, intersecting_points);
-                if (ret != 2 && ret != 0) {
-                    DEBUG("find_n_intersect ret=%d  intersecting_point[0]=%d,%d\n",
-                          ret, intersecting_points[0].x, intersecting_points[0].y);
-                }
-                if (ret == 2) {
-                    ADD_POINT_TO_ARRAY(intersecting_points[0]);
-                    ADD_POINT_TO_ARRAY(intersecting_points[1]);
-                    SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
-                    max = 0;
-                }
-            }
+        if (max == MAX_SDL_POINTS) {
+            SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
+            max = 0;
+            ADD_POINT_TO_ARRAY(points[i]);
         }
-
-        // save last_point info for next time around the loop
-        last_point = points[i];
-        last_point_is_within_pane = point_is_within_pane;
     }
 
     // finish rendering the lines
-    if (max) {
+    if (max > 1) {
         SDL_RenderDrawLines(sdl_renderer, sdl_points, max);
     }
 }
 
-// The following routines are used by sdl_render_lines to locate the intersection
-// of a line (connecting points p1 and p2) with the pane border, when the line enters
-// or leave the pane.
-//
-// The intersecting point returned must also lie within the pane.
-//
-// The return value from these routines is the number of intersecting points found.
-static int find_1_intersect(point_t *p1, point_t *p2, rect_t *pane, point_t *p_intersect)
-{
-    if ((find_x_intersect(p1, p2, 0, p_intersect)         && POINT_IS_WITHIN_PANE(p_intersect,pane)) ||
-        (find_x_intersect(p1, p2, pane->w-1, p_intersect) && POINT_IS_WITHIN_PANE(p_intersect,pane)) ||
-        (find_y_intersect(p1, p2, 0, p_intersect)         && POINT_IS_WITHIN_PANE(p_intersect,pane)) ||
-        (find_y_intersect(p1, p2, pane->h-1, p_intersect) && POINT_IS_WITHIN_PANE(p_intersect,pane)))
-    {
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
-static int find_n_intersect(point_t *p1, point_t *p2, rect_t *pane, point_t *p_intersect)
-{
-    point_t p_tmp;
-    int max_found = 0;
-
-    if (find_x_intersect(p1, p2, 0, &p_tmp) && POINT_IS_WITHIN_PANE(&p_tmp,pane)) {
-        p_intersect[max_found++] = p_tmp;
-    }
-    if (find_x_intersect(p1, p2, pane->w-1, &p_tmp) && POINT_IS_WITHIN_PANE(&p_tmp,pane)) {
-        p_intersect[max_found++] = p_tmp;
-    }
-    if (find_y_intersect(p1, p2, 0, &p_tmp) && POINT_IS_WITHIN_PANE(&p_tmp,pane)) {
-        p_intersect[max_found++] = p_tmp;
-    }
-    if (find_y_intersect(p1, p2, pane->h-1, &p_tmp) && POINT_IS_WITHIN_PANE(&p_tmp,pane)) {
-        p_intersect[max_found++] = p_tmp;
-    }
-
-    return max_found;
-}
-
-// find the intersection of a line segment from p1 to p2 with the 
-// line 'x = X'; for example:
-//  Example1:  p1=1,1 p2=3,3 X=2  =>  p_intersect=2,2 ret=1
-//  Example2:  p1=1,1 p2=3,3 X=4  =>  ret=0
-static int find_x_intersect(point_t *p1, point_t *p2, double X, point_t *p_intersect)
-{
-    double T;
-
-    #define X1 (p1->x)
-    #define Y1 (p1->y)
-    #define X2 (p2->x)
-    #define Y2 (p2->y)
-
-    if (X2 - X1 == 0) {
-        return 0;
-    }
-
-    T = (X - X1) / (X2 - X1);
-    if (T <= 0 || T >= 1) {
-        return 0;
-    }
-
-    p_intersect->x = X;
-    p_intersect->y = nearbyint(Y1 + T * (Y2 - Y1));
-    return 1;
-}
-
-// same as above routine except that the intersection found is that between
-// the line segment and 'y = Y'
-static int find_y_intersect(point_t *p1, point_t *p2, double Y, point_t *p_intersect)
-{
-    double T;
-
-    if (Y2 - Y1 == 0) {
-        return 0;
-    }
-
-    T = (Y - Y1) / (Y2 - Y1);
-    if (T <= 0 || T >= 1) {
-        return 0;
-    }
-
-    p_intersect->x = nearbyint(X1 + T * (X2 - X1));
-    p_intersect->y = Y;
-    return 1;
-}
-
 // -----------------  RENDER CIRCLE  ------------------------------------ 
 
-void sdl_render_circle(rect_t * pane, int32_t x_center, int32_t y_center, int32_t radius,
-                       int32_t line_width, int32_t color)
+void sdl_render_circle(int32_t x_center, int32_t y_center, int32_t radius, int32_t line_width, int32_t color)
 {
     int32_t count = 0, i, angle, x, y;
     SDL_Point points[370];
@@ -1611,19 +994,19 @@ void sdl_render_circle(rect_t * pane, int32_t x_center, int32_t y_center, int32_
 
     // loop over line_width
     for (i = 0; i < line_width; i++) {
-        // draw circle, and clip to pane dimensions
+        // draw circle, and clip to win dimensions
         for (angle = 0; angle < 362; angle++) {
             x = x_center + (((int64_t)radius * sin_table[angle]) >> 18);
             y = y_center + (((int64_t)radius * cos_table[angle]) >> 18);
-            if (x < 0 || x >= pane->w || y < 0 || y >= pane->h) {
+            if (x < 0 || x >= sdl_win_width || y < 0 || y >= sdl_win_height) {
                 if (count) {
                     SDL_RenderDrawLines(sdl_renderer, points, count);
                     count = 0;
                 }
                 continue;
             }
-            points[count].x = pane->x + x;
-            points[count].y = pane->y + y;
+            points[count].x = x;
+            points[count].y = y;
             count++;
         }
         if (count) {
@@ -1641,13 +1024,13 @@ void sdl_render_circle(rect_t * pane, int32_t x_center, int32_t y_center, int32_
 
 // -----------------  RENDER POINTS  ------------------------------------ 
 
-void sdl_render_point(rect_t * pane, int32_t x, int32_t y, int32_t color, int32_t point_size)
+void sdl_render_point(int32_t x, int32_t y, int32_t color, int32_t point_size)
 {
     point_t point = {x,y};
-    sdl_render_points(pane, &point, 1, color, point_size);
+    sdl_render_points(&point, 1, color, point_size);
 }
 
-void sdl_render_points(rect_t * pane, point_t * points, int32_t count, int32_t color, int32_t point_size)
+void sdl_render_points(point_t * points, int32_t count, int32_t color, int32_t point_size)
 {
     #define MAX_SDL_POINTS 1000
 
@@ -1799,11 +1182,11 @@ void sdl_render_points(rect_t * pane, point_t * points, int32_t count, int32_t c
         for (j = 0; j < pe->max; j++) {
             x = points[i].x + peo[j].x;
             y = points[i].y + peo[j].y;
-            if (x < 0 || x >= pane->w || y < 0 || y >= pane->h) {
+            if (x < 0 || x >= sdl_win_width || y < 0 || y >= sdl_win_height) {
                 continue;
             }
-            sdl_points[sdl_points_count].x = pane->x + x;
-            sdl_points[sdl_points_count].y = pane->y + y;
+            sdl_points[sdl_points_count].x = x;
+            sdl_points[sdl_points_count].y = y;
             sdl_points_count++;
 
             if (sdl_points_count == MAX_SDL_POINTS) {
@@ -1821,6 +1204,9 @@ void sdl_render_points(rect_t * pane, point_t * points, int32_t count, int32_t c
 
 // -----------------  RENDER USING TEXTURES  ---------------------------- 
 
+// xxx how are all these used
+// xxx some routines in this file need comment headers
+
 texture_t sdl_create_texture(int32_t w, int32_t h)
 {
     SDL_Texture * texture;
@@ -1837,12 +1223,13 @@ texture_t sdl_create_texture(int32_t w, int32_t h)
     return (texture_t)texture;
 }
 
-texture_t sdl_create_texture_from_pane_pixels(rect_t * pane)
+// xxx how used
+texture_t sdl_create_texture_from_win_pixels(void)
 {
     texture_t texture;
     int32_t ret;
     uint8_t * pixels;
-    SDL_Rect rect = {pane->x, pane->y, pane->w, pane->h};
+    SDL_Rect rect = {0, 0, sdl_win_width, sdl_win_height};
 
     // allocate memory for the pixels
     pixels = calloc(1, rect.h * rect.w * BYTES_PER_PIXEL);
@@ -1864,7 +1251,7 @@ texture_t sdl_create_texture_from_pane_pixels(rect_t * pane)
     }
 
     // create the texture
-    texture = sdl_create_texture(pane->w, pane->h);
+    texture = sdl_create_texture(sdl_win_width, sdl_win_height);
     if (texture == NULL) {
         ERROR("failed to allocate texture\n");
         free(pixels);
@@ -1872,7 +1259,7 @@ texture_t sdl_create_texture_from_pane_pixels(rect_t * pane)
     }
 
     // update the texture with the pixels
-    SDL_UpdateTexture(texture, NULL, pixels, pane->w * BYTES_PER_PIXEL);
+    SDL_UpdateTexture(texture, NULL, pixels, sdl_win_width * BYTES_PER_PIXEL);
 
     // free pixels
     free(pixels);
@@ -1995,7 +1382,7 @@ void sdl_query_texture(texture_t texture, int32_t * width, int32_t * height)
     SDL_QueryTexture((SDL_Texture *)texture, NULL, NULL, width, height);
 }
 
-rect_t sdl_render_texture(rect_t * pane, int32_t x, int32_t y, texture_t texture)
+rect_t sdl_render_texture(int32_t x, int32_t y, texture_t texture)
 {
     int32_t width, height;
     rect_t loc, loc_clipped = {0,0,0,0};
@@ -2012,14 +1399,14 @@ rect_t sdl_render_texture(rect_t * pane, int32_t x, int32_t y, texture_t texture
     loc.w = width;
     loc.h = height;
     
-    // render the texture at pane/loc
-    loc_clipped = sdl_render_scaled_texture(pane, &loc, texture);
+    // render the texture 
+    loc_clipped = sdl_render_scaled_texture(&loc, texture);
 
     // return the possibly clipped location
     return loc_clipped;
 }
 
-rect_t sdl_render_scaled_texture(rect_t * pane, rect_t * loc, texture_t texture)
+rect_t sdl_render_scaled_texture(rect_t * loc, texture_t texture)
 {
     SDL_Rect dstrect, srcrect;
     int32_t texture_width, texture_height;
@@ -2030,79 +1417,79 @@ rect_t sdl_render_scaled_texture(rect_t * pane, rect_t * loc, texture_t texture)
         return loc_clipped;
     }
 
-    // if loc is completely outside of pane then return
-    if (loc->x >= pane->w ||
-        loc->y >= pane->h ||
+    // if loc is completely outside of window then return
+    if (loc->x >= sdl_win_width ||
+        loc->y >= sdl_win_height ||
         loc->x + loc->w <= 0 ||
         loc->y + loc->h <= 0)
     {
         return loc_clipped;
     }
 
-    // if loc is completely inside the pane
-    if (loc->x >= 0 && loc->x + loc->w <= pane->w &&
-        loc->y >= 0 && loc->y + loc->h <= pane->h)
+    // if loc is completely inside the window
+    if (loc->x >= 0 && loc->x + loc->w <= sdl_win_width &&
+        loc->y >= 0 && loc->y + loc->h <= sdl_win_height)
     {
-        dstrect.x = loc->x + pane->x;
-        dstrect.y = loc->y + pane->y;
+        dstrect.x = loc->x;
+        dstrect.y = loc->y;
         dstrect.w = loc->w;
         dstrect.h = loc->h;
         SDL_RenderCopy(sdl_renderer, texture, NULL, &dstrect);
 
-        loc_clipped.x = dstrect.x - pane->x;
-        loc_clipped.y = dstrect.y - pane->y;
+        loc_clipped.x = dstrect.x;
+        loc_clipped.y = dstrect.y;
         loc_clipped.w = dstrect.w;
         loc_clipped.h = dstrect.h;
         return loc_clipped;
     }
 
     // otherwise need to handle complicated cases to clip the 
-    // texture at the pane border
+    // texture at the window border
     sdl_query_texture(texture, &texture_width, &texture_height);
 
     if ((loc->y < 0) &&
-        (loc->y + loc->h > pane->h)) 
+        (loc->y + loc->h > sdl_win_height)) 
     {
-        dstrect.y = pane->y;
-        dstrect.h = pane->h;
+        dstrect.y = 0;
+        dstrect.h = sdl_win_height;
         srcrect.y = texture_height * -loc->y / loc->h;
-        srcrect.h = texture_height * pane->h / loc->h;
+        srcrect.h = texture_height * sdl_win_height / loc->h;
     } else if (loc->y < 0) {
-        dstrect.y = pane->y;
+        dstrect.y = 0;
         dstrect.h = loc->h + loc->y;
         srcrect.y = texture_height * -loc->y / loc->h;
         srcrect.h = texture_height - srcrect.y;
-    } else if (loc->y + loc->h > pane->h) {
-        dstrect.y = pane->y + loc->y;
-        dstrect.h = pane->h - loc->y;
+    } else if (loc->y + loc->h > sdl_win_height) {
+        dstrect.y = loc->y;
+        dstrect.h = sdl_win_height - loc->y;
         srcrect.y = 0;
         srcrect.h = texture_height * dstrect.h / loc->h;
     } else {
-        dstrect.y = pane->y + loc->y;
+        dstrect.y = loc->y;
         dstrect.h = loc->h;
         srcrect.y = 0;
         srcrect.h = texture_height;
     }
 
     if ((loc->x < 0) &&
-        (loc->x + loc->w > pane->w)) 
+        (loc->x + loc->w > sdl_win_width)) 
     {
-        dstrect.x = pane->x;
-        dstrect.w = pane->w;
+        dstrect.x = 0;
+        dstrect.w = sdl_win_width;
         srcrect.x = texture_width * -loc->x / loc->w;
-        srcrect.w = texture_width * pane->w / loc->w;
+        srcrect.w = texture_width * sdl_win_width / loc->w;
     } else if (loc->x < 0) {
-        dstrect.x = pane->x;
+        dstrect.x = 0;
         dstrect.w = loc->w + loc->x;
         srcrect.x = texture_width * -loc->x / loc->w;
         srcrect.w = texture_width - srcrect.x;
-    } else if (loc->x + loc->w > pane->w) {
-        dstrect.x = pane->x + loc->x;
-        dstrect.w = pane->w - loc->x;
+    } else if (loc->x + loc->w > sdl_win_width) {
+        dstrect.x = loc->x;
+        dstrect.w = sdl_win_width - loc->x;
         srcrect.x = 0;
         srcrect.w = texture_width * dstrect.w / loc->w;
     } else {
-        dstrect.x = pane->x + loc->x;
+        dstrect.x = loc->x;
         dstrect.w = loc->w;
         srcrect.x = 0;
         srcrect.w = texture_width;
@@ -2110,20 +1497,19 @@ rect_t sdl_render_scaled_texture(rect_t * pane, rect_t * loc, texture_t texture)
 
     SDL_RenderCopy(sdl_renderer, texture, &srcrect, &dstrect);
 
-    loc_clipped.x = dstrect.x - pane->x;
-    loc_clipped.y = dstrect.y - pane->y;
+    loc_clipped.x = dstrect.x;
+    loc_clipped.y = dstrect.y;
     loc_clipped.w = dstrect.w;
     loc_clipped.h = dstrect.h;
     return loc_clipped;
 }
 
-// xxx this should also support clipping
-void sdl_render_scaled_texture_ex(rect_t *pane, rect_t *src, rect_t *dst, texture_t texture)
+void sdl_render_scaled_texture_ex(rect_t *src, rect_t *dst, texture_t texture)
 {
     SDL_Rect dstrect, srcrect;
 
-    dstrect.x = dst->x + pane->x;
-    dstrect.y = dst->y + pane->y;
+    dstrect.x = dst->x;
+    dstrect.y = dst->y;
     dstrect.w = dst->w;
     dstrect.h = dst->h;
 
@@ -2202,183 +1588,3 @@ void sdl_update_iyuv_texture(texture_t texture,
                          v_plane, v_pitch);
 }
 
-// -----------------  RENDER PLOTS  ------------------------------------- 
-
-void sdl_plot(rect_t *pane, 
-              int x_pos, int y_pos, int x_width, int y_height,  // 0 - 100 percent
-              double *data, int n, 
-              double xv_min, double xv_max, double xv_blue_cursor, double xv_red_cursor,
-              double yv_min, double yv_max,
-              unsigned int flags,
-              char *title, char *x_units)
-{
-    #define MAX_YV 4000
-    #define PLOT_FONTSZ 16
-
-    struct {
-        double min;
-        double max;
-    } yv[MAX_YV];
-    double xv_span, yv_span, y, y_min, y_max;
-
-    int x_l, x_r, y_t, y_b;
-    int x_left, x_right, y_top, y_bottom;
-    int x_span, y_span;
-    int x_origin, y_origin;
-
-    int x_title;
-    int x, i;
-    char s[100], *p;
-
-    // init x,y value span
-    xv_span  = xv_max - xv_min;
-    yv_span  = yv_max - yv_min;
-
-    // init pixel coords
-    // - full display area for this plot (pixel units)
-    x_l = nearbyint((x_pos / 100.) * pane->w);
-    x_r = nearbyint(x_l + (x_width / 100.) * pane->w);
-    y_t = nearbyint((y_pos / 100.) * pane->h);
-    y_b = nearbyint(y_t + (y_height / 100.) * pane->h);
-    // - the actual area of the plot graph (within this plot's full display area) (pixel units)
-    x_left   = x_l + COL2X(6,PLOT_FONTSZ);
-    x_right  = x_r - 20;
-    y_top    = y_t;
-    y_bottom = y_b - 40;
-    // - the span of the plot graph (pixel units)
-    x_span   = x_right - x_left;
-    y_span   = y_bottom - y_top;
-    // - the x,y origin (pixel units)
-    x_origin = x_left;
-    y_origin = y_top + (yv_max / yv_span) * y_span;
-
-    // sanity checks
-    if (x_span >= MAX_YV) {
-        FATAL("x_span = %d too large\n", x_span);
-    }
-
-    // init yv array
-    for (i = 0; i < x_span; i++) {
-        yv[i].min = 1e99;
-        yv[i].max = -1e99;
-    }
-
-    // determine yv min/max
-    for (i = 0; i < n; i++) {
-        x = (long)i * x_span / n;
-        y = data[i];
-        if (y > yv[x].max) yv[x].max = y;
-        if (y < yv[x].min) yv[x].min = y;
-    }
-
-    // handle xxx
-    if (flags & SDL_PLOT_FLAG_BARS) {
-        for (x = 0; x < x_span; x++) {
-            if (yv[x].max == -1e99) {
-                continue;
-            }
-            if (yv[x].max > 0 && yv[x].min > 0) {
-                yv[x].min = 0;
-            }
-            if (yv[x].max < 0 && yv[x].min < 0) {
-                yv[x].max = 0;
-            }
-        }
-    }
-
-    // limit yv to caller supplied min/max
-    for (x = 0; x < x_span; x++) {
-        if (yv[x].max == -1e99) {
-            continue;
-        }
-        if (yv[x].max > yv_max) yv[x].max = yv_max;
-        if (yv[x].max < yv_min) yv[x].max = yv_min;
-
-        if (yv[x].min > yv_max) yv[x].min = yv_max;
-        if (yv[x].min < yv_min) yv[x].min = yv_min;
-    }
-
-    // plot
-    for (x = 0; x < x_span; x++) {
-        if (yv[x].max == -1e99) {
-            continue;
-        }
-        y_min = yv[x].min * (y_span / yv_span);
-        y_max = yv[x].max * (y_span / yv_span);
-        sdl_render_line(pane, 
-                        x_origin+x, y_origin-y_min,
-                        x_origin+x, y_origin-y_max,
-                        SDL_WHITE);
-    }
-
-    // x axis: line
-    if (y_origin <= y_bottom && y_origin >= y_top) {
-        sdl_render_line(pane, 
-                        x_origin, y_origin, 
-                        x_origin + x_span, y_origin,
-                        SDL_GREEN);
-    }
-
-    // x axis: ticks
-    int y_tick = (y_origin <= y_bottom && y_origin >= y_top) ? y_origin : y_bottom;
-    for (int i = 0; i <= 10; i++) {
-        int x_tick = x_origin + (i / 10.) * x_span;
-        sdl_render_line(pane, x_tick, y_tick-5, x_tick, y_tick+5, SDL_GREEN);
-        sdl_render_line(pane, x_tick-1, y_tick-5, x_tick-1, y_tick+5, SDL_GREEN);
-        sdl_render_line(pane, x_tick+1, y_tick-5, x_tick+1, y_tick+5, SDL_GREEN);
-    }
-
-    // x axis: min, max
-    sprintf(s, "%0.2f", xv_min);
-    sdl_render_printf(pane, 
-                    x_origin, y_bottom+2,
-                    PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
-    sprintf(s, "%0.2f", xv_max);
-    sdl_render_printf(pane, 
-                      x_right-COL2X(strlen(s),PLOT_FONTSZ), y_bottom+2,
-                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
-
-    // x axis: title
-    p = s;
-    p += sprintf(p, "%s - TICK=%g", title, (xv_max-xv_min)/10);
-    if (x_units) {
-        p += sprintf(p, " %s", x_units);
-    }
-    x_title = (x_right + x_origin) / 2 - COL2X(strlen(s),PLOT_FONTSZ) / 2;
-    sdl_render_printf(pane, 
-                      x_title, y_bottom+2,
-                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%s", s);
-
-    // y axis: line
-    sdl_render_line(pane, 
-                    x_origin-2, y_top,
-                    x_origin-2, y_bottom,
-                    SDL_GREEN);
-
-    // y axis: limits
-    sdl_render_printf(pane, 
-                      0, y_top, 
-                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_max);
-    sdl_render_printf(pane, 
-                      0, y_bottom-ROW2Y(1,PLOT_FONTSZ)+0, 
-                      PLOT_FONTSZ, SDL_GREEN, SDL_BLACK, "%6.2f", yv_min);
-
-    // x axis: cursors
-    if (xv_blue_cursor != SDL_PLOT_NO_CURSOR) {
-        int x_cursor = x_left + (x_span / xv_span) * (xv_blue_cursor - xv_min);
-#if 1  // xxx which one?
-        sdl_render_point(pane, x_cursor, y_bottom, SDL_BLUE, 4);
-#else
-        sdl_render_line(pane, x_cursor, y_top, x_cursor, y_bottom, SDL_BLUE);
-#endif
-    }
-
-    if (xv_red_cursor != SDL_PLOT_NO_CURSOR) {
-        int x_cursor = x_left + (x_span / xv_span) * (xv_red_cursor - xv_min);
-#if 1  // xxx which one?
-        sdl_render_point(pane, x_cursor, y_bottom, SDL_RED, 4);
-#else
-        sdl_render_line(pane, x_cursor, y_top, x_cursor, y_bottom, SDL_RED);
-#endif
-    }
-}

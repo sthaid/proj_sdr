@@ -10,6 +10,8 @@ int main(int argc, char **argv)
     //fft_init();
     display_init();
 
+    config_write();
+
     while (true) {
         display_update();
         usleep(100000);
@@ -27,6 +29,5 @@ int main(int argc, char **argv)
     end
 #endif
 
-    config_write();
 }
 

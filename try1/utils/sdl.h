@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <sys/queue.h>
 
 //
 // GENERAL
@@ -135,41 +134,8 @@ typedef struct {
 } sdl_event_t;
 
 //
-// PANES            
-//
-
-#define PANE_BORDER_STYLE_NONE      0
-#define PANE_BORDER_STYLE_MINIMAL   1
-#define PANE_BORDER_STYLE_STANDARD  2
-
-#define PANE_HANDLER_REQ_INITIALIZE         0 
-#define PANE_HANDLER_REQ_RENDER             1
-#define PANE_HANDLER_REQ_EVENT              2
-#define PANE_HANDLER_REQ_TERMINATE          3
-
-#define PANE_HANDLER_RET_NO_ACTION          0
-#define PANE_HANDLER_RET_PANE_TERMINATE     1
-#define PANE_HANDLER_RET_DISPLAY_REDRAW     2
-
-struct pane_cx_s;
-TAILQ_HEAD(pane_list_head_s, pane_cx_s);
-typedef int32_t (*pane_handler_t)(struct pane_cx_s * pane_cx, int32_t request, void * init, sdl_event_t * event);
-typedef struct pane_cx_s {
-    void * display_cx;
-    int32_t x_disp;
-    int32_t y_disp;
-    int32_t w_total;
-    int32_t h_total;
-    int32_t border_style;
-    rect_t  pane;
-    void *  vars;
-    pane_handler_t pane_handler;
-    struct pane_list_head_s * pane_list_head;
-    TAILQ_ENTRY(pane_cx_s) entries;
-} pane_cx_t;
-
-//
 // PROTOTYPES
+// xxx check all these
 //
 
 // sdl initialize
@@ -183,21 +149,8 @@ void sdl_full_screen(bool enable);
 // print screen, file_name must end in .jpg or .png
 void sdl_print_screen(char * file_name, bool flash_display, rect_t * rect);
 
-// pane support
-void sdl_pane_manager(void *display_cx,                        // optional, context
-                      void (*display_start)(void *display_cx), // optional, called prior to pane handlers
-                      void (*display_end)(void *display_cx),   // optional, called after pane handlers
-                      int64_t redraw_interval_us,              // 0=continuous, -1=never, else us
-                      int32_t count,                           // number of pane handler varargs that follow
-                      ...);                                    // pane_handler, init_params, x_disp, y_disp, w, h, border_style
-void sdl_pane_create(struct pane_list_head_s * pane_list_head, pane_handler_t pane_handler, void * init,
-                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total, 
-                     int32_t border_style, void * display_cx);
-void sdl_pane_update(pane_cx_t *pane_cx,
-                     int32_t x_disp, int32_t y_disp, int32_t w_total, int32_t h_total);
-
 // display init and present
-void sdl_display_init(int32_t * win_width, int32_t * win_height, bool * win_minimized);
+void sdl_display_init(void);
 void sdl_display_present(void);
 
 // colors
@@ -205,47 +158,48 @@ void sdl_define_custom_color(int32_t color, uint8_t r, uint8_t g, uint8_t b);
 void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b);
 
 // font support
-int32_t sdl_pane_cols(rect_t * pane, int32_t font_ptsize);
-int32_t sdl_pane_rows(rect_t * pane, int32_t font_ptsize);
+int32_t sdl_win_cols(int32_t font_ptsize);
+int32_t sdl_win_rows(int32_t font_ptsize);
 int32_t sdl_font_char_width(int32_t font_ptsize);
 int32_t sdl_font_char_height(int32_t font_ptsize);
 
 // event support
-void sdl_register_event(rect_t * pane, rect_t * loc, int32_t event_id, int32_t event_type, void * event_cx);
-void sdl_render_text_and_register_event(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize, char * str, 
+void sdl_register_event(rect_t * loc, int32_t event_id, int32_t event_type, void * event_cx);
+void sdl_render_text_and_register_event(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
         int32_t fg_color, int32_t bg_color, int32_t event_id, int32_t event_type, void * event_cx);
-void sdl_render_texture_and_register_event(rect_t * pane, int32_t x, int32_t y,
+void sdl_render_texture_and_register_event(int32_t x, int32_t y,
         texture_t texture, int32_t event_id, int32_t event_type, void * event_cx);
 sdl_event_t * sdl_poll_event(void);
 void sdl_push_event(sdl_event_t *ev);
-void sdl_play_event_sound(void);
+//xxx void sdl_play_event_sound(void);
 
 // render text
-rect_t sdl_render_text(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize, char * str, 
+rect_t sdl_render_text(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
             int32_t fg_color, int32_t bg_color);
-void sdl_render_printf(rect_t * pane, int32_t x, int32_t y, int32_t font_ptsize, 
-            int32_t fg_color, int32_t bg_color, char * fmt, ...) __attribute__ ((format (printf, 7, 8)));
+void sdl_render_printf(int32_t x, int32_t y, int32_t font_ptsize, 
+            int32_t fg_color, int32_t bg_color, char * fmt, ...) 
+            __attribute__ ((format (printf, 6, 7)));
 
 // render rectangle, lines, circles, points
-void sdl_render_rect(rect_t * pane, rect_t * loc, int32_t line_width, int32_t color);
-void sdl_render_fill_rect(rect_t * pane, rect_t * loc, int32_t color);
-void sdl_render_line(rect_t * pane, int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t color);
-void sdl_render_lines(rect_t * pane, point_t * points, int32_t count, int32_t color);
-void sdl_render_circle(rect_t * pane, int32_t x_center, int32_t y_center, int32_t radius, 
+void sdl_render_rect(rect_t * loc, int32_t line_width, int32_t color);
+void sdl_render_fill_rect(rect_t * loc, int32_t color);
+void sdl_render_line(int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t color);
+void sdl_render_lines(point_t * points, int32_t count, int32_t color);
+void sdl_render_circle(int32_t x_center, int32_t y_center, int32_t radius, 
             int32_t line_width, int32_t color);
-void sdl_render_point(rect_t * pane, int32_t x, int32_t y, int32_t color, int32_t point_size);
-void sdl_render_points(rect_t * pane, point_t * points, int32_t count, int32_t color, int32_t point_size);
+void sdl_render_point(int32_t x, int32_t y, int32_t color, int32_t point_size);
+void sdl_render_points(point_t * points, int32_t count, int32_t color, int32_t point_size);
 
 // render using textures
 texture_t sdl_create_texture(int32_t w, int32_t h);
-texture_t sdl_create_texture_from_pane_pixels(rect_t * pane);
+texture_t sdl_create_texture_from_win_pixels(void); // xxx how used
 texture_t sdl_create_filled_circle_texture(int32_t radius, int32_t color);
 texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t font_ptsize, char * str);
 void sdl_update_texture(texture_t texture, uint8_t * pixels, int32_t pitch);
 void sdl_query_texture(texture_t texture, int32_t * width, int32_t * height);
-rect_t sdl_render_texture(rect_t * pane, int32_t x, int32_t y, texture_t texture);
-rect_t sdl_render_scaled_texture(rect_t * pane, rect_t * loc, texture_t texture);
-void sdl_render_scaled_texture_ex(rect_t *pane, rect_t *src, rect_t *dst, texture_t texture);
+rect_t sdl_render_texture(int32_t x, int32_t y, texture_t texture);
+rect_t sdl_render_scaled_texture(rect_t * loc, texture_t texture);
+void sdl_render_scaled_texture_ex(rect_t *src, rect_t *dst, texture_t texture);
 void sdl_destroy_texture(texture_t texture);
 
 // render using textures - webcam support
@@ -254,15 +208,5 @@ void sdl_update_yuy2_texture(texture_t texture, uint8_t * pixels, int32_t pitch)
 texture_t sdl_create_iyuv_texture(int32_t w, int32_t h);
 void sdl_update_iyuv_texture(texture_t texture, uint8_t *y_plane, int y_pitch, 
             uint8_t *u_plane, int u_pitch, uint8_t *v_plane, int v_pitch);
-
-// plot
-#define SDL_PLOT_FLAG_BARS 1
-#define SDL_PLOT_NO_CURSOR 999999
-void sdl_plot(rect_t *pane,
-              int x_pos, int y_pos, int x_width, int y_height,  // 0 - 100 percent
-              double *data, int n,
-              double xv_min, double xv_max, double xv_blue_cursor, double xv_red_cursor,
-              double yv_min, double yv_max,
-              unsigned int flags, char *title, char *x_units);
 
 #endif
