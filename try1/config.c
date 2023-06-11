@@ -4,7 +4,6 @@
 
 #define MAX_VARS (sizeof(vars) / sizeof(vars[0]))
 
-
 static struct {
     char *name;
     int  *value;
@@ -16,8 +15,7 @@ static struct {
     { "help",       &help       },
             };
 
-static void remove_trailing_newline(char *s);
-static void remove_leading_whitespace(char *s);
+// -------------------------------------------------------------
 
 void config_init(void)
 {
@@ -134,22 +132,3 @@ void config_write(void)
                 vars[i].name, *vars[i].value);
     }
 }
-
-// -----------------  PRIVATE  ---------------------------------------
-
-static void remove_trailing_newline(char *s)
-{
-    int len = strlen(s);
-    if (len > 0 && s[len-1] == '\n') {
-        s[len-1] = '\0';
-    }
-}
-
-static void remove_leading_whitespace(char *s)
-{
-    int prefix_len = strspn(s, " \t");
-    char *s1 = s + prefix_len;
-    int s1_len = strlen(s1);
-    memmove(s, s1, s1_len+1);
-}
-
