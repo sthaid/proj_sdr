@@ -9,6 +9,7 @@
 //
 
 // colors
+// xxx put black and white first?
 #define SDL_PURPLE     0 
 #define SDL_BLUE       1
 #define SDL_LIGHT_BLUE 2
@@ -116,7 +117,6 @@ typedef void * texture_t;
 // event data structure 
 typedef struct {
     int32_t event_id;
-    void  * event_cx;
     union {
         struct {
             int32_t x;
@@ -139,15 +139,15 @@ typedef struct {
 //
 
 // sdl initialize
-int32_t sdl_init(int32_t * w, int32_t * h, bool fullscreen, bool resizeable, bool swap_white_black);
+int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool swap_white_black);
 void sdl_get_window_size(int32_t * w, int32_t * h);
 void sdl_get_max_texture_dim(int32_t * max_texture_dim);
 
 // display mode
 void sdl_full_screen(bool enable);
 
-// print screen, file_name must end in .jpg or .png
-void sdl_print_screen(char * file_name, bool flash_display, rect_t * rect);
+// print screen
+void sdl_print_screen(bool flash_display, rect_t * rect);
 
 // display init and present
 void sdl_display_init(void);
@@ -158,20 +158,17 @@ void sdl_define_custom_color(int32_t color, uint8_t r, uint8_t g, uint8_t b);
 void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b);
 
 // font support
-int32_t sdl_win_cols(int32_t font_ptsize);
-int32_t sdl_win_rows(int32_t font_ptsize);
 int32_t sdl_font_char_width(int32_t font_ptsize);
 int32_t sdl_font_char_height(int32_t font_ptsize);
 
 // event support
-void sdl_register_event(rect_t * loc, int32_t event_id, int32_t event_type, void * event_cx);
+void sdl_register_event(rect_t * loc, int32_t event_id, int32_t event_type);
 void sdl_render_text_and_register_event(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
-        int32_t fg_color, int32_t bg_color, int32_t event_id, int32_t event_type, void * event_cx);
+        int32_t fg_color, int32_t bg_color, int32_t event_id, int32_t event_type);
 void sdl_render_texture_and_register_event(int32_t x, int32_t y,
-        texture_t texture, int32_t event_id, int32_t event_type, void * event_cx);
+        texture_t texture, int32_t event_id, int32_t event_type);
 sdl_event_t * sdl_poll_event(void);
 void sdl_push_event(sdl_event_t *ev);
-//xxx void sdl_play_event_sound(void);
 
 // render text
 rect_t sdl_render_text(int32_t x, int32_t y, int32_t font_ptsize, char * str, 

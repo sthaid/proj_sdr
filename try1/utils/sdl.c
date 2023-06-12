@@ -13,6 +13,9 @@
 #include <misc.h>
 #include <png_rw.h>
 
+// xxx need unit test pgm
+// - test sdl_render_lines
+
 //
 // defines
 //
@@ -39,13 +42,11 @@ typedef struct {
 typedef struct {
     int32_t event_id;
     int32_t event_type;
-    void * event_cx;
     rect_t disp_loc;
 } sdl_event_reg_t;
 
 //
 // variables
-// xxx all used?
 //
 
 static SDL_Window     * sdl_window;
@@ -54,7 +55,6 @@ static SDL_RendererInfo sdl_renderer_info;
 static int32_t          sdl_win_width;
 static int32_t          sdl_win_height;
 static bool             sdl_win_minimized;
-static bool             sdl_program_quit;
 
 static sdl_font_t       sdl_font[MAX_FONT_PTSIZE];
 static char           * sdl_font_path;
@@ -83,25 +83,11 @@ static uint32_t         sdl_color_to_rgba[MAX_SDL_COLOR_TO_RGBA] = {
 
 static void exit_handler(void);
 static void font_init(int32_t ptsize);
-static char *get_print_screen_filename(void); // xxx move
 static void set_color(int32_t color); 
-
-// 
-// inline procedures
-//
-
-static inline uint32_t _bswap32(uint32_t a)
-{
-    a = ((a & 0x000000FF) << 24) |
-        ((a & 0x0000FF00) <<  8) |
-        ((a & 0x00FF0000) >>  8) |
-        ((a & 0xFF000000) >> 24);
-    return a;
-}
 
 // -----------------  SDL INIT & MISC ROUTINES  ------------------------- 
 
-int32_t sdl_init(int32_t *w, int32_t *h, bool fullscreen, bool resizeable, bool swap_white_black)
+int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool swap_white_black)
 {
     #define MAX_FONT_SEARCH_PATH 2
 
@@ -124,20 +110,14 @@ int32_t sdl_init(int32_t *w, int32_t *h, bool fullscreen, bool resizeable, bool 
     // create SDL Window and Renderer
     #define SDL_FLAGS ((resizeable ? SDL_WINDOW_RESIZABLE : 0) | \
                        (fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0))
-    if (fullscreen) {
-        *w = *h = 0;
-    }
-    if (SDL_CreateWindowAndRenderer(*w, *h, SDL_FLAGS, &sdl_window, &sdl_renderer) != 0) {
+    if (SDL_CreateWindowAndRenderer(w, h, SDL_FLAGS, &sdl_window, &sdl_renderer) != 0) {
         ERROR("SDL_CreateWindowAndRenderer failed\n");
         return -1;
     }
-    //xxx sdl_poll_event();
+    sdl_poll_event();
 
-    // get the actual window size, which will be returned to caller and
-    // also saved in vars sdl_win_width/height
-    SDL_GetWindowSize(sdl_window, w, h);
-    sdl_win_width  = *w;
-    sdl_win_height = *h;
+    // get the actual window size
+    SDL_GetWindowSize(sdl_window, &sdl_win_width, &sdl_win_height);
     NOTICE("sdl_win_width=%d sdl_win_height=%d\n", sdl_win_width, sdl_win_height);
 
     // initialize True Type Font
@@ -211,6 +191,7 @@ void sdl_get_window_size(int32_t *w, int32_t *h)
     *h = sdl_win_height;
 }
 
+// xxx test
 void sdl_full_screen(bool enable)
 {
     SDL_SetWindowFullscreen(sdl_window, enable ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
@@ -233,6 +214,7 @@ void sdl_get_max_texture_dim(int32_t * max_texture_dim)
                            sdl_renderer_info.max_texture_height);
 }
 
+// xxx test proper exitting
 static void exit_handler(void)
 {
     int32_t i;
@@ -251,11 +233,22 @@ static void exit_handler(void)
 
 // -----------------  PRINT SCREEN -------------------------------------- 
 
-void sdl_print_screen(char *file_name, bool flash_display, rect_t * rect_arg) 
+// xxx test
+void sdl_print_screen(bool flash_display, rect_t * rect_arg) 
 {
     uint8_t * pixels = NULL;
     SDL_Rect  rect;
     int32_t   ret, len;
+    struct tm tm;
+    time_t    t;
+    char      file_name[PATH_MAX];
+
+    // create file_name
+    t = time(NULL);
+    localtime_r(&t, &tm);
+    sprintf(file_name, "screenshot_%2.2d%2.2d%2.2d_%2.2d%2.2d%2.2d.png",
+            tm.tm_year-100, tm.tm_mon+1, tm.tm_mday,
+            tm.tm_hour, tm.tm_min, tm.tm_sec);
 
     // if caller has supplied region to print then 
     //   init rect to print with caller supplied position
@@ -321,22 +314,6 @@ void sdl_print_screen(char *file_name, bool flash_display, rect_t * rect_arg)
 
     // free pixels
     free(pixels);
-}
-
-// xxx call from print_scr
-static char *get_print_screen_filename(void)
-{
-    struct tm tm;
-    time_t t;
-    static char filename[PATH_MAX];
-
-    t = time(NULL);
-    localtime_r(&t, &tm);
-    sprintf(filename, "screenshot_%2.2d%2.2d%2.2d_%2.2d%2.2d%2.2d.png",
-            tm.tm_year-100, tm.tm_mon+1, tm.tm_mday,
-            tm.tm_hour, tm.tm_min, tm.tm_sec);
-
-    return filename;
 }
 
 // -----------------  DISPLAY INIT AND PRESENT  ------------------------- 
@@ -433,18 +410,6 @@ void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b)
 
 // -----------------  FONT SUPPORT ROUTINES  ---------------------------- 
 
-int32_t sdl_win_cols(int32_t font_ptsize)
-{
-    font_init(font_ptsize);
-    return sdl_win_width / sdl_font[font_ptsize].char_width;
-}
-
-int32_t sdl_win_rows(int32_t font_ptsize)
-{
-    font_init(font_ptsize);
-    return sdl_win_height / sdl_font[font_ptsize].char_height;
-}
-
 int32_t sdl_font_char_width(int32_t font_ptsize)
 {
     font_init(font_ptsize);
@@ -459,7 +424,7 @@ int32_t sdl_font_char_height(int32_t font_ptsize)
 
 // -----------------  EVENT HANDLING  ----------------------------------- 
 
-void sdl_register_event(rect_t * loc, int32_t event_id, int32_t event_type, void * event_cx)
+void sdl_register_event(rect_t * loc, int32_t event_id, int32_t event_type)
 {
     sdl_event_reg_t * e = &sdl_event_reg_tbl[sdl_event_max];
 
@@ -478,31 +443,31 @@ void sdl_register_event(rect_t * loc, int32_t event_id, int32_t event_type, void
     e->disp_loc.y = loc->y;
     e->disp_loc.w = loc->w;
     e->disp_loc.h = loc->h;
-    e->event_cx = event_cx;
 
     sdl_event_max++;
 }
 
 void sdl_render_text_and_register_event(int32_t x, int32_t y,
         int32_t font_ptsize, char * str, int32_t fg_color, int32_t bg_color, 
-        int32_t event_id, int32_t event_type, void * event_cx)
+        int32_t event_id, int32_t event_type)
 {
     rect_t loc_clipped;
     loc_clipped = sdl_render_text(x, y, font_ptsize, str, fg_color, bg_color);
     if (loc_clipped.w == 0) {
         return;
     }
-    sdl_register_event(&loc_clipped, event_id, event_type, event_cx);
+    sdl_register_event(&loc_clipped, event_id, event_type);
 }
 
 void sdl_render_texture_and_register_event(int32_t x, int32_t y,
-        texture_t texture, int32_t event_id, int32_t event_type, void * event_cx)
+        texture_t texture, int32_t event_id, int32_t event_type)
 {
     rect_t loc_clipped;
     loc_clipped = sdl_render_texture(x, y, texture);
-    sdl_register_event(&loc_clipped, event_id, event_type, event_cx);
+    sdl_register_event(&loc_clipped, event_id, event_type);
 }
 
+// xxx fixups needed here
 sdl_event_t * sdl_poll_event(void)
 {
     #define AT_POS(X,Y,pos) (((X) >= (pos).x) && \
@@ -535,7 +500,6 @@ sdl_event_t * sdl_poll_event(void)
         do { \
             mouse_button_state = MOUSE_BUTTON_STATE_NONE; \
             mouse_button_motion_event_id = SDL_EVENT_NONE; \
-            mouse_button_motion_event_cx = NULL; \
             mouse_button_x = 0; \
             mouse_button_y = 0; \
         } while (0)
@@ -547,7 +511,6 @@ sdl_event_t * sdl_poll_event(void)
     static struct {
         bool active;
         int32_t event_id;
-        void * event_cx;
         int32_t x_start;
         int32_t y_start;
         int32_t x_last;
@@ -563,7 +526,6 @@ sdl_event_t * sdl_poll_event(void)
     if (sdl_push_ev.event_id != SDL_EVENT_NONE) {
         event = sdl_push_ev;
         sdl_push_ev.event_id = SDL_EVENT_NONE;
-        __sync_synchronize();
         return &event;
     }
 
@@ -628,20 +590,17 @@ sdl_event_t * sdl_poll_event(void)
                 sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_RIGHT_CLICK) 
             {
                 event.event_id = sdl_event_reg_tbl[i].event_id;
-                event.event_cx = sdl_event_reg_tbl[i].event_cx;
                 event.mouse_click.x = ev.button.x - sdl_event_reg_tbl[i].disp_loc.x;
                 event.mouse_click.y = ev.button.y - sdl_event_reg_tbl[i].disp_loc.y;
             } else {
                 mouse_motion.active = true;
                 mouse_motion.event_id = sdl_event_reg_tbl[i].event_id;
-                mouse_motion.event_cx = sdl_event_reg_tbl[i].event_cx;
                 mouse_motion.x_start = ev.button.x;
                 mouse_motion.y_start = ev.button.y;
                 mouse_motion.x_last  = ev.button.x;
                 mouse_motion.y_last  = ev.button.y;
 
                 event.event_id = mouse_motion.event_id;
-                event.event_cx = mouse_motion.event_cx;
                 event.mouse_motion.delta_x = 0;
                 event.mouse_motion.delta_y = 0;
             }
@@ -669,7 +628,7 @@ sdl_event_t * sdl_poll_event(void)
             memset(&mouse_motion,0,sizeof(mouse_motion));
             break; }
 
-        case SDL_MOUSEMOTION: {
+        case SDL_MOUSEMOTION: { //xxx redo
             // if mouse_motion is not active then get out
             if (!mouse_motion.active) {
                 break;
@@ -677,7 +636,6 @@ sdl_event_t * sdl_poll_event(void)
 
             // get all additional pending mouse motion events, and sum the motion
             event.event_id = mouse_motion.event_id;
-            event.event_cx = mouse_motion.event_cx;
             event.mouse_motion.delta_x = 0;
             event.mouse_motion.delta_y = 0;
             do {
@@ -708,7 +666,6 @@ sdl_event_t * sdl_poll_event(void)
 
             // set return event
             event.event_id = sdl_event_reg_tbl[i].event_id;
-            event.event_cx = sdl_event_reg_tbl[i].event_cx;
             event.mouse_wheel.delta_x = ev.wheel.x;
             event.mouse_wheel.delta_y = ev.wheel.y;
             break; }
@@ -721,6 +678,7 @@ sdl_event_t * sdl_poll_event(void)
             int32_t  event_id = SDL_EVENT_NONE;
 
             // map key to event_id
+            // xxx should be better way to handle shift keys
             if (key < 128) {
                 event_id = key;
                 if (shift) {
@@ -780,6 +738,7 @@ sdl_event_t * sdl_poll_event(void)
             break;
 
        case SDL_TEXTINPUT:
+            // xxx how does this work
             break;
 
        case SDL_WINDOWEVENT: {
@@ -823,11 +782,18 @@ sdl_event_t * sdl_poll_event(void)
 // this function is thread-safe
 void sdl_push_event(sdl_event_t *ev) 
 {
-    sdl_push_ev = *ev;
-    __sync_synchronize();
-    while (sdl_push_ev.event_id != SDL_EVENT_NONE) {
-        usleep(1000);
+    int event_id = ev->event_id;
+    sdl_event_t tmp = *ev;
+
+    if (sdl_push_ev.event_id != SDL_EVENT_NONE) {
+        ERROR("push event is pending\n");
+        return;
     }
+
+    tmp.event_id = SDL_EVENT_NONE;
+    sdl_push_ev = tmp;
+    __sync_synchronize();
+    sdl_push_ev.event_id = event_id;
 }
 
 // -----------------  RENDER TEXT  -------------------------------------- 
@@ -922,14 +888,12 @@ void sdl_render_fill_rect(rect_t * loc, int32_t color)
 
 // -----------------  RENDER LINES  ------------------------------------- 
 
-// xxx need unit test pgm
 void sdl_render_line(int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t color)
 {
     point_t points[2] = { {x1,y1}, {x2,y2} };
     sdl_render_lines(points, 2, color);
 }
 
-// xxx test this
 void sdl_render_lines(point_t * points, int32_t count, int32_t color)
 {
     #define MAX_SDL_POINTS 1000
@@ -1204,7 +1168,6 @@ void sdl_render_points(point_t * points, int32_t count, int32_t color, int32_t p
 
 // -----------------  RENDER USING TEXTURES  ---------------------------- 
 
-// xxx how are all these used
 // xxx some routines in this file need comment headers
 
 texture_t sdl_create_texture(int32_t w, int32_t h)
@@ -1223,7 +1186,7 @@ texture_t sdl_create_texture(int32_t w, int32_t h)
     return (texture_t)texture;
 }
 
-// xxx how used
+// xxx should have a loc arg
 texture_t sdl_create_texture_from_win_pixels(void)
 {
     texture_t texture;
@@ -1382,6 +1345,7 @@ void sdl_query_texture(texture_t texture, int32_t * width, int32_t * height)
     SDL_QueryTexture((SDL_Texture *)texture, NULL, NULL, width, height);
 }
 
+// xxx loc_clipped?
 rect_t sdl_render_texture(int32_t x, int32_t y, texture_t texture)
 {
     int32_t width, height;
@@ -1406,102 +1370,20 @@ rect_t sdl_render_texture(int32_t x, int32_t y, texture_t texture)
     return loc_clipped;
 }
 
+// xxx is the return needed
 rect_t sdl_render_scaled_texture(rect_t * loc, texture_t texture)
 {
-    SDL_Rect dstrect, srcrect;
-    int32_t texture_width, texture_height;
-    rect_t loc_clipped = {0,0,0,0};
+    SDL_Rect dstrect;
 
-    // verify texture arg
-    if (texture == NULL) {
-        return loc_clipped;
-    }
+    dstrect.x = loc->x;
+    dstrect.y = loc->y;
+    dstrect.w = loc->w;
+    dstrect.h = loc->h;
 
-    // if loc is completely outside of window then return
-    if (loc->x >= sdl_win_width ||
-        loc->y >= sdl_win_height ||
-        loc->x + loc->w <= 0 ||
-        loc->y + loc->h <= 0)
-    {
-        return loc_clipped;
-    }
+    // NULL means entire texture is copied
+    SDL_RenderCopy(sdl_renderer, texture, NULL, &dstrect);
 
-    // if loc is completely inside the window
-    if (loc->x >= 0 && loc->x + loc->w <= sdl_win_width &&
-        loc->y >= 0 && loc->y + loc->h <= sdl_win_height)
-    {
-        dstrect.x = loc->x;
-        dstrect.y = loc->y;
-        dstrect.w = loc->w;
-        dstrect.h = loc->h;
-        SDL_RenderCopy(sdl_renderer, texture, NULL, &dstrect);
-
-        loc_clipped.x = dstrect.x;
-        loc_clipped.y = dstrect.y;
-        loc_clipped.w = dstrect.w;
-        loc_clipped.h = dstrect.h;
-        return loc_clipped;
-    }
-
-    // otherwise need to handle complicated cases to clip the 
-    // texture at the window border
-    sdl_query_texture(texture, &texture_width, &texture_height);
-
-    if ((loc->y < 0) &&
-        (loc->y + loc->h > sdl_win_height)) 
-    {
-        dstrect.y = 0;
-        dstrect.h = sdl_win_height;
-        srcrect.y = texture_height * -loc->y / loc->h;
-        srcrect.h = texture_height * sdl_win_height / loc->h;
-    } else if (loc->y < 0) {
-        dstrect.y = 0;
-        dstrect.h = loc->h + loc->y;
-        srcrect.y = texture_height * -loc->y / loc->h;
-        srcrect.h = texture_height - srcrect.y;
-    } else if (loc->y + loc->h > sdl_win_height) {
-        dstrect.y = loc->y;
-        dstrect.h = sdl_win_height - loc->y;
-        srcrect.y = 0;
-        srcrect.h = texture_height * dstrect.h / loc->h;
-    } else {
-        dstrect.y = loc->y;
-        dstrect.h = loc->h;
-        srcrect.y = 0;
-        srcrect.h = texture_height;
-    }
-
-    if ((loc->x < 0) &&
-        (loc->x + loc->w > sdl_win_width)) 
-    {
-        dstrect.x = 0;
-        dstrect.w = sdl_win_width;
-        srcrect.x = texture_width * -loc->x / loc->w;
-        srcrect.w = texture_width * sdl_win_width / loc->w;
-    } else if (loc->x < 0) {
-        dstrect.x = 0;
-        dstrect.w = loc->w + loc->x;
-        srcrect.x = texture_width * -loc->x / loc->w;
-        srcrect.w = texture_width - srcrect.x;
-    } else if (loc->x + loc->w > sdl_win_width) {
-        dstrect.x = loc->x;
-        dstrect.w = sdl_win_width - loc->x;
-        srcrect.x = 0;
-        srcrect.w = texture_width * dstrect.w / loc->w;
-    } else {
-        dstrect.x = loc->x;
-        dstrect.w = loc->w;
-        srcrect.x = 0;
-        srcrect.w = texture_width;
-    }
-
-    SDL_RenderCopy(sdl_renderer, texture, &srcrect, &dstrect);
-
-    loc_clipped.x = dstrect.x;
-    loc_clipped.y = dstrect.y;
-    loc_clipped.w = dstrect.w;
-    loc_clipped.h = dstrect.h;
-    return loc_clipped;
+    return *loc;
 }
 
 void sdl_render_scaled_texture_ex(rect_t *src, rect_t *dst, texture_t texture)
