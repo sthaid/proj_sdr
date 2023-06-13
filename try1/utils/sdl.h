@@ -171,8 +171,10 @@ sdl_event_t * sdl_poll_event(void);
 void sdl_push_event(sdl_event_t *ev);
 
 // render text
-rect_t sdl_render_text(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
+void sdl_render_text(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
             int32_t fg_color, int32_t bg_color);
+void sdl_render_text_ex(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
+            int32_t fg_color, int32_t bg_color, rect_t *loc);
 void sdl_render_printf(int32_t x, int32_t y, int32_t font_ptsize, 
             int32_t fg_color, int32_t bg_color, char * fmt, ...) 
             __attribute__ ((format (printf, 6, 7)));
@@ -194,8 +196,8 @@ texture_t sdl_create_filled_circle_texture(int32_t radius, int32_t color);
 texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t font_ptsize, char * str);
 void sdl_update_texture(texture_t texture, uint8_t * pixels, int32_t pitch);
 void sdl_query_texture(texture_t texture, int32_t * width, int32_t * height);
-rect_t sdl_render_texture(int32_t x, int32_t y, texture_t texture);
-rect_t sdl_render_scaled_texture(rect_t * loc, texture_t texture);
+void sdl_render_texture(int32_t x, int32_t y, texture_t texture);
+void sdl_render_scaled_texture(rect_t * loc, texture_t texture);
 void sdl_render_scaled_texture_ex(rect_t *src, rect_t *dst, texture_t texture);
 void sdl_destroy_texture(texture_t texture);
 

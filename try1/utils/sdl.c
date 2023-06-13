@@ -449,20 +449,30 @@ void sdl_render_text_and_register_event(int32_t x, int32_t y,
         int32_t font_ptsize, char * str, int32_t fg_color, int32_t bg_color, 
         int32_t event_id, int32_t event_type)
 {
-    rect_t loc_clipped;
-    loc_clipped = sdl_render_text(x, y, font_ptsize, str, fg_color, bg_color);
-    if (loc_clipped.w == 0) {
+    rect_t loc;
+
+    sdl_render_text_ex(x, y, font_ptsize, str, fg_color, bg_color, &loc);
+    if (loc.w == 0) {
         return;
     }
-    sdl_register_event(&loc_clipped, event_id, event_type);
+    sdl_register_event(&loc, event_id, event_type);
 }
 
 void sdl_render_texture_and_register_event(int32_t x, int32_t y,
         texture_t texture, int32_t event_id, int32_t event_type)
 {
-    rect_t loc_clipped;
-    loc_clipped = sdl_render_texture(x, y, texture);
-    sdl_register_event(&loc_clipped, event_id, event_type);
+    rect_t loc;
+    int w, h;
+
+    sdl_render_texture(x, y, texture);
+
+    sdl_query_texture(texture, &w, &h);
+    loc.x = x;
+    loc.y = y;
+    loc.w = w;
+    loc.h = h;
+
+    sdl_register_event(&loc, event_id, event_type);
 }
 
 // xxx fixups needed here
@@ -796,40 +806,46 @@ void sdl_push_event(sdl_event_t *ev)
 
 // -----------------  RENDER TEXT  -------------------------------------- 
 
-rect_t sdl_render_text(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
-                       int32_t fg_color, int32_t bg_color)
+void sdl_render_text(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
+                     int32_t fg_color, int32_t bg_color)
+{
+    sdl_render_text_ex(x, y, font_ptsize, str, fg_color, bg_color, NULL);
+}
+
+void sdl_render_text_ex(int32_t x, int32_t y, int32_t font_ptsize, char * str, 
+                        int32_t fg_color, int32_t bg_color, rect_t *loc_arg)
 {
     texture_t texture;
     int32_t   width, height;
-    rect_t    loc, loc_clipped = {0,0,0,0};
+    rect_t    loc = {0,0,0,0};
 
     // if zero length string just return
     if (str[0] == '\0') {
-        return loc_clipped;
+        if (loc_arg) *loc_arg = loc;
+        return;
     }
     
     // create the text texture
     texture =  sdl_create_text_texture(fg_color, bg_color, font_ptsize, str);
     if (texture == NULL) {
         ERROR("sdl_create_text_texture failed\n");
-        return loc_clipped;
+        if (loc_arg) *loc_arg = loc;
+        return;
     }
     sdl_query_texture(texture, &width, &height);
 
-    // determine the location that this texture is to be rendered
+    // render the texture
     loc.x = x;
     loc.y = y; 
     loc.w = width;
     loc.h = height;
-
-    // render the texture
-    loc_clipped = sdl_render_scaled_texture(&loc, texture);
+    sdl_render_scaled_texture(&loc, texture);
 
     // clean up
     sdl_destroy_texture(texture);
 
-    // return the location of the text (possibly clipped)
-    return loc_clipped;
+    // return the location of the text
+    if (loc_arg) *loc_arg = loc;
 }
 
 void sdl_render_printf(int32_t x, int32_t y, int32_t font_ptsize,
@@ -1341,15 +1357,14 @@ void sdl_query_texture(texture_t texture, int32_t * width, int32_t * height)
     SDL_QueryTexture((SDL_Texture *)texture, NULL, NULL, width, height);
 }
 
-// xxx loc_clipped?
-rect_t sdl_render_texture(int32_t x, int32_t y, texture_t texture)
+void sdl_render_texture(int32_t x, int32_t y, texture_t texture)
 {
     int32_t width, height;
-    rect_t loc, loc_clipped = {0,0,0,0};
+    rect_t loc;
 
     // verify texture arg
     if (texture == NULL) {
-        return loc_clipped;
+        return;
     }
 
     // construct loc from caller supplied x,y and from the texture width,height
@@ -1360,14 +1375,10 @@ rect_t sdl_render_texture(int32_t x, int32_t y, texture_t texture)
     loc.h = height;
     
     // render the texture 
-    loc_clipped = sdl_render_scaled_texture(&loc, texture);
-
-    // return the possibly clipped location
-    return loc_clipped;
+    sdl_render_scaled_texture(&loc, texture);
 }
 
-// xxx is the return needed
-rect_t sdl_render_scaled_texture(rect_t * loc, texture_t texture)
+void sdl_render_scaled_texture(rect_t * loc, texture_t texture)
 {
     SDL_Rect dstrect;
 
@@ -1378,8 +1389,6 @@ rect_t sdl_render_scaled_texture(rect_t * loc, texture_t texture)
 
     // NULL means entire texture is copied
     SDL_RenderCopy(sdl_renderer, texture, NULL, &dstrect);
-
-    return *loc;
 }
 
 void sdl_render_scaled_texture_ex(rect_t *src, rect_t *dst, texture_t texture)
