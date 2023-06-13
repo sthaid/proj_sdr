@@ -13,8 +13,9 @@
 #include <misc.h>
 #include <png_rw.h>
 
-// xxx need unit test pgm
-// - test sdl_render_lines
+// xxx 
+// - need unit test pgm
+// - some routines in this file need comment headers
 
 //
 // defines
@@ -191,7 +192,6 @@ void sdl_get_window_size(int32_t *w, int32_t *h)
     *h = sdl_win_height;
 }
 
-// xxx test
 void sdl_full_screen(bool enable)
 {
     SDL_SetWindowFullscreen(sdl_window, enable ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
@@ -214,7 +214,6 @@ void sdl_get_max_texture_dim(int32_t * max_texture_dim)
                            sdl_renderer_info.max_texture_height);
 }
 
-// xxx test proper exitting
 static void exit_handler(void)
 {
     int32_t i;
@@ -233,7 +232,6 @@ static void exit_handler(void)
 
 // -----------------  PRINT SCREEN -------------------------------------- 
 
-// xxx test
 void sdl_print_screen(bool flash_display, rect_t * rect_arg) 
 {
     uint8_t * pixels = NULL;
@@ -1167,8 +1165,6 @@ void sdl_render_points(point_t * points, int32_t count, int32_t color, int32_t p
 }
 
 // -----------------  RENDER USING TEXTURES  ---------------------------- 
-
-// xxx some routines in this file need comment headers
 
 texture_t sdl_create_texture(int32_t w, int32_t h)
 {

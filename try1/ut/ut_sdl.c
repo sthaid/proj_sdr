@@ -9,13 +9,13 @@
 #define FTPSZ_LG 40
 
 #define SDL_EVENT_END_PROGRAM    (SDL_EVENT_USER_DEFINED+0)
-#define SDL_EVENT_END_PROGRAM2   (SDL_EVENT_USER_DEFINED+1)
+#define SDL_EVENT_FULLSCR        (SDL_EVENT_USER_DEFINED+2)
 
 int main(int argc, char **argv)
 {
     char *s;
     int   max_texture_dim;
-    int   i, x, y, w, h;
+    int   i, x, y, w, h, w_last=0, h_last=0;
     rect_t loc;
     texture_t circle = NULL;
 
@@ -27,12 +27,16 @@ int main(int argc, char **argv)
     NOTICE("max_texture_dim = %d\n", max_texture_dim);
 
     while (true) {
-        // display init
-        NOTICE("display_init\n");
-        sdl_display_init();
-
         // get window size
         sdl_get_window_size(&w, &h);
+        if (w != w_last || h != h_last) {
+            NOTICE("%d %d\n", w, h);
+            w_last = w;
+            h_last = h;
+        }
+
+        // display init
+        sdl_display_init();
 
         // render text
         s = "Top Left, White";
@@ -87,45 +91,52 @@ int main(int argc, char **argv)
             "QUIT", SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_END_PROGRAM, SDL_EVENT_TYPE_MOUSE_CLICK);
         sdl_render_text_and_register_event(
-            10 * sdl_font_char_width(FTPSZ_LG), h - sdl_font_char_height(FTPSZ_LG), FTPSZ_LG, 
-            "QUIT2", SDL_LIGHT_BLUE, SDL_BLACK, 
-            SDL_EVENT_END_PROGRAM2, SDL_EVENT_TYPE_MOUSE_CLICK);
+            w/2-3*sdl_font_char_width(FTPSZ_LG), 0, FTPSZ_LG, 
+            "FULLSCR", SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_FULLSCR, SDL_EVENT_TYPE_MOUSE_CLICK);
 
         // present the display
         sdl_display_present();
 
         // handle events
         sdl_event_t *ev;
-        bool event_handled;
+        int poll_count = 0;
+        bool redraw_now;
 
-        NOTICE("processing events\n");
-        do {
-            event_handled = true;
+        while (true) {
             ev = sdl_poll_event();
+            poll_count++;
+            redraw_now = true;
+
             switch (ev->event_id) {
             case SDL_EVENT_QUIT: 
-                NOTICE("got event SDL_EVENT_QUIT\n");
-                goto end_program;
-                break;
             case SDL_EVENT_END_PROGRAM:
-                NOTICE("got event SDL_EVENT_END_PROGRAM\n");
-                goto end_program;
-                break;
             case SDL_EVENT_KEY_ALT + 'q':
-                NOTICE("got event ALT-q\n");
                 goto end_program;
                 break;
-            case SDL_EVENT_END_PROGRAM2: {
-                static sdl_event_t evq = {SDL_EVENT_QUIT};
-                NOTICE("got event SDL_EVENT_END_PROGRAM2\n");
-                sdl_push_event(&evq);
+            case SDL_EVENT_FULLSCR: {
+                static bool fullscr;
+                fullscr = !fullscr;
+                sdl_full_screen(fullscr);
                 break; }
+            case SDL_EVENT_WIN_SIZE_CHANGE:
+            case SDL_EVENT_WIN_MINIMIZED:
+            case SDL_EVENT_WIN_RESTORED:
+                break;
+            case SDL_EVENT_KEY_ALT + 'p':
+                sdl_print_screen(true, NULL);
+                break;
             default:
-                event_handled = false;
-                usleep(10000);
+                redraw_now = false;
                 break;
             }
-        } while (event_handled == false);
+
+            if (redraw_now || poll_count == 10) {
+                break;
+            }
+        }
+
+        // xxx print display update rate
     }
 
 end_program:
