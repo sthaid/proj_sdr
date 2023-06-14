@@ -14,7 +14,6 @@
 #include <png_rw.h>
 
 // xxx 
-// - need unit test pgm
 // - some routines in this file need comment headers
 
 //
@@ -147,7 +146,7 @@ int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool sw
     DEBUG("using font %s\n", sdl_font_path);
 
     // currently the SDL Text Input feature is not being used here
-    // xxx how does this wokr0
+    // xxx how does this wokr
     SDL_StopTextInput();
 
     // if caller requests swap_white_black then swap the white and black
@@ -475,7 +474,6 @@ void sdl_render_texture_and_register_event(int32_t x, int32_t y,
     sdl_register_event(&loc, event_id, event_type);
 }
 
-// xxx fixups needed here
 sdl_event_t * sdl_poll_event(void)
 {
     #define AT_POS(X,Y,pos) (((X) >= (pos).x) && \
@@ -500,18 +498,6 @@ sdl_event_t * sdl_poll_event(void)
         (x) == SDL_WINDOWEVENT_CLOSE        ? "SDL_WINDOWEVENT_CLOSE"        : \
                                               "????")
 
-    #define MOUSE_BUTTON_STATE_NONE     0
-    #define MOUSE_BUTTON_STATE_DOWN     1
-    #define MOUSE_BUTTON_STATE_MOTION   2
-
-    #define MOUSE_BUTTON_STATE_RESET \
-        do { \
-            mouse_button_state = MOUSE_BUTTON_STATE_NONE; \
-            mouse_button_motion_event_id = SDL_EVENT_NONE; \
-            mouse_button_x = 0; \
-            mouse_button_y = 0; \
-        } while (0)
-
     SDL_Event ev;
     int32_t i;
 
@@ -519,11 +505,7 @@ sdl_event_t * sdl_poll_event(void)
     static struct {
         bool active;
         int32_t event_id;
-        int32_t x_start;
-        int32_t y_start;
-        int32_t x_last;
-        int32_t y_last;
-    } mouse_motion;
+    } mouse_drag;
 
     memset(&event, 0,sizeof(event));
 
@@ -570,14 +552,14 @@ sdl_event_t * sdl_poll_event(void)
                 break;
             }
 
-            // clear mouse_motion 
-            memset(&mouse_motion,0,sizeof(mouse_motion));
+            // clear mouse_drag 
+            memset(&mouse_drag,0,sizeof(mouse_drag));
 
-            // search for matching registered mouse_click or mouse_motion event
+            // search for matching registered mouse_click or mouse_drag event
             for (i = sdl_event_max-1; i >= 0; i--) {
-                if (((sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_CLICK && left_click) ||
+                if (((sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_LEFT_CLICK && left_click) ||
                      (sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_RIGHT_CLICK && right_click) ||
-                     (sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_MOTION && left_click)) &&
+                     (sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_DRAG && left_click)) &&
                     (AT_POS(ev.button.x, ev.button.y, sdl_event_reg_tbl[i].disp_loc))) 
                 {
                     break;
@@ -587,30 +569,22 @@ sdl_event_t * sdl_poll_event(void)
                 break;
             }
 
-            // we've found a registered MOUSE_CLICK or MOUSE_RIGHT_CLICK or MOUSE_MOTION event;
-            // if it is a MOUSE_CLICK or MOUSE_RIGHT_CLICK event then
+            // we've found a registered MOUSE_LEFT_CLICK or MOUSE_RIGHT_CLICK or MOUSE_DRAG event;
+            // if it is a MOUSE_LEFT_CLICK or MOUSE_RIGHT_CLICK event then
             //   return the event to caller
             // else
-            //   initialize mouse_motion state, which will be used in 
+            //   initialize mouse_drag state, which will be used in 
             //     the case SDL_MOUSEMOTION below
             // endif
-            if (sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_CLICK ||
+            if (sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_LEFT_CLICK ||
                 sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_RIGHT_CLICK) 
             {
                 event.event_id = sdl_event_reg_tbl[i].event_id;
                 event.mouse_click.x = ev.button.x - sdl_event_reg_tbl[i].disp_loc.x;
                 event.mouse_click.y = ev.button.y - sdl_event_reg_tbl[i].disp_loc.y;
             } else {
-                mouse_motion.active = true;
-                mouse_motion.event_id = sdl_event_reg_tbl[i].event_id;
-                mouse_motion.x_start = ev.button.x;
-                mouse_motion.y_start = ev.button.y;
-                mouse_motion.x_last  = ev.button.x;
-                mouse_motion.y_last  = ev.button.y;
-
-                event.event_id = mouse_motion.event_id;
-                event.mouse_motion.delta_x = 0;
-                event.mouse_motion.delta_y = 0;
+                mouse_drag.active = true;
+                mouse_drag.event_id = sdl_event_reg_tbl[i].event_id;
             }
             break; }
 
@@ -627,31 +601,40 @@ sdl_event_t * sdl_poll_event(void)
                    ev.button.x,
                    ev.button.y);
 
-            // if not the left button then get out
+            // clear mouse drag when left button is released
             if (ev.button.button != SDL_BUTTON_LEFT) {
-                break;
+                memset(&mouse_drag,0,sizeof(mouse_drag));
             }
-
-            // clear mouse_motion 
-            memset(&mouse_motion,0,sizeof(mouse_motion));
             break; }
 
-        case SDL_MOUSEMOTION: { //xxx redo
-            // if mouse_motion is not active then get out
-            if (!mouse_motion.active) {
-                break;
-            }
+        case SDL_MOUSEMOTION: {
+            // xxx handle both active
 
-            // get all additional pending mouse motion events, and sum the motion
-            event.event_id = mouse_motion.event_id;
-            event.mouse_motion.delta_x = 0;
-            event.mouse_motion.delta_y = 0;
-            do {
-                event.mouse_motion.delta_x += ev.motion.x - mouse_motion.x_last;
-                event.mouse_motion.delta_y += ev.motion.y - mouse_motion.y_last;
-                mouse_motion.x_last = ev.motion.x;
-                mouse_motion.y_last = ev.motion.y;
-            } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
+            // return MOUSE_DRAG or MOUSE_POSITION event
+            if (mouse_drag.active) {
+                event.event_id = mouse_drag.event_id;
+                event.mouse_drag.delta_x = 0;
+                event.mouse_drag.delta_y = 0;
+                do {
+                    event.mouse_drag.delta_x += ev.motion.xrel;
+                    event.mouse_drag.delta_y += ev.motion.yrel;
+                } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
+            } else {
+                for (i = sdl_event_max-1; i >= 0; i--) {
+                    if ((sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_POSITION) &&
+                        (AT_POS(ev.motion.x, ev.motion.y, sdl_event_reg_tbl[i].disp_loc))) 
+                    {
+                        break;
+                    }
+                }
+                if (i >= 0) {
+                    event.event_id = sdl_event_reg_tbl[i].event_id;
+                    do {
+                        event.mouse_position.x += ev.motion.x;
+                        event.mouse_position.y += ev.motion.y;
+                    } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
+                }
+            }
             break; }
 
         case SDL_MOUSEWHEEL: {
@@ -686,10 +669,10 @@ sdl_event_t * sdl_poll_event(void)
             int32_t  event_id = SDL_EVENT_NONE;
 
             // map key to event_id
-            // xxx should be better way to handle shift keys
             if (key < 128) {
                 event_id = key;
-                if (shift) {
+#if 0
+                if (shift) { //xxx del
                     if (event_id >= 'a' && event_id <= 'z') {
                         event_id = toupper(event_id);
                     } else if (event_id >= '0' && event_id <= '9') {
@@ -706,6 +689,7 @@ sdl_event_t * sdl_poll_event(void)
                         event_id = '?';
                     }
                 }
+#endif
             } else if (key == SDLK_INSERT) {
                 event_id = SDL_EVENT_KEY_INSERT;
             } else if (key == SDLK_HOME) {
@@ -717,23 +701,22 @@ sdl_event_t * sdl_poll_event(void)
             } else if (key == SDLK_PAGEDOWN) {
                 event_id = SDL_EVENT_KEY_PGDN;
             } else if (key == SDLK_UP) {
-                event_id = !shift ? SDL_EVENT_KEY_UP_ARROW : SDL_EVENT_KEY_SHIFT_UP_ARROW;
+                event_id = SDL_EVENT_KEY_UP_ARROW;
             } else if (key == SDLK_DOWN) {
-                event_id = !shift ? SDL_EVENT_KEY_DOWN_ARROW : SDL_EVENT_KEY_SHIFT_DOWN_ARROW;
+                event_id = SDL_EVENT_KEY_DOWN_ARROW;
             } else if (key == SDLK_LEFT) {
-                event_id = !shift ? SDL_EVENT_KEY_LEFT_ARROW : SDL_EVENT_KEY_SHIFT_LEFT_ARROW;
+                event_id = SDL_EVENT_KEY_LEFT_ARROW;
             } else if (key == SDLK_RIGHT) {
-                event_id = !shift ? SDL_EVENT_KEY_RIGHT_ARROW : SDL_EVENT_KEY_SHIFT_RIGHT_ARROW;
+                event_id = SDL_EVENT_KEY_RIGHT_ARROW;
             } else if (key >= SDLK_F1 && key <= SDLK_F12) {
-                event_id = key - SDLK_F1 + SDL_EVENT_KEY_F(1);
+                event_id = (key - SDLK_F1) + SDL_EVENT_KEY_F(1);
             }
 
-            // adjust event_id if ctrl and/or alt is active
-            if (event_id != SDL_EVENT_NONE && ctrl) {
-                event_id += SDL_EVENT_KEY_CTRL;
-            }
-            if (event_id != SDL_EVENT_NONE && alt) {
-                event_id += SDL_EVENT_KEY_ALT;
+            // add shift/ctrl/alt to event-id
+            if (event_id != SDL_EVENT_NONE) {
+                if (shift) event_id += SDL_EVENT_KEY_SHIFT;
+                if (ctrl)  event_id += SDL_EVENT_KEY_CTRL;
+                if (alt)   event_id += SDL_EVENT_KEY_ALT;
             }
 
             // if there is a keyboard event_id then return it

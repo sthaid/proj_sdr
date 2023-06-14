@@ -69,10 +69,11 @@ typedef void * texture_t;
 //
 
 // event types
-#define SDL_EVENT_TYPE_MOUSE_CLICK          1
+#define SDL_EVENT_TYPE_MOUSE_LEFT_CLICK     1
 #define SDL_EVENT_TYPE_MOUSE_RIGHT_CLICK    2
-#define SDL_EVENT_TYPE_MOUSE_MOTION         3
+#define SDL_EVENT_TYPE_MOUSE_DRAG           3
 #define SDL_EVENT_TYPE_MOUSE_WHEEL          4
+#define SDL_EVENT_TYPE_MOUSE_POSITION       5
 
 // event identifiers
 // - no event
@@ -125,11 +126,15 @@ typedef struct {
         struct {
             int32_t delta_x;
             int32_t delta_y;
-        } mouse_motion;
+        } mouse_drag;
         struct {
             int32_t delta_x;
             int32_t delta_y;
         } mouse_wheel;
+        struct {
+            int32_t x;
+            int32_t y;
+        } mouse_position;
     };
 } sdl_event_t;
 

@@ -5,11 +5,18 @@
 #include <misc.h>
 #include <sdl.h>
 
-#define FTPSZ    20
-#define FTPSZ_LG 40
+#define FTSZ1  20
+#define FTSZ2  40
+#define FTCW1 (sdl_font_char_width(FTSZ1))
+#define FTCH1 (sdl_font_char_height(FTSZ1))
+#define FTCW2 (sdl_font_char_width(FTSZ2))
+#define FTCH2 (sdl_font_char_height(FTSZ2))
 
 #define SDL_EVENT_END_PROGRAM    (SDL_EVENT_USER_DEFINED+0)
-#define SDL_EVENT_FULLSCR        (SDL_EVENT_USER_DEFINED+2)
+#define SDL_EVENT_FULLSCR        (SDL_EVENT_USER_DEFINED+1)
+#define SDL_EVENT_MOUSE_DRAG     (SDL_EVENT_USER_DEFINED+2)
+#define SDL_EVENT_MOUSE_POSITION (SDL_EVENT_USER_DEFINED+3)
+#define SDL_EVENT_MOUSE_WHEEL    (SDL_EVENT_USER_DEFINED+4)
 
 int main(int argc, char **argv)
 {
@@ -18,6 +25,10 @@ int main(int argc, char **argv)
     int   i, x, y, w, h, w_last=0, h_last=0;
     rect_t loc;
     texture_t circle = NULL;
+    int  dragx, dragy;
+    int mousex, mousey;
+    int wheel_count;
+    char wheel_count_str[100];
 
     NOTICE("program starting\n");
 
@@ -26,6 +37,12 @@ int main(int argc, char **argv)
     sdl_get_max_texture_dim(&max_texture_dim);
     NOTICE("max_texture_dim = %d\n", max_texture_dim);
 
+    dragx = 800;
+    dragy = 400;
+    mousex = 30;
+    mousey = 30;
+    wheel_count = 0;
+
     while (true) {
         // get window size
         sdl_get_window_size(&w, &h);
@@ -33,6 +50,7 @@ int main(int argc, char **argv)
             NOTICE("%d %d\n", w, h);
             w_last = w;
             h_last = h;
+            // xxx scale drag
         }
 
         // display init
@@ -40,12 +58,12 @@ int main(int argc, char **argv)
 
         // render text
         s = "Top Left, White";
-        sdl_render_text(0, 0, FTPSZ, s, SDL_WHITE, SDL_BLACK);
+        sdl_render_text(0, 0, FTSZ1, s, SDL_WHITE, SDL_BLACK);
 
         s = "Bottom Right, Orange";
-        x = w - strlen(s) * sdl_font_char_width(FTPSZ);
-        y = h - sdl_font_char_height(FTPSZ);
-        sdl_render_text(x, y, FTPSZ, s, SDL_ORANGE, SDL_BLACK);
+        x = w - strlen(s) * FTCW1;
+        y = h - FTCW1;
+        sdl_render_text(x, y, FTSZ1, s, SDL_ORANGE, SDL_BLACK);
 
         // rectangles
         loc = (rect_t){-20, -20, 200, 200};
@@ -82,18 +100,33 @@ int main(int argc, char **argv)
         }
         sdl_render_texture(w/2-100, h*4/5, circle);
 
+        // scaled texture
         loc = (rect_t){w/2-100, h/2, 200, 100};
         sdl_render_scaled_texture(&loc, circle);
 
         // register events
         sdl_render_text_and_register_event(
-            0, h - sdl_font_char_height(FTPSZ_LG), FTPSZ_LG, 
+            0, h - FTCW1, FTSZ2, 
             "QUIT", SDL_LIGHT_BLUE, SDL_BLACK, 
-            SDL_EVENT_END_PROGRAM, SDL_EVENT_TYPE_MOUSE_CLICK);
+            SDL_EVENT_END_PROGRAM, SDL_EVENT_TYPE_MOUSE_LEFT_CLICK);
         sdl_render_text_and_register_event(
-            w/2-3*sdl_font_char_width(FTPSZ_LG), 0, FTPSZ_LG, 
+            w/2-3*FTCW1, 0, FTSZ2, 
             "FULLSCR", SDL_LIGHT_BLUE, SDL_BLACK, 
-            SDL_EVENT_FULLSCR, SDL_EVENT_TYPE_MOUSE_CLICK);
+            SDL_EVENT_FULLSCR, SDL_EVENT_TYPE_MOUSE_LEFT_CLICK);
+        sdl_render_text_and_register_event(
+            dragx, dragy, FTSZ2,
+            "DRAG", SDL_LIGHT_BLUE, SDL_BLACK, 
+            SDL_EVENT_MOUSE_DRAG, SDL_EVENT_TYPE_MOUSE_DRAG);
+        sprintf(wheel_count_str, "%d", wheel_count);
+        sdl_render_text_and_register_event(
+            20, 100, FTSZ2,
+            wheel_count_str, SDL_ORANGE, SDL_BLACK, 
+            SDL_EVENT_MOUSE_WHEEL, SDL_EVENT_TYPE_MOUSE_WHEEL);
+        sdl_register_event(&(rect_t){0,0,w,h},
+            SDL_EVENT_MOUSE_POSITION, SDL_EVENT_TYPE_MOUSE_POSITION);
+
+        // draw point at the mouse position
+        sdl_render_point(mousex, mousey, SDL_RED, 3);
 
         // present the display
         sdl_display_present();
@@ -119,6 +152,17 @@ int main(int argc, char **argv)
                 fullscr = !fullscr;
                 sdl_full_screen(fullscr);
                 break; }
+            case SDL_EVENT_MOUSE_DRAG:
+                dragx += ev->mouse_drag.delta_x;
+                dragy += ev->mouse_drag.delta_y;
+                break;
+            case SDL_EVENT_MOUSE_POSITION:
+                mousex = ev->mouse_position.x;
+                mousey = ev->mouse_position.y;
+                break;
+            case SDL_EVENT_MOUSE_WHEEL:
+                wheel_count += ev->mouse_wheel.delta_y;
+                break;
             case SDL_EVENT_WIN_SIZE_CHANGE:
             case SDL_EVENT_WIN_MINIMIZED:
             case SDL_EVENT_WIN_RESTORED:
