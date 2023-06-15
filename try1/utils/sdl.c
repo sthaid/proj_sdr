@@ -52,9 +52,7 @@ typedef struct {
 static SDL_Window     * sdl_window;
 static SDL_Renderer   * sdl_renderer;
 static SDL_RendererInfo sdl_renderer_info;
-static int32_t          sdl_win_width;
-static int32_t          sdl_win_height;
-static bool             sdl_win_minimized;
+static win_info_t       sdl_win_info;
 
 static sdl_font_t       sdl_font[MAX_FONT_PTSIZE];
 static char           * sdl_font_path;
@@ -87,7 +85,7 @@ static void set_color(int32_t color);
 
 // -----------------  SDL INIT & MISC ROUTINES  ------------------------- 
 
-int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool swap_white_black)
+int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool swap_white_black, win_info_t *wi)
 {
     #define MAX_FONT_SEARCH_PATH 2
 
@@ -116,9 +114,11 @@ int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool sw
     }
     sdl_poll_event();
 
-    // get the actual window size
-    SDL_GetWindowSize(sdl_window, &sdl_win_width, &sdl_win_height);
-    NOTICE("sdl_win_width=%d sdl_win_height=%d\n", sdl_win_width, sdl_win_height);
+    // init win_info
+    SDL_GetWindowSize(sdl_window, &sdl_win_info.w, &sdl_win_info.h);
+    sdl_win_info.minimized = false;
+    sdl_win_info.mouse_in_window = true;
+    NOTICE("win_width=%d win_height=%d\n", sdl_win_info.w, sdl_win_info.h);
 
     // initialize True Type Font
     if (TTF_Init() < 0) {
@@ -146,7 +146,7 @@ int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool sw
     DEBUG("using font %s\n", sdl_font_path);
 
     // currently the SDL Text Input feature is not being used here
-    // xxx how does this wokr
+    // xxx how does this work
     SDL_StopTextInput();
 
     // if caller requests swap_white_black then swap the white and black
@@ -159,6 +159,9 @@ int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool sw
 
     // register exit handler
     atexit(exit_handler);
+
+    // return sdl_win_info to caller
+    *wi = sdl_win_info;
 
     // return success
     DEBUG("success\n");
@@ -185,10 +188,9 @@ static void font_init(int32_t font_ptsize)
          font_ptsize, sdl_font[font_ptsize].char_width, sdl_font[font_ptsize].char_height);
 }
 
-void sdl_get_window_size(int32_t *w, int32_t *h)
+void sdl_get_win_info(win_info_t *wi)
 {
-    *w = sdl_win_width;
-    *h = sdl_win_height;
+    *wi = sdl_win_info;
 }
 
 void sdl_full_screen(bool enable)
@@ -260,8 +262,8 @@ void sdl_print_screen(bool flash_display, rect_t * rect_arg)
     } else {
         rect.x = 0;
         rect.y = 0;
-        rect.w = sdl_win_width;
-        rect.h = sdl_win_height;   
+        rect.w = sdl_win_info.w;
+        rect.h = sdl_win_info.h;;   
     }
 
     // allocate memory for pixels
@@ -525,9 +527,7 @@ sdl_event_t * sdl_poll_event(void)
             break;
         }
 
-        // process the SDL event, this code
-        // - sets event and sdl_quit
-        // - updates sdl_win_width, sdl_win_height, sdl_win_minimized
+        // process the SDL event
         switch (ev.type) {
         case SDL_MOUSEBUTTONDOWN: {
             bool left_click, right_click;
@@ -601,16 +601,14 @@ sdl_event_t * sdl_poll_event(void)
                    ev.button.x,
                    ev.button.y);
 
-            // clear mouse drag when left button is released
-            if (ev.button.button != SDL_BUTTON_LEFT) {
-                memset(&mouse_drag,0,sizeof(mouse_drag));
-            }
+            // clear mouse drag
+            memset(&mouse_drag,0,sizeof(mouse_drag));
             break; }
 
         case SDL_MOUSEMOTION: {
-            // xxx handle both active
+            sdl_event_t mouse_pos_event;
 
-            // return MOUSE_DRAG or MOUSE_POSITION event
+            // if mouse_drag_active then return a MOUSE_DRAG event
             if (mouse_drag.active) {
                 event.event_id = mouse_drag.event_id;
                 event.mouse_drag.delta_x = 0;
@@ -619,21 +617,38 @@ sdl_event_t * sdl_poll_event(void)
                     event.mouse_drag.delta_x += ev.motion.xrel;
                     event.mouse_drag.delta_y += ev.motion.yrel;
                 } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
+            }
+
+            // determine if the mouse position corresponds to a registered MOUSE_POSITION event;
+            // if not then break
+            for (i = sdl_event_max-1; i >= 0; i--) {
+                if ((sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_POSITION) &&
+                    (AT_POS(ev.motion.x, ev.motion.y, sdl_event_reg_tbl[i].disp_loc))) 
+                {
+                    break;
+                }
+            }
+            if (i < 0) {
+                break;
+            }
+
+            // init the mouse_pos_event
+            memset(&mouse_pos_event, 0, sizeof(mouse_pos_event));
+            mouse_pos_event.event_id = sdl_event_reg_tbl[i].event_id;
+            do {
+                mouse_pos_event.mouse_position.x += ev.motion.x;
+                mouse_pos_event.mouse_position.y += ev.motion.y;
+            } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
+
+            // if we are not already returning the MOUSE_DRAG event then
+            //   return the mouse_pos_event
+            // else
+            //   save the mouse_pos_event for the next call to sdl_poll_event
+            // endif
+            if (event.event_id == SDL_EVENT_NONE) {
+                event = mouse_pos_event;
             } else {
-                for (i = sdl_event_max-1; i >= 0; i--) {
-                    if ((sdl_event_reg_tbl[i].event_type == SDL_EVENT_TYPE_MOUSE_POSITION) &&
-                        (AT_POS(ev.motion.x, ev.motion.y, sdl_event_reg_tbl[i].disp_loc))) 
-                    {
-                        break;
-                    }
-                }
-                if (i >= 0) {
-                    event.event_id = sdl_event_reg_tbl[i].event_id;
-                    do {
-                        event.mouse_position.x += ev.motion.x;
-                        event.mouse_position.y += ev.motion.y;
-                    } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
-                }
+                sdl_push_event(&mouse_pos_event);
             }
             break; }
 
@@ -733,22 +748,27 @@ sdl_event_t * sdl_poll_event(void)
             break;
 
        case SDL_WINDOWEVENT: {
-            DEBUG("got event SDL_WINOWEVENT - %s\n", SDL_WINDOWEVENT_STR(ev.window.event));
+            NOTICE("got event SDL_WINOWEVENT - %s\n", SDL_WINDOWEVENT_STR(ev.window.event));
             switch (ev.window.event)  {
             case SDL_WINDOWEVENT_SIZE_CHANGED:
-                sdl_win_width = ev.window.data1;
-                sdl_win_height = ev.window.data2;
-                event.event_id = SDL_EVENT_WIN_SIZE_CHANGE;
+                sdl_win_info.w = ev.window.data1;
+                sdl_win_info.h = ev.window.data2;
                 break;
             case SDL_WINDOWEVENT_MINIMIZED:
-                sdl_win_minimized = true;
-                event.event_id = SDL_EVENT_WIN_MINIMIZED;
+                sdl_win_info.minimized = true;
                 break;
             case SDL_WINDOWEVENT_RESTORED:
-                sdl_win_minimized = false;
-                event.event_id = SDL_EVENT_WIN_RESTORED;
+                sdl_win_info.minimized = false;
+                break;
+            case SDL_WINDOWEVENT_LEAVE:
+                sdl_win_info.mouse_in_window = false;
+                break;
+            case SDL_WINDOWEVENT_ENTER:
+                sdl_win_info.mouse_in_window = true;
                 break;
             }
+            event.event_id = SDL_EVENT_WINDOW;
+            event.win_info = sdl_win_info;
             break; }
 
         case SDL_QUIT: {
@@ -934,7 +954,7 @@ void sdl_render_lines(point_t * points, int32_t count, int32_t color)
 
 void sdl_render_circle(int32_t x_center, int32_t y_center, int32_t radius, int32_t line_width, int32_t color)
 {
-    int32_t count = 0, i, angle, x, y;
+    int32_t count = 0, i, angle;
     SDL_Point points[370];
 
     static int32_t sin_table[370];
@@ -955,25 +975,14 @@ void sdl_render_circle(int32_t x_center, int32_t y_center, int32_t radius, int32
 
     // loop over line_width
     for (i = 0; i < line_width; i++) {
-        // draw circle, and clip to win dimensions
+        // draw circle
+        count = 0;
         for (angle = 0; angle < 362; angle++) {
-            x = x_center + (((int64_t)radius * sin_table[angle]) >> 18);
-            y = y_center + (((int64_t)radius * cos_table[angle]) >> 18);
-            if (x < 0 || x >= sdl_win_width || y < 0 || y >= sdl_win_height) {
-                if (count) {
-                    SDL_RenderDrawLines(sdl_renderer, points, count);
-                    count = 0;
-                }
-                continue;
-            }
-            points[count].x = x;
-            points[count].y = y;
+            points[count].x = x_center + (((int64_t)radius * sin_table[angle]) >> 18);
+            points[count].y = y_center + (((int64_t)radius * cos_table[angle]) >> 18);
             count++;
         }
-        if (count) {
-            SDL_RenderDrawLines(sdl_renderer, points, count);
-            count = 0;
-        }
+        SDL_RenderDrawLines(sdl_renderer, points, count);
 
         // reduce radius by 1
         radius--;
@@ -1124,7 +1133,7 @@ void sdl_render_points(point_t * points, int32_t count, int32_t color, int32_t p
             } },
                 };
 
-    int32_t i, j, x, y;
+    int32_t i, j;
     SDL_Point sdl_points[MAX_SDL_POINTS];
     int32_t sdl_points_count = 0;
     struct point_extend_s * pe = &point_extend[point_size];
@@ -1141,13 +1150,8 @@ void sdl_render_points(point_t * points, int32_t count, int32_t color, int32_t p
 
     for (i = 0; i < count; i++) {
         for (j = 0; j < pe->max; j++) {
-            x = points[i].x + peo[j].x;
-            y = points[i].y + peo[j].y;
-            if (x < 0 || x >= sdl_win_width || y < 0 || y >= sdl_win_height) {
-                continue;
-            }
-            sdl_points[sdl_points_count].x = x;
-            sdl_points[sdl_points_count].y = y;
+            sdl_points[sdl_points_count].x = points[i].x + peo[j].x;
+            sdl_points[sdl_points_count].y = points[i].y + peo[j].y;
             sdl_points_count++;
 
             if (sdl_points_count == MAX_SDL_POINTS) {
@@ -1187,7 +1191,7 @@ texture_t sdl_create_texture_from_win_pixels(void)
     texture_t texture;
     int32_t ret;
     uint8_t * pixels;
-    SDL_Rect rect = {0, 0, sdl_win_width, sdl_win_height};
+    SDL_Rect rect = {0, 0, sdl_win_info.w, sdl_win_info.h};
 
     // allocate memory for the pixels
     pixels = calloc(1, rect.h * rect.w * BYTES_PER_PIXEL);
@@ -1209,7 +1213,7 @@ texture_t sdl_create_texture_from_win_pixels(void)
     }
 
     // create the texture
-    texture = sdl_create_texture(sdl_win_width, sdl_win_height);
+    texture = sdl_create_texture(sdl_win_info.w, sdl_win_info.h);
     if (texture == NULL) {
         ERROR("failed to allocate texture\n");
         free(pixels);
@@ -1217,7 +1221,7 @@ texture_t sdl_create_texture_from_win_pixels(void)
     }
 
     // update the texture with the pixels
-    SDL_UpdateTexture(texture, NULL, pixels, sdl_win_width * BYTES_PER_PIXEL);
+    SDL_UpdateTexture(texture, NULL, pixels, sdl_win_info.w * BYTES_PER_PIXEL);
 
     // free pixels
     free(pixels);

@@ -9,7 +9,6 @@
 //
 
 // colors
-// xxx put black and white first?
 #define SDL_PURPLE     0 
 #define SDL_BLUE       1
 #define SDL_LIGHT_BLUE 2
@@ -61,6 +60,13 @@ typedef struct {
     int32_t x, y;
 } point_t;
 
+// win_info
+typedef struct {
+    int  w, h;
+    bool minimized;
+    bool mouse_in_window;
+} win_info_t;
+
 // texture
 typedef void * texture_t;
 
@@ -99,12 +105,11 @@ typedef void * texture_t;
 #define SDL_EVENT_KEY_SHIFT_LEFT_ARROW   0x10c
 #define SDL_EVENT_KEY_SHIFT_RIGHT_ARROW  0x10d
 #define SDL_EVENT_KEY_F(n)               (0x10f+(n))  // n=1...12
-#define SDL_EVENT_KEY_CTRL               0x1000
-#define SDL_EVENT_KEY_ALT                0x2000
+#define SDL_EVENT_KEY_SHIFT              0x1000
+#define SDL_EVENT_KEY_CTRL               0x2000
+#define SDL_EVENT_KEY_ALT                0x4000
 // - window events
-#define SDL_EVENT_WIN_SIZE_CHANGE        0x8001
-#define SDL_EVENT_WIN_MINIMIZED          0x8002
-#define SDL_EVENT_WIN_RESTORED           0x8003
+#define SDL_EVENT_WINDOW                 0x8001
 // - program quit event
 #define SDL_EVENT_QUIT                   0x8fff
 // - user defined events base
@@ -135,17 +140,19 @@ typedef struct {
             int32_t x;
             int32_t y;
         } mouse_position;
+        win_info_t win_info;
     };
 } sdl_event_t;
 
 //
 // PROTOTYPES
-// xxx check all these
 //
 
 // sdl initialize
-int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool swap_white_black);
-void sdl_get_window_size(int32_t * w, int32_t * h);
+int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool swap_white_black,
+                 win_info_t *wi);
+
+void sdl_get_win_info(win_info_t *wi);
 void sdl_get_max_texture_dim(int32_t * max_texture_dim);
 
 // display mode
@@ -196,7 +203,7 @@ void sdl_render_points(point_t * points, int32_t count, int32_t color, int32_t p
 
 // render using textures
 texture_t sdl_create_texture(int32_t w, int32_t h);
-texture_t sdl_create_texture_from_win_pixels(void); // xxx how used
+texture_t sdl_create_texture_from_win_pixels(void);
 texture_t sdl_create_filled_circle_texture(int32_t radius, int32_t color);
 texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t font_ptsize, char * str);
 void sdl_update_texture(texture_t texture, uint8_t * pixels, int32_t pitch);
