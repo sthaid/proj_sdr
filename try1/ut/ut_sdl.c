@@ -127,6 +127,7 @@ int main(int argc, char **argv)
 
         // draw point at the mouse position
         if (wi.mouse_in_window) {
+// xxx lagging
             sdl_render_point(mousex, mousey, SDL_RED, 3);
         }
 
@@ -169,9 +170,13 @@ int main(int argc, char **argv)
                 NOTICE("win_info: w=%d h=%d minimized=%d mouse_in_window=%d\n",
                        wi.w, wi.h, wi.minimized, wi.mouse_in_window);
                 break;
-            case SDL_EVENT_KEY_ALT + 'p':
+            case SDL_EVENT_KEY_CTRL + SDL_EVENT_KEY_PRINTSCREEN:
                 sdl_print_screen(true, NULL);
                 break;
+            case 0x20 ... 0x7f:
+                NOTICE("got char '%c'\n", ev->event_id);
+                break;
+// xxx print other chars too
             default:
                 redraw_now = false;
                 break;

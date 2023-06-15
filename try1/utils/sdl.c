@@ -147,7 +147,7 @@ int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool sw
 
     // currently the SDL Text Input feature is not being used here
     // xxx how does this work
-    SDL_StopTextInput();
+    //SDL_StopTextInput();
 
     // if caller requests swap_white_black then swap the white and black
     // entries of the sdl_color_to_rgba table
@@ -683,28 +683,11 @@ sdl_event_t * sdl_poll_event(void)
             bool     alt = (ev.key.keysym.mod & KMOD_ALT) != 0;
             int32_t  event_id = SDL_EVENT_NONE;
 
+            //NOTICE("KEYDOWN %x '%c'\n", key, key);
+
             // map key to event_id
-            if (key < 128) {
+            if (key >= 0x20 && key < 0x7f && (ctrl || alt)) {
                 event_id = key;
-#if 0
-                if (shift) { //xxx del
-                    if (event_id >= 'a' && event_id <= 'z') {
-                        event_id = toupper(event_id);
-                    } else if (event_id >= '0' && event_id <= '9') {
-                        event_id = ")!@#$%^&*("[event_id-'0'];
-                    } else if (event_id == '-') {
-                        event_id = '_';
-                    } else if (event_id == '=') {
-                        event_id = '+';
-                    } else if (event_id == ',') {
-                        event_id = '<';
-                    } else if (event_id == '.') {
-                        event_id = '>';
-                    } else if (event_id == '/') {
-                        event_id = '?';
-                    }
-                }
-#endif
             } else if (key == SDLK_INSERT) {
                 event_id = SDL_EVENT_KEY_INSERT;
             } else if (key == SDLK_HOME) {
@@ -725,6 +708,8 @@ sdl_event_t * sdl_poll_event(void)
                 event_id = SDL_EVENT_KEY_RIGHT_ARROW;
             } else if (key >= SDLK_F1 && key <= SDLK_F12) {
                 event_id = (key - SDLK_F1) + SDL_EVENT_KEY_F(1);
+            } else if (key == SDLK_PRINTSCREEN) {
+                event_id = SDL_EVENT_KEY_PRINTSCREEN;
             }
 
             // add shift/ctrl/alt to event-id
@@ -743,8 +728,17 @@ sdl_event_t * sdl_poll_event(void)
         case SDL_KEYUP:
             break;
 
-       case SDL_TEXTINPUT:
-            // xxx how does this work
+        // xxx how does this work
+        case SDL_TEXTINPUT: {
+            char *s = ev.text.text;
+            //NOTICE("SDL_TEXTINPUT  %x %x\n", s[0], s[1]);
+            if (s[0] >= 0x20 && s[0] < 0x7f) {
+                event.event_id = s[0];
+            }
+            break; }
+
+        case SDL_TEXTEDITING:
+            //NOTICE("SDL_TEXTEDITING\n");
             break;
 
        case SDL_WINDOWEVENT: {
