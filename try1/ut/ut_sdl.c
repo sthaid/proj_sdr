@@ -7,10 +7,13 @@
 
 #define FTSZ1  20
 #define FTSZ2  40
+#define FTSZ3  100
 #define FTCW1 (sdl_font_char_width(FTSZ1))
 #define FTCH1 (sdl_font_char_height(FTSZ1))
 #define FTCW2 (sdl_font_char_width(FTSZ2))
 #define FTCH2 (sdl_font_char_height(FTSZ2))
+#define FTCW3 (sdl_font_char_width(FTSZ3))
+#define FTCH3 (sdl_font_char_height(FTSZ3))
 
 #define SDL_EVENT_END_PROGRAM    (SDL_EVENT_USER_DEFINED+0)
 #define SDL_EVENT_FULLSCR        (SDL_EVENT_USER_DEFINED+1)
@@ -21,12 +24,14 @@
 #define W (wi.w)
 #define H (wi.h)
 
-texture_t  circle, points;
-int        dragx=800, dragy=400;
-int        mousex, mousey;
-int        wheel_count;
-win_info_t wi;
-bool       fullscr;
+win_info_t    wi;
+texture_t     circle, points;
+int           dragx=800, dragy=400;
+int           mousex, mousey;
+int           wheel_count;
+bool          fullscr;
+int           ascii_char;
+unsigned long ascii_char_display_start_time;
 
 // -----------------  MAIN  ------------------------------------------
 
@@ -77,6 +82,16 @@ int main(int argc, char **argv)
 
         // circle
         sdl_render_circle(W*3/4, H/2, 200, 5, SDL_PINK);
+
+        // if an ascii char evid occurred then display the char
+        // in the center of the circle
+        if (ascii_char_display_start_time) {
+            sdl_render_printf(W*3/4-FTCW3/2, H/2-FTCH3/2, FTSZ3, SDL_WHITE, SDL_BLACK, "%c", ascii_char);
+            if (microsec_timer() > ascii_char_display_start_time + 5000000) {
+                ascii_char_display_start_time = 0;
+                ascii_char = 0;
+            }
+        }
 
         // points
         for (i = 0; i <= 9; i++) {
@@ -185,11 +200,12 @@ int main(int argc, char **argv)
                     sdl_print_screen(true, NULL);
                 } else if (IS_EVENT_ID_TEXT(evid)) {
                     NOTICE("got ASCII char '%c'\n", evid);
+                    ascii_char = evid;
+                    ascii_char_display_start_time = microsec_timer();
                 } else {
                     NOTICE("got special key %04x\n", evid);
                 }
                 break;
-// xxx print other chars too
             default:
                 redraw_now = false;
                 break;
