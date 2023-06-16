@@ -62,7 +62,7 @@ typedef struct {
 
 // win_info
 typedef struct {
-    int  w, h;
+    int32_t  w, h;
     bool minimized;
     bool mouse_in_window;
 } win_info_t;
@@ -89,6 +89,7 @@ typedef void * texture_t;
 //   . event_id in range 0x100 to 0x1ff are special keys
 //   . if ctrl is active then SDL_EVENT_KEY_CTRL is added to the event_id value
 //   . if alt is active then SDL_EVENT_KEY_ALT is added to the event_id value
+#define SDL_EVENT_KEY_FIRST              0x01
 #define SDL_EVENT_KEY_ESC                0x1b
 #define SDL_EVENT_KEY_DELETE             0x7f
 #define SDL_EVENT_KEY_INSERT             0x101
@@ -102,20 +103,20 @@ typedef void * texture_t;
 #define SDL_EVENT_KEY_RIGHT_ARROW        0x109
 #define SDL_EVENT_KEY_PRINTSCREEN        0x10a
 #define SDL_EVENT_KEY_F(n)               (0x110+(n))  // n=1...12
-#define SDL_EVENT_KEY_SHIFT              0x1000
-#define SDL_EVENT_KEY_CTRL               0x2000
-#define SDL_EVENT_KEY_ALT                0x4000
+#define SDL_EVENT_KEY_LAST               0x7fff
+#define SDL_EVENT_KEY_SHIFT              0x1000  // qualifiers
+#define SDL_EVENT_KEY_CTRL               0x2000  // ...
+#define SDL_EVENT_KEY_ALT                0x4000  // ...
 // - window events
-#define SDL_EVENT_WINDOW                 0x8001
+#define SDL_EVENT_WINDOW                 0x8000
 // - program quit event
-#define SDL_EVENT_QUIT                   0x8fff
+#define SDL_EVENT_QUIT                   0xffff
 // - user defined events base
 #define SDL_EVENT_USER_DEFINED           0x10000
 
 // check if event_id is associated with the keyboard
-#define SDL_EVENT_KEY_FIRST        0x1
-#define SDL_EVENT_KEY_LAST         (SDL_EVENT_KEY_CTRL + SDL_EVENT_KEY_ALT + 0x1ff)
-#define IS_KEYBOARD_EVENT_ID(evid) ((evid >= SDL_EVENT_KEY_FIRST) && ((evid) <= SDL_EVENT_KEY_LAST))
+#define IS_EVENT_ID_TEXT(evid)  ((evid) >= 0x20 && (evid) < 0x7f)
+#define IS_EVENT_ID_SPECIAL_KEY ((evid) >= SDL_EVENT_KEY_FIRST && (evid) <= SDL_EVENT_KEY_LAST && !IS_EVENT_ID_TEXT(evid))
 
 // event data structure 
 typedef struct {
@@ -200,7 +201,7 @@ void sdl_render_points(point_t * points, int32_t count, int32_t color, int32_t p
 
 // render using textures
 texture_t sdl_create_texture(int32_t w, int32_t h);
-texture_t sdl_create_texture_from_win_pixels(void);
+texture_t sdl_create_texture_from_win_pixels(rect_t * loc);
 texture_t sdl_create_filled_circle_texture(int32_t radius, int32_t color);
 texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t font_ptsize, char * str);
 void sdl_update_texture(texture_t texture, uint8_t * pixels, int32_t pitch);
@@ -214,7 +215,7 @@ void sdl_destroy_texture(texture_t texture);
 texture_t sdl_create_yuy2_texture(int32_t w, int32_t h);
 void sdl_update_yuy2_texture(texture_t texture, uint8_t * pixels, int32_t pitch);
 texture_t sdl_create_iyuv_texture(int32_t w, int32_t h);
-void sdl_update_iyuv_texture(texture_t texture, uint8_t *y_plane, int y_pitch, 
-            uint8_t *u_plane, int u_pitch, uint8_t *v_plane, int v_pitch);
+void sdl_update_iyuv_texture(texture_t texture, uint8_t *y_plane, int32_t y_pitch, 
+            uint8_t *u_plane, int32_t u_pitch, uint8_t *v_plane, int32_t v_pitch);
 
 #endif

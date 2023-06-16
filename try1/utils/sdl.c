@@ -14,7 +14,7 @@
 #include <png_rw.h>
 
 // xxx 
-// - some routines in this file need comment headers
+// - add comments for each routine
 
 //
 // defines
@@ -144,10 +144,6 @@ int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool sw
         return -1;
     }
     DEBUG("using font %s\n", sdl_font_path);
-
-    // currently the SDL Text Input feature is not being used here
-    // xxx how does this work
-    //SDL_StopTextInput();
 
     // if caller requests swap_white_black then swap the white and black
     // entries of the sdl_color_to_rgba table
@@ -640,7 +636,7 @@ sdl_event_t * sdl_poll_event(void)
                 mouse_pos_event.mouse_position.y += ev.motion.y;
             } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
 
-            // if we are not already returning the MOUSE_DRAG event then
+            // if we are not returning the MOUSE_DRAG event then
             //   return the mouse_pos_event
             // else
             //   save the mouse_pos_event for the next call to sdl_poll_event
@@ -683,10 +679,13 @@ sdl_event_t * sdl_poll_event(void)
             bool     alt = (ev.key.keysym.mod & KMOD_ALT) != 0;
             int32_t  event_id = SDL_EVENT_NONE;
 
-            //NOTICE("KEYDOWN %x '%c'\n", key, key);
+            // this case returns event_id for special keyboard keys, such as
+            // Home, Insert, RightArrow, ctrl-a, alt-a, etc.
 
-            // map key to event_id
-            if (key >= 0x20 && key < 0x7f && (ctrl || alt)) {
+            // map key to event_id define used by this code
+            if (key == SDL_EVENT_KEY_ESC || key == SDL_EVENT_KEY_DELETE) {
+                event_id = key;
+            } else if (key >= 0x20 && key < 0x7f && (ctrl || alt)) {
                 event_id = key;
             } else if (key == SDLK_INSERT) {
                 event_id = SDL_EVENT_KEY_INSERT;
@@ -728,17 +727,17 @@ sdl_event_t * sdl_poll_event(void)
         case SDL_KEYUP:
             break;
 
-        // xxx how does this work
         case SDL_TEXTINPUT: {
             char *s = ev.text.text;
-            //NOTICE("SDL_TEXTINPUT  %x %x\n", s[0], s[1]);
+
+            // this case returns ASCII keyboard codes, such as:
+            // 'A', 'a', '<', '>', etc.
             if (s[0] >= 0x20 && s[0] < 0x7f) {
                 event.event_id = s[0];
             }
             break; }
 
         case SDL_TEXTEDITING:
-            //NOTICE("SDL_TEXTEDITING\n");
             break;
 
        case SDL_WINDOWEVENT: {
@@ -785,6 +784,7 @@ sdl_event_t * sdl_poll_event(void)
 }
 
 // this function is thread-safe
+// xxx could use improvement, such as a mutex and fifo of events
 void sdl_push_event(sdl_event_t *ev) 
 {
     int event_id = ev->event_id;
@@ -1179,13 +1179,12 @@ texture_t sdl_create_texture(int32_t w, int32_t h)
     return (texture_t)texture;
 }
 
-// xxx should have a loc arg
-texture_t sdl_create_texture_from_win_pixels(void)
+texture_t sdl_create_texture_from_win_pixels(rect_t *loc)
 {
     texture_t texture;
     int32_t ret;
     uint8_t * pixels;
-    SDL_Rect rect = {0, 0, sdl_win_info.w, sdl_win_info.h};
+    SDL_Rect rect = {loc->x, loc->y, loc->w, loc->h};
 
     // allocate memory for the pixels
     pixels = calloc(1, rect.h * rect.w * BYTES_PER_PIXEL);
@@ -1207,7 +1206,7 @@ texture_t sdl_create_texture_from_win_pixels(void)
     }
 
     // create the texture
-    texture = sdl_create_texture(sdl_win_info.w, sdl_win_info.h);
+    texture = sdl_create_texture(rect.w, rect.h);
     if (texture == NULL) {
         ERROR("failed to allocate texture\n");
         free(pixels);
@@ -1215,7 +1214,7 @@ texture_t sdl_create_texture_from_win_pixels(void)
     }
 
     // update the texture with the pixels
-    SDL_UpdateTexture(texture, NULL, pixels, sdl_win_info.w * BYTES_PER_PIXEL);
+    SDL_UpdateTexture(texture, NULL, pixels, rect.w * BYTES_PER_PIXEL);
 
     // free pixels
     free(pixels);

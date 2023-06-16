@@ -21,15 +21,12 @@
 #define W (wi.w)
 #define H (wi.h)
 
-texture_t  circle = NULL;
+texture_t  circle, points;
 int        dragx=800, dragy=400;
 int        mousex, mousey;
 int        wheel_count;
 win_info_t wi;
 bool       fullscr;
-
-// xxx
-// - drag scaling when going in/out of full screen
 
 // -----------------  MAIN  ------------------------------------------
 
@@ -99,6 +96,16 @@ int main(int argc, char **argv)
         loc = (rect_t){W/2-100, H/2, 200, 100};
         sdl_render_scaled_texture(&loc, circle);
 
+        // create texture from window pixels;
+        // make copy of points that were rendered in above code, and render 
+        // just a bit below
+        loc.x = 0;
+        loc.y = H/3-10;
+        loc.w = 300;
+        loc.h = 20;
+        points = sdl_create_texture_from_win_pixels(&loc);
+        sdl_render_texture(0, H/3+50, points);
+
         // register events
         sdl_render_text_and_register_event(
             0, H - FTCW1, FTSZ2, 
@@ -127,7 +134,6 @@ int main(int argc, char **argv)
 
         // draw point at the mouse position
         if (wi.mouse_in_window) {
-// xxx lagging
             sdl_render_point(mousex, mousey, SDL_RED, 3);
         }
 
@@ -136,7 +142,7 @@ int main(int argc, char **argv)
 
         // handle events
         sdl_event_t *ev;
-        int poll_count = 0;
+        int evid, poll_count = 0;
         bool redraw_now;
 
         while (true) {
@@ -147,7 +153,6 @@ int main(int argc, char **argv)
             switch (ev->event_id) {
             case SDL_EVENT_QUIT: 
             case SDL_EVENT_END_PROGRAM:
-            case SDL_EVENT_KEY_ALT + 'q':
                 goto end_program;
                 break;
             case SDL_EVENT_FULLSCR: {
@@ -170,11 +175,19 @@ int main(int argc, char **argv)
                 NOTICE("win_info: w=%d h=%d minimized=%d mouse_in_window=%d\n",
                        wi.w, wi.h, wi.minimized, wi.mouse_in_window);
                 break;
-            case SDL_EVENT_KEY_CTRL + SDL_EVENT_KEY_PRINTSCREEN:
-                sdl_print_screen(true, NULL);
-                break;
-            case 0x20 ... 0x7f:
-                NOTICE("got char '%c'\n", ev->event_id);
+            case SDL_EVENT_KEY_FIRST ... SDL_EVENT_KEY_LAST:
+                evid = ev->event_id;
+                if (evid == SDL_EVENT_KEY_ALT + 'q') {
+                    NOTICE("got alt-q\n");
+                    goto end_program;
+                } else if (evid == SDL_EVENT_KEY_CTRL + SDL_EVENT_KEY_PRINTSCREEN) {
+                    NOTICE("got ctrl-PrtScn\n");
+                    sdl_print_screen(true, NULL);
+                } else if (IS_EVENT_ID_TEXT(evid)) {
+                    NOTICE("got ASCII char '%c'\n", evid);
+                } else {
+                    NOTICE("got special key %04x\n", evid);
+                }
                 break;
 // xxx print other chars too
             default:
