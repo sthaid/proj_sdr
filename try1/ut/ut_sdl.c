@@ -215,8 +215,8 @@ int main(int argc, char **argv)
                 break;
             case SDL_EVENT_KEY_FIRST ... SDL_EVENT_KEY_LAST:
                 evid = ev->event_id;
-                if (evid == SDL_EVENT_KEYMOD_ALT + 'q') {
-                    NOTICE("got alt-q\n");
+                if (evid == SDL_EVENT_KEYMOD_CTRL + 'q') {
+                    NOTICE("got ctrl-q, end program\n");
                     goto end_program;
                 } else if (evid == SDL_EVENT_KEYMOD_CTRL + SDL_EVENT_KEY_PRINTSCREEN) {
                     NOTICE("got ctrl-PrtScn\n");

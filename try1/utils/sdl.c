@@ -665,8 +665,8 @@ sdl_event_t * sdl_poll_event(void)
             memset(&mouse_pos_event, 0, sizeof(mouse_pos_event));
             mouse_pos_event.event_id = sdl_event_reg_tbl[i].event_id;
             do {
-                mouse_pos_event.mouse_position.x += ev.motion.x;
-                mouse_pos_event.mouse_position.y += ev.motion.y;
+                mouse_pos_event.mouse_position.x = ev.motion.x;
+                mouse_pos_event.mouse_position.y = ev.motion.y;
             } while (SDL_PeepEvents(&ev, 1, SDL_GETEVENT, SDL_MOUSEMOTION, SDL_MOUSEMOTION) == 1);
 
             // if we are not returning the MOUSE_DRAG event then
