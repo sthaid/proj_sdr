@@ -1,6 +1,9 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <locale.h>
+#include <wchar.h>
 
 #include <misc.h>
 #include <sdl.h>
@@ -14,7 +17,7 @@
 
 #define FTSZ1  20
 #define FTSZ2  40
-#define FTSZ3  100
+#define FTSZ3  60
 #define FTCW1 (sdl_font_char_width(FTSZ1))
 #define FTCH1 (sdl_font_char_height(FTSZ1))
 #define FTCW2 (sdl_font_char_width(FTSZ2))
@@ -37,8 +40,10 @@ int           dragx=800, dragy=400;
 int           mousex, mousey;
 int           wheel_count;
 bool          fullscr;
-char          evid_key[20];
-unsigned long evid_key_start_time;
+char          evid_key_str[20];
+unsigned long evid_key_time;
+
+size_t mb_strlen(char *s);
 
 // -----------------  MAIN  ------------------------------------------
 
@@ -49,6 +54,12 @@ int main(int argc, char **argv)
     rect_t loc;
 
     NOTICE("program starting\n");
+
+    if (setlocale(LC_ALL, "") == NULL) {
+        printf("ERROR: setlocale failed.\n");
+        return 1;
+    }
+    printf("MB_CUR_MAX = %ld\n", MB_CUR_MAX);
 
     sdl_init(1600, 800, false, true, false, &wi);
 
@@ -97,11 +108,11 @@ int main(int argc, char **argv)
 
         // if an ascii char evid occurred then display the char
         // in the center of the circle
-        // xxx center it
-        if (evid_key_start_time) {
-            sdl_render_printf(W*3/4-FTCW3/2, H/2-FTCH3/2, FTSZ3, SDL_WHITE, SDL_BLACK, "%s", evid_key);
-            if (microsec_timer() > evid_key_start_time + 5000000) {
-                evid_key_start_time = 0;
+        if (evid_key_time) {
+            int len = mb_strlen(evid_key_str);
+            sdl_render_printf(W*3/4-(len*FTCW3)/2, H/2-FTCH3/2, FTSZ3, SDL_WHITE, SDL_BLACK, "%s", evid_key_str);
+            if (microsec_timer() > evid_key_time + 5000000) {
+                evid_key_time = 0;
             }
         }
 
@@ -212,24 +223,28 @@ int main(int argc, char **argv)
                     sdl_print_screen(true, NULL);
                 } else if (IS_EVENT_ID_TEXT(evid)) {
                     NOTICE("got ASCII char '%c'\n", evid);
-                    evid_key[0] = evid;
-                    evid_key[1] = 0;
-                    evid_key_start_time = microsec_timer();
+                    evid_key_str[0] = evid;
+                    evid_key_str[1] = 0;
+                    evid_key_time = microsec_timer();
                 } else {
+                    char tmp[10] = {0};
                     NOTICE("got special key %04x\n", evid);
-                    evid_key[0] = 0;
-                    if (evid & SDL_EVENT_KEYMOD_SHIFT) strcat(evid_key, "S");
-                    if (evid & SDL_EVENT_KEYMOD_CTRL) strcat(evid_key, "C");
-                    if (evid & SDL_EVENT_KEYMOD_ALT) strcat(evid_key, "A");
-                    if (evid & SDL_EVENT_KEYMOD_MASK) strcat(evid_key , "-");
                     switch (evid & ~SDL_EVENT_KEYMOD_MASK) {
-                    case SDL_EVENT_KEY_LEFT_ARROW: strcat(evid_key, UNICODE_LEFT_ARROW); break;
-                    case SDL_EVENT_KEY_RIGHT_ARROW: strcat(evid_key, UNICODE_RIGHT_ARROW); break;
-                    case SDL_EVENT_KEY_UP_ARROW: strcat(evid_key, UNICODE_UP_ARROW); break;
-                    case SDL_EVENT_KEY_DOWN_ARROW: strcat(evid_key, UNICODE_DOWN_ARROW); break;
+                    case SDL_EVENT_KEY_LEFT_ARROW: strcat(tmp, UNICODE_LEFT_ARROW); break;
+                    case SDL_EVENT_KEY_RIGHT_ARROW: strcat(tmp, UNICODE_RIGHT_ARROW); break;
+                    case SDL_EVENT_KEY_UP_ARROW: strcat(tmp, UNICODE_UP_ARROW); break;
+                    case SDL_EVENT_KEY_DOWN_ARROW: strcat(tmp, UNICODE_DOWN_ARROW); break;
+                    case 'a' ... 'z': tmp[0] = evid; tmp[1] = 0; break;
                     }
-// xxx clean up
-                    evid_key_start_time = microsec_timer();
+                    if (tmp[0]) {
+                        evid_key_str[0] = 0;
+                        if (evid & SDL_EVENT_KEYMOD_SHIFT) strcat(evid_key_str, "S");
+                        if (evid & SDL_EVENT_KEYMOD_CTRL) strcat(evid_key_str, "C");
+                        if (evid & SDL_EVENT_KEYMOD_ALT) strcat(evid_key_str, "A");
+                        if (evid_key_str[0]) strcat(evid_key_str , ":");
+                        strcat(evid_key_str, tmp);
+                        evid_key_time = microsec_timer();
+                    }
                 }
                 break;
             default:
@@ -249,5 +264,26 @@ int main(int argc, char **argv)
 
 end_program:
     return 0;
+}
+
+size_t mb_strlen(char *s)
+{
+    size_t cnt=0, charlen;
+    mbstate_t mbs;
+
+    memset(&mbs, 0, sizeof(mbs));
+    while (1) {
+        charlen = mbrlen(s, MB_CUR_MAX, &mbs);
+        if (charlen < 0) {
+            printf("ERROR invlid multibyte string\n");
+        }
+        if (charlen <= 0) {
+            break;
+        }
+        cnt++;
+        s += charlen;
+    }
+
+    return cnt;
 }
 

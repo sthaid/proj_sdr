@@ -13,6 +13,8 @@
 #include <misc.h>
 #include <png_rw.h>
 
+#define UNUSED __attribute__ ((unused))
+
 // SDL2 Doc
 // - https://wiki.libsdl.org/SDL2/FrontPage
 //     https://wiki.libsdl.org/SDL2/APIByCategory
@@ -711,12 +713,12 @@ sdl_event_t * sdl_poll_event(void)
             int32_t  event_id = SDL_EVENT_NONE;
 
             // this case returns event_id for special keyboard keys, such as
-            // Home, Insert, RightArrow, ctrl-a, alt-a, etc.
+            // Home, Insert, RightArrow, ctrl-a, etc.
 
-            // map key to event_id define used by this code
+            // map key to event_id used by this code
             if (key == SDL_EVENT_KEY_ESC || key == SDL_EVENT_KEY_DELETE) {
                 event_id = key;
-            } else if (key >= 0x20 && key < 0x7f && (ctrl || alt)) {
+            } else if (key >= 'a' && key < 'z' && (ctrl)) {
                 event_id = key;
             } else if (key == SDLK_INSERT) {
                 event_id = SDL_EVENT_KEY_INSERT;
@@ -1308,7 +1310,7 @@ texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t fo
     uint32_t      fg_rgba;
     uint32_t      bg_rgba;
     SDL_Color     fg_sdl_color;
-    SDL_Color     bg_sdl_color;
+    SDL_Color     bg_sdl_color UNUSED;
 
     if (str[0] == '\0') {
         return NULL;
@@ -1332,10 +1334,11 @@ texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t fo
     // render the text to a surface,
     // create a texture from the surface
     // free the surface
-    //xxx surface = TTF_RenderText_Shaded(sdl_font[font_ptsize].font, str, fg_sdl_color, bg_sdl_color);
-    //xxx surface = TTF_RenderText_Blended(sdl_font[font_ptsize].font, str, fg_sdl_color);
-    //xxx surface = TTF_RenderUTF8_Blended(sdl_font[font_ptsize].font, str, fg_sdl_color);
+#if 0
     surface = TTF_RenderUTF8_Shaded(sdl_font[font_ptsize].font, str, fg_sdl_color, bg_sdl_color);
+#else
+    surface = TTF_RenderUTF8_Blended(sdl_font[font_ptsize].font, str, fg_sdl_color);
+#endif
     if (surface == NULL) {
         ERROR("failed to allocate surface\n");
         return NULL;
