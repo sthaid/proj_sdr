@@ -49,9 +49,13 @@ size_t mb_strlen(char *s);
 
 int main(int argc, char **argv)
 {
-    char  *s;
-    int    i, x, y;
-    rect_t loc;
+    char         *s;
+    int           i, x, y;
+    rect_t        loc;
+    unsigned long start;
+    double        duration;
+    void         *moving_avg_cx = NULL;
+    int           display_update_count = 0;
 
     NOTICE("program starting\n");
 
@@ -69,6 +73,7 @@ int main(int argc, char **argv)
 
     while (true) {
         // display init
+        start = microsec_timer();
         sdl_display_init();
 
         // render text
@@ -177,6 +182,12 @@ int main(int argc, char **argv)
 
         // present the display
         sdl_display_present();
+        duration = (microsec_timer() - start) / 1000.;  // ms
+        duration = moving_avg(duration, 50, &moving_avg_cx);
+        if (++display_update_count == 20) {
+            // printf("duration = %f ms\n", duration);
+            display_update_count = 0;
+        }
 
         // handle events
         sdl_event_t *ev;
@@ -286,4 +297,3 @@ size_t mb_strlen(char *s)
 
     return cnt;
 }
-

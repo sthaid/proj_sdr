@@ -53,6 +53,7 @@ double moving_avg(double v, int n, void **cx_arg)
     struct {
         double sum;
         int    idx;
+        int    n;
         double vals[0];
     } *cx;
 
@@ -66,7 +67,8 @@ double moving_avg(double v, int n, void **cx_arg)
     cx->sum += (v - cx->vals[cx->idx]);
     cx->vals[cx->idx] = v;
     if (++(cx->idx) == n) cx->idx = 0;
-    return cx->sum / n;
+    if (cx->n < n) cx->n++;
+    return cx->sum / cx->n;
 }
 
 void average_float(float *v, int n, double *min_arg, double *max_arg, double *avg)
