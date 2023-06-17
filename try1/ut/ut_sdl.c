@@ -5,6 +5,13 @@
 #include <misc.h>
 #include <sdl.h>
 
+// unicode chars, in UTF8 encoding
+#define UNICODE_LEFT_ARROW  "\u2190"
+#define UNICODE_RIGHT_ARROW "\u2192"
+#define UNICODE_UP_ARROW    "\u2191"
+#define UNICODE_DOWN_ARROW  "\u2193"
+#define UNICODE_PI          "\u03c0"
+
 #define FTSZ1  20
 #define FTSZ2  40
 #define FTSZ3  100
@@ -30,8 +37,8 @@ int           dragx=800, dragy=400;
 int           mousex, mousey;
 int           wheel_count;
 bool          fullscr;
-int           ascii_char;
-unsigned long ascii_char_display_start_time;
+char          evid_key[20];
+unsigned long evid_key_start_time;
 
 // -----------------  MAIN  ------------------------------------------
 
@@ -59,8 +66,13 @@ int main(int argc, char **argv)
 
         s = "Bottom Right, Orange";
         x = W - strlen(s) * FTCW1;
-        y = H - FTCW1;
+        y = H - FTCH1;
         sdl_render_text(x, y, FTSZ1, s, SDL_ORANGE, SDL_BLACK);
+
+        char *s = UNICODE_PI " = 3.14";
+        x = W/4;
+        y = FTCH2;
+        sdl_render_text(x, y, FTSZ2, s, SDL_WHITE, SDL_BLACK);
 
         // rectangles
         loc = (rect_t){-20, -20, 200, 200};
@@ -85,11 +97,11 @@ int main(int argc, char **argv)
 
         // if an ascii char evid occurred then display the char
         // in the center of the circle
-        if (ascii_char_display_start_time) {
-            sdl_render_printf(W*3/4-FTCW3/2, H/2-FTCH3/2, FTSZ3, SDL_WHITE, SDL_BLACK, "%c", ascii_char);
-            if (microsec_timer() > ascii_char_display_start_time + 5000000) {
-                ascii_char_display_start_time = 0;
-                ascii_char = 0;
+        // xxx center it
+        if (evid_key_start_time) {
+            sdl_render_printf(W*3/4-FTCW3/2, H/2-FTCH3/2, FTSZ3, SDL_WHITE, SDL_BLACK, "%s", evid_key);
+            if (microsec_timer() > evid_key_start_time + 5000000) {
+                evid_key_start_time = 0;
             }
         }
 
@@ -123,7 +135,7 @@ int main(int argc, char **argv)
 
         // register events
         sdl_render_text_and_register_event(
-            0, H - FTCW1, FTSZ2, 
+            0, H - FTCH2, FTSZ2, 
             "QUIT", SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_END_PROGRAM, SDL_EVENT_TYPE_MOUSE_LEFT_CLICK);
 
@@ -192,18 +204,32 @@ int main(int argc, char **argv)
                 break;
             case SDL_EVENT_KEY_FIRST ... SDL_EVENT_KEY_LAST:
                 evid = ev->event_id;
-                if (evid == SDL_EVENT_KEY_ALT + 'q') {
+                if (evid == SDL_EVENT_KEYMOD_ALT + 'q') {
                     NOTICE("got alt-q\n");
                     goto end_program;
-                } else if (evid == SDL_EVENT_KEY_CTRL + SDL_EVENT_KEY_PRINTSCREEN) {
+                } else if (evid == SDL_EVENT_KEYMOD_CTRL + SDL_EVENT_KEY_PRINTSCREEN) {
                     NOTICE("got ctrl-PrtScn\n");
                     sdl_print_screen(true, NULL);
                 } else if (IS_EVENT_ID_TEXT(evid)) {
                     NOTICE("got ASCII char '%c'\n", evid);
-                    ascii_char = evid;
-                    ascii_char_display_start_time = microsec_timer();
+                    evid_key[0] = evid;
+                    evid_key[1] = 0;
+                    evid_key_start_time = microsec_timer();
                 } else {
                     NOTICE("got special key %04x\n", evid);
+                    evid_key[0] = 0;
+                    if (evid & SDL_EVENT_KEYMOD_SHIFT) strcat(evid_key, "S");
+                    if (evid & SDL_EVENT_KEYMOD_CTRL) strcat(evid_key, "C");
+                    if (evid & SDL_EVENT_KEYMOD_ALT) strcat(evid_key, "A");
+                    if (evid & SDL_EVENT_KEYMOD_MASK) strcat(evid_key , "-");
+                    switch (evid & ~SDL_EVENT_KEYMOD_MASK) {
+                    case SDL_EVENT_KEY_LEFT_ARROW: strcat(evid_key, UNICODE_LEFT_ARROW); break;
+                    case SDL_EVENT_KEY_RIGHT_ARROW: strcat(evid_key, UNICODE_RIGHT_ARROW); break;
+                    case SDL_EVENT_KEY_UP_ARROW: strcat(evid_key, UNICODE_UP_ARROW); break;
+                    case SDL_EVENT_KEY_DOWN_ARROW: strcat(evid_key, UNICODE_DOWN_ARROW); break;
+                    }
+// xxx clean up
+                    evid_key_start_time = microsec_timer();
                 }
                 break;
             default:

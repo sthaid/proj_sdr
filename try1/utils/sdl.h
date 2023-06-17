@@ -104,9 +104,10 @@ typedef void * texture_t;
 #define SDL_EVENT_KEY_PRINTSCREEN        0x10a
 #define SDL_EVENT_KEY_F(n)               (0x110+(n))  // n=1...12
 #define SDL_EVENT_KEY_LAST               0x7fff
-#define SDL_EVENT_KEY_SHIFT              0x1000  // qualifiers
-#define SDL_EVENT_KEY_CTRL               0x2000  // ...
-#define SDL_EVENT_KEY_ALT                0x4000  // ...
+#define SDL_EVENT_KEYMOD_SHIFT           0x1000
+#define SDL_EVENT_KEYMOD_CTRL            0x2000
+#define SDL_EVENT_KEYMOD_ALT             0x4000
+#define SDL_EVENT_KEYMOD_MASK            0x7000
 // - window events
 #define SDL_EVENT_WINDOW                 0x8000
 // - program quit event

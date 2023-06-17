@@ -13,6 +13,37 @@
 #include <misc.h>
 #include <png_rw.h>
 
+// SDL2 Doc
+// - https://wiki.libsdl.org/SDL2/FrontPage
+//     https://wiki.libsdl.org/SDL2/APIByCategory
+//     https://wiki.libsdl.org/SDL2/CategoryAPI
+
+// SDL2 TTF Doc
+// - https://wiki.libsdl.org/SDL2_ttf/FrontPage
+//     https://wiki.libsdl.org/SDL2_ttf/CategoryAPI
+// - rendering functions
+//     solid:   just fg color, quick but dirty rendering
+//     blended: just fg color, good quality
+//     shaded:  fg and bg colors, good quality
+
+// UTF8
+//  https://en.wikipedia.org/wiki/UTF-8
+
+// UNICODE
+//  https://en.wikipedia.org/wiki/Unicode_block
+//  https://en.wikipedia.org/wiki/Block_Elements
+//  https://en.wikipedia.org/wiki/Arrows_(Unicode_block)
+//
+//  https://www.compart.com/en/unicode/
+//  https://www.compart.com/en/unicode/block          list of blocks
+//  https://www.compart.com/en/unicode/block/U+0370   Greek and Coptic
+//  https://www.compart.com/en/unicode/U+03C0         pi
+
+// Inserting unicode (this inserts UTF8 encoded unicode char)
+//   C language string example: "Hello \u03c0 = 3.14"
+//     note: gcc will not accept "\u0041" 
+//   vim, insert π:  ^vu03c0
+
 // xxx 
 // - add comments for each routine
 
@@ -713,9 +744,9 @@ sdl_event_t * sdl_poll_event(void)
 
             // add shift/ctrl/alt to event-id
             if (event_id != SDL_EVENT_NONE) {
-                if (shift) event_id += SDL_EVENT_KEY_SHIFT;
-                if (ctrl)  event_id += SDL_EVENT_KEY_CTRL;
-                if (alt)   event_id += SDL_EVENT_KEY_ALT;
+                if (shift) event_id += SDL_EVENT_KEYMOD_SHIFT;
+                if (ctrl)  event_id += SDL_EVENT_KEYMOD_CTRL;
+                if (alt)   event_id += SDL_EVENT_KEYMOD_ALT;
             }
 
             // if there is a keyboard event_id then return it
@@ -1301,7 +1332,10 @@ texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t fo
     // render the text to a surface,
     // create a texture from the surface
     // free the surface
-    surface = TTF_RenderText_Shaded(sdl_font[font_ptsize].font, str, fg_sdl_color, bg_sdl_color);
+    //xxx surface = TTF_RenderText_Shaded(sdl_font[font_ptsize].font, str, fg_sdl_color, bg_sdl_color);
+    //xxx surface = TTF_RenderText_Blended(sdl_font[font_ptsize].font, str, fg_sdl_color);
+    //xxx surface = TTF_RenderUTF8_Blended(sdl_font[font_ptsize].font, str, fg_sdl_color);
+    surface = TTF_RenderUTF8_Shaded(sdl_font[font_ptsize].font, str, fg_sdl_color, bg_sdl_color);
     if (surface == NULL) {
         ERROR("failed to allocate surface\n");
         return NULL;
