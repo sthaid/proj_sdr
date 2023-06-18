@@ -23,7 +23,11 @@ void log_msg(char *lvl, char *fmt, ...)
         s[len-1] = '\0';
     }
 
-    fprintf(stderr, "%s: %s\n", lvl, s);
+    if (lvl[0] == '\0') {
+        fprintf(stderr, "%s\n", s);
+    } else {
+        fprintf(stderr, "%s: %s\n", lvl, s);
+    }
 }
 
 // -----------------  TIME  -----------------------------------------------

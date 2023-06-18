@@ -14,6 +14,8 @@
 
 #define FATAL(fmt, args...)  do { log_msg("FATAL", fmt, ## args); log_msg("FATAL", "%s %d\n", __FILE__, __LINE__); exit(1); } while (0)
 
+#define BLANKLINE do { log_msg("", "\n"); } while (0)
+
 void log_msg(char *lvl, char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 
 // -----------------  TIME  -----------------------

@@ -11,6 +11,7 @@ int main(int argc, char **argv)
         FATAL("setlocale failed, %m\n");
     }
     NOTICE("MB_CUR_MAX = %ld\n", MB_CUR_MAX);
+    BLANKLINE;
 
     // initialization
     config_init();
@@ -18,12 +19,12 @@ int main(int argc, char **argv)
     //audio_init();
     //fft_init();
     display_init();
-    config_write();
 
     // runtime
     display_handler();
 
     // program terminating
+    //config_write();
     NOTICE("program terminating\n");
 }
 
