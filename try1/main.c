@@ -4,30 +4,26 @@
 
 int main(int argc, char **argv)
 {
+    NOTICE("program starting\n");
+
+    // xxx
+    if (setlocale(LC_ALL, "") == NULL) {
+        FATAL("setlocale failed, %m\n");
+    }
+    NOTICE("MB_CUR_MAX = %ld\n", MB_CUR_MAX);
+
+    // initialization
     config_init();
     //sdr_init();
     //audio_init();
     //fft_init();
     display_init();
-
     config_write();
 
-    while (true) {
-        display_update();
-        usleep(100000);
-    }
-#if 0
-    while true
-        if display has changed
-            update display
+    // runtime
+    display_handler();
 
-        while ctrl event avail
-            process ctrl event
-
-        if exit requested
-            terminate
-    end
-#endif
-
+    // program terminating
+    NOTICE("program terminating\n");
 }
 

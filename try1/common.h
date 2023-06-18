@@ -4,18 +4,22 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <locale.h>
+
+
 #include <string.h>
-#include <errno.h>
+//#include <errno.h>
 #include <time.h>
 #include <pthread.h>
-#include <ctype.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+//#include <ctype.h>
+//#include <sys/types.h>
+//#include <sys/stat.h>
+//#include <fcntl.h>
 #include <complex.h>
 #include <math.h>
 
 #include <misc.h>
+#include <sdl.h>
 
 #ifdef MAIN
   #define EXTERN
@@ -68,7 +72,7 @@ void config_write(void);
 
 // display.c
 void display_init(void);
-void display_update(void);
+void display_handler(void);
 
 //void sdr_init(void);
 //void audio_init(void);

@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <locale.h>
-#include <wchar.h>
 
 #include <misc.h>
 #include <sdl.h>
@@ -43,8 +42,6 @@ bool          fullscr;
 char          evid_key_str[20];
 unsigned long evid_key_time;
 
-size_t mb_strlen(char *s);
-
 // -----------------  MAIN  ------------------------------------------
 
 int main(int argc, char **argv)
@@ -60,10 +57,10 @@ int main(int argc, char **argv)
     NOTICE("program starting\n");
 
     if (setlocale(LC_ALL, "") == NULL) {
-        printf("ERROR: setlocale failed.\n");
+        ERROR("setlocale failed, %m\n");
         return 1;
     }
-    printf("MB_CUR_MAX = %ld\n", MB_CUR_MAX);
+    NOTICE("MB_CUR_MAX = %ld\n", MB_CUR_MAX);
 
     sdl_init(1600, 800, false, true, false, &wi);
 
@@ -114,7 +111,7 @@ int main(int argc, char **argv)
         // if an ascii char evid occurred then display the char
         // in the center of the circle
         if (evid_key_time) {
-            int len = mb_strlen(evid_key_str);
+            int len = mbstrchars(evid_key_str);
             sdl_render_printf(W*3/4-(len*FTCW3)/2, H/2-FTCH3/2, FTSZ3, SDL_WHITE, SDL_BLACK, "%s", evid_key_str);
             if (microsec_timer() > evid_key_time + 5000000) {
                 evid_key_time = 0;
@@ -185,7 +182,7 @@ int main(int argc, char **argv)
         duration = (microsec_timer() - start) / 1000.;  // ms
         duration = moving_avg(duration, 50, &moving_avg_cx);
         if (++display_update_count == 20) {
-            // printf("duration = %f ms\n", duration);
+            DEBUG("duration = %f ms\n", duration);
             display_update_count = 0;
         }
 
@@ -275,25 +272,4 @@ int main(int argc, char **argv)
 
 end_program:
     return 0;
-}
-
-size_t mb_strlen(char *s)
-{
-    size_t cnt=0, charlen;
-    mbstate_t mbs;
-
-    memset(&mbs, 0, sizeof(mbs));
-    while (1) {
-        charlen = mbrlen(s, MB_CUR_MAX, &mbs);
-        if (charlen < 0) {
-            printf("ERROR invlid multibyte string\n");
-        }
-        if (charlen <= 0) {
-            break;
-        }
-        cnt++;
-        s += charlen;
-    }
-
-    return cnt;
 }

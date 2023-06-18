@@ -3,6 +3,7 @@
 
 #include <stdarg.h>
 #include <complex.h>
+#include <wchar.h>
 
 // -----------------  LOGGING  --------------------
 
@@ -31,6 +32,7 @@ void normalize(double *v, int n, double min, double max);
 
 void remove_trailing_newline(char *s);
 void remove_leading_whitespace(char *s);
+int mbstrchars(char *s);
 
 // -----------------  MISC  ----------------------------
 

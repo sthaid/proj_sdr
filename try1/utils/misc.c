@@ -136,6 +136,27 @@ void remove_leading_whitespace(char *s)
     memmove(s, s1, s1_len+1);
 }
 
+int mbstrchars(char *s)
+{
+    int chars=0, charlen;
+    mbstate_t mbs;
+
+    memset(&mbs, 0, sizeof(mbs));
+    while (1) {
+        charlen = mbrlen(s, MB_CUR_MAX, &mbs);
+        if (charlen <= 0) {
+            if (charlen < 0) {
+                ERROR("invlid multibyte string\n");
+            }
+            break;
+        }
+        chars++;
+        s += charlen;
+    }
+
+    return chars;
+}
+
 // -----------------  MISC  ----------------------------
 
 void zero_real(double *data, int n)
