@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <locale.h>
 
 
@@ -20,6 +21,8 @@
 
 #include <misc.h>
 #include <sdl.h>
+#include <sdr.h>
+#include <pa.h>
 
 #ifdef MAIN
   #define EXTERN
@@ -64,6 +67,8 @@ EXTERN int           mute;
 EXTERN int           scan_intvl;
 EXTERN int           help;
 
+EXTERN bool          program_terminating;
+
 // -----------------  PROTOTYPES  ------------------------
 
 // config.c
@@ -74,6 +79,8 @@ void config_write(void);
 void display_init(void);
 void display_handler(void);
 
-//void sdr_init(void);
-//void audio_init(void);
+// audio.c
+void audio_init(void);
+void audio_out(double yo);
+
 //void fft_init(void);

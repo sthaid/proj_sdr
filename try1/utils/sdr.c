@@ -79,7 +79,7 @@ void sdr_list_devices(void)
     dev_cnt = rtlsdr_get_device_count();
     NOTICE("dev_cnt = %d\n", dev_cnt);
     if (dev_cnt == 0) {
-        FATAL("dev_cnt = 0\n");
+        ERROR("no sdr devices found\n");
     }
 
     for (i = 0; i < dev_cnt; i++) {
@@ -89,8 +89,8 @@ void sdr_list_devices(void)
         if (rc != 0) {
             FATAL("rtlsdr_get_device_usb_strings(%d) rc=%d\n", i, rc);
         }
-        NOTICE("name='%s'  manufact='%s'  product='%s'  serial='%s'\n",
-               rtlsdr_get_device_name(i), manufact, product, serial);
+        NOTICE("%d:  name='%s'  manufact='%s'  product='%s'  serial='%s'\n",
+               i, rtlsdr_get_device_name(i), manufact, product, serial);
     }
 }
 

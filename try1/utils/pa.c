@@ -1,12 +1,12 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
 #include <pthread.h>
+#include <portaudio.h>
 
 #include <misc.h>
 #include <pa.h>
-
-#include <portaudio.h>
 
 #define SIZEOF_SAMPLE_FORMAT(sf) \
     ((sf) == PA_FLOAT32  ? 4 : \
@@ -34,6 +34,8 @@ void pa_init(void)
     if (parc != paNoError) {
         FATAL("Pa_Initialize failed, %s\n", Pa_GetErrorText(parc));
     }
+
+    pa_print_device_info_all();  // xxx could be an option
 
     atexit(exit_hndlr);
 }

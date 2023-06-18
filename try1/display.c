@@ -24,9 +24,8 @@
 // variables
 //
 
-static win_info_t    wi;
-static bool          fullscr;
-static bool          end_program;
+static win_info_t wi;
+static bool       fullscr;
 
 //
 // prototypes
@@ -84,8 +83,8 @@ void display_handler(void)
             usleep(10000);
         }
 
-        // if end_program requested then return
-        if (end_program) {
+        // if program is terminating then return
+        if (program_terminating) {
             break;
         }
     }
@@ -99,7 +98,7 @@ static bool handle_event(sdl_event_t *ev)
     case SDL_EVENT_QUIT:
     case SDL_EVENT_END_PROGRAM:
     case SDL_EVENT_KEYMOD_CTRL + 'q':
-        end_program = true;
+        program_terminating = true;
         break;
     case SDL_EVENT_FULLSCR:
         fullscr = !fullscr;
