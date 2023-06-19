@@ -46,7 +46,10 @@ int main(int argc, char **argv)
 
     // initialization
     config_init();
-    //sdr_init();
+    sdr_init(0, SDR_SAMPLE_RATE);
+return 1;
+
+
     audio_init();
     //fft_init();
     display_init();

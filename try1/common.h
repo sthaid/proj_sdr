@@ -32,6 +32,8 @@
 
 #define TWO_PI (2*M_PI)
 
+#define SDR_SAMPLE_RATE 2400000   // 2.4 MS/sec
+
 // -----------------  CONFIG  ----------------------------
 
 #define MAX_BAND    20

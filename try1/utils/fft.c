@@ -4,6 +4,7 @@
 // - save the in array and restore it when creating the plan, or comment about it not needed
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 
 #include <misc.h>

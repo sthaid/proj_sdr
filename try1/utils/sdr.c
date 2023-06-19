@@ -2,22 +2,37 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <string.h>
+//#include <pthread.h>
 
 #include <rtl-sdr.h>
 
 #include <misc.h>
+#include <sdr.h>
 
-// xxx check ret codes
-// xxx may want this when shutting down;  could use atexit
-//  rc = rtlsdr_cancel_async(dev);
-//  rtlsdr_close(dev);
+// xxx add references
+// https://pa3fwm.nl/technotes/tn20.html
+
+// xxx todo
+// - add link to descriptions
+// - check ret codes
+// - use these atexit
+//     rc = rtlsdr_cancel_async(dev);
+//     rtlsdr_close(dev);
+// - should sample_rate be changeable
+
+// xxx also use
+// - rtlsdr_set_tuner_if_gain
+// - rtlsdr_set_testmode
+// - rtlsdr_get_freq_correction
+// - rtlsdr_set_offset_tuning
+// - rtlsdr_get_offset_tuning
+// - rtlsdr_read_sync
+// - rtlsdr_set_bias_tee
 
 //
 // defines
 //
-
-#define SAMPLE_RATE 2400000   // 2.4 MS/sec
 
 #define F_DS (28*MHZ)
 
@@ -31,8 +46,11 @@
      (x) == RTLSDR_TUNER_R828D   ? "R828D"   : \
                                     "????")
 
-#define AGC_MODE_ENABLE  1
-#define AGC_MODE_DISABLE 0
+#define TUNER_GAIN_MODE_AUTO   0
+#define TUNER_GAIN_MODE_MANUAL 1
+
+#define RTL2832_AGC_MODE_ENABLE  1
+#define RTL2832_AGC_MODE_DISABLE 0
 
 #define DIRECT_SAMPLING_DISABLED          0
 #define DIRECT_SAMPLING_I_ADC_ENABLED     1
@@ -56,25 +74,47 @@
 //
 
 static rtlsdr_dev_t *dev;
-static void(*cb)(unsigned char *iq, size_t len);
-static bool direct_sampling_enabled;
+
+static struct {
+    // static fields
+    int  dev_idx;
+    char dev_name[256];
+    char manufact[256];
+    char product[256];
+    char serial[256];
+    enum rtlsdr_tuner  tuner_type;  //xxx is the enum required
+    int  tuner_gains[100];  // units = tenth db
+    int  num_tuner_gains;
+    unsigned int  rtl2832_xtal_freq;
+    unsigned int  tuner_xtal_freq;
+    // configurable fields
+    int  sample_rate;
+    bool rtl2832_agc_enabled;
+    bool tuner_gain_mode_manual;
+    int  tuner_gain;        // units = tenth db
+    int  direct_sampling;
+    int  ctr_freq;
+} info;
+
+//static void(*cb)(unsigned char *iq, size_t len);
+//static bool direct_sampling_enabled;
 
 //
 // prototypes
 //
 
+#if 0
 static void print_info(rtlsdr_dev_t *dev);
 static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int **gains_arg);
-static int get_max_gain(rtlsdr_dev_t *dev);
 static void *async_reader_thread(void *cx);
 static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg);
+#endif
 
-// -----------------  API  ---------------------------------------------
+// -----------------  LIST DEVICES  ------------------------------------
 
-// xxx call this at startup
 void sdr_list_devices(void)
 {
-    int dev_cnt, i, rc;
+    int dev_cnt, idx;
 
     dev_cnt = rtlsdr_get_device_count();
     NOTICE("dev_cnt = %d\n", dev_cnt);
@@ -82,69 +122,146 @@ void sdr_list_devices(void)
         ERROR("no sdr devices found\n");
     }
 
-    for (i = 0; i < dev_cnt; i++) {
-        char manufact[256], product[256], serial[256];
-
-        rc = rtlsdr_get_device_usb_strings(0, manufact, product, serial);
-        if (rc != 0) {
-            FATAL("rtlsdr_get_device_usb_strings(%d) rc=%d\n", i, rc);
-        }
-        NOTICE("%d:  name='%s'  manufact='%s'  product='%s'  serial='%s'\n",
-               i, rtlsdr_get_device_name(i), manufact, product, serial);
+    for (idx = 0; idx < dev_cnt; idx++) {
+        char manufact[256]={0}, product[256]={0}, serial[256]={0};
+        rtlsdr_get_device_usb_strings(idx, manufact, product, serial);
+        NOTICE("dev_idx=%d dev_name='%s' manufact='%s' product='%s' serial='%s'\n",
+               idx, rtlsdr_get_device_name(idx), manufact, product, serial);
     }
 }
 
-// xxx pass in idx, sample_rate, ...
-void sdr_init(double f, void(*cb_arg)(unsigned char *iq, size_t len))
+// -----------------  TEST A DEVICE  -----------------------------------
+
+void sdr_test(int idx)
+{
+#if 0
+    // xxx add code for test mode
+    // test mode 
+    #define TEST_MODE_ON  1
+    #define TEST_MODE_OFF 0
+    rc = rtlsdr_set_testmode(dev, TEST_MODE_ON);
+
+    rc = rtlsdr_reset_buffer(dev);
+    NOTICE("rtlsdr_reset_buffer rc=%d\n", rc);
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, reader, NULL);
+    sleep(5);
+    NOTICE("cancelling\n");
+    rc = rtlsdr_cancel_async(dev);
+    NOTICE("cancel ret %d\n", rc);
+    sleep(5);
+#endif
+}
+
+// -----------------  OPEN AND INIT A DEVICE  --------------------------
+
+void sdr_init(int dev_idx, int sample_rate)
 {
     int rc;
 
-    // save cb_arg in global var
-    cb = cb_arg;
-
     // open
-    rc = rtlsdr_open(&dev, 0);
+    rc = rtlsdr_open(&dev, dev_idx);
     if (rc != 0) {
         FATAL("rtlsdr_open rc=%d\n", rc);
     }
-    NOTICE("opened index=0\n");
 
-    // print info
-    print_info(dev);
+    // get info
+    // - dev idx and name
+    info.dev_idx = dev_idx;
+    strcpy(info.dev_name, rtlsdr_get_device_name(dev_idx));
+    // - manufact, product, serial
+    rtlsdr_get_usb_strings(dev, info.manufact, info.product, info.serial);
+    // - tuner type
+    info.tuner_type = rtlsdr_get_tuner_type(dev);
+    // - tuner gains
+    info.num_tuner_gains = rtlsdr_get_tuner_gains(dev, info.tuner_gains);
+    // - xtal freq
+    rtlsdr_get_xtal_freq(dev, &info.rtl2832_xtal_freq, &info.tuner_xtal_freq);
 
-    // set gain mode manual, and set max_gain
-    #define GAIN_MODE_AUTO   0
-    #define GAIN_MODE_MANUAL 1
-    int max_gain, curr_gain;
-    // - set manual gain mode
-    rtlsdr_set_tuner_gain_mode(dev, GAIN_MODE_MANUAL);
-    // - set gain to max
-    max_gain = get_max_gain(dev);
-    rtlsdr_set_tuner_gain(dev, max_gain);
-    // - readback and print gain to confirm
-    curr_gain = rtlsdr_get_tuner_gain(dev);
-    NOTICE("curr_gain = %d  max_gain = %d\n", curr_gain, max_gain);
+    // disable agc mode of the RTL2832
+    rtlsdr_set_agc_mode(dev, RTL2832_AGC_MODE_DISABLE);
+    info.rtl2832_agc_enabled = false;
+
+    // set tuner manual gain mode, and set tuner gain to max
+    rtlsdr_set_tuner_gain_mode(dev, TUNER_GAIN_MODE_MANUAL);
+    rtlsdr_set_tuner_gain(dev, info.tuner_gains[info.num_tuner_gains-1]);
+    info.tuner_gain_mode_manual = true;
 
     // set sample rate
-    unsigned int curr_sample_rate;
-    rtlsdr_set_sample_rate(dev, SAMPLE_RATE);
-    curr_sample_rate = rtlsdr_get_sample_rate(dev);
-    NOTICE("curr_sample_rate = %u\n", curr_sample_rate);
+    rtlsdr_set_sample_rate(dev, sample_rate);
 
-    // disable agc mode xxx should this be earlier
-    rtlsdr_set_agc_mode(dev, AGC_MODE_DISABLE);
+    // disable direct sampling mode
+    rtlsdr_set_direct_sampling(dev, DIRECT_SAMPLING_DISABLED);
 
+    // xxx ctr_freq not set
+
+    // readback the dynamic values that can be read back
+    info.sample_rate = rtlsdr_get_sample_rate(dev);
+    info.tuner_gain = rtlsdr_get_tuner_gain(dev);
+    info.direct_sampling = rtlsdr_get_direct_sampling(dev);
+    info.ctr_freq = rtlsdr_get_center_freq(dev);
+
+    // print info
+    sdr_print_info();
+}
+
+void sdr_print_info(void)
+{
+    char tuner_gains_str[300], *p;
+
+    // if sdr_init was not called then error
+    if (dev == NULL) {
+        FATAL("no dev\n");
+    }
+
+    // gains, xxx init this once
+    p = tuner_gains_str;
+    for (int i = 0; i < info.num_tuner_gains; i++) {
+        p += sprintf(p, "%d ", info.tuner_gains[i]);
+    }
+
+    // xxx if gain mode is auto may need to read the gain again
+
+    NOTICE("dev_idx         = %d\n",
+           info.dev_idx);
+    NOTICE("dev_name        = %s\n",
+           info.dev_name);
+    NOTICE("dev strings     = manfact='%s'  product='%s'  serial='%s'\n",
+           info.manufact,
+           info.product,
+           info.serial);
+    NOTICE("tuner_type      = %s\n", 
+           TUNER_TYPE_STR(info.tuner_type));
+    NOTICE("tuner_gains     = %s\n", 
+           tuner_gains_str);
+    NOTICE("xtral_freq      = %d (rtl2832)  %d (tuner)\n",
+           info.rtl2832_xtal_freq, 
+           info.tuner_xtal_freq);
+    NOTICE("sample_rate     = %d\n",
+           info.sample_rate);
+    NOTICE("rtl2832_agc     = %s\n",
+           info.rtl2832_agc_enabled ? "enabled" : "disabled");
+    NOTICE("tuner_gain      = %d (%s)\n",
+           info.tuner_gain, 
+           info.tuner_gain_mode_manual ? "manual" : "auto");
+    NOTICE("direct_sampling = %s\n",
+           DIRECT_SAMPLING_STR(info.direct_sampling));
+    NOTICE("ctr_freq        = %d\n",
+           info.ctr_freq);
+}
+
+
+
+#if 0
+xxx disable
     // enable direct sampling
     int direct_sampling;
     direct_sampling = (f < F_DS ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
-    rc = rtlsdr_set_direct_sampling(dev, direct_sampling);
-    if (rc != 0) {
-        FATAL("rtlsdr_set_direct_sampling\n");
-    }
-    direct_sampling = rtlsdr_get_direct_sampling(dev);
     NOTICE("curr direct sampling = %s\n", DIRECT_SAMPLING_STR(direct_sampling));
     direct_sampling_enabled = (direct_sampling == DIRECT_SAMPLING_Q_ADC_ENABLED);
 
+xxx other routine for the remaining
     // set center frequency
     unsigned int ctr_freq;
     rtlsdr_set_center_freq(dev, f);
@@ -196,72 +313,12 @@ void sdr_set_freq(double f)
 
 // -----------------  LOCAL  -------------------------------------------
 
-static void print_info(rtlsdr_dev_t *dev)
-{
-    int rc;
-    char str[300], *p;
-
-    // get xtal freq
-    unsigned int rtl_freq, tuner_freq;
-    rc = rtlsdr_get_xtal_freq(dev, &rtl_freq, &tuner_freq);
-    if (rc != 0) {
-        FATAL("rtlsdr_get_xtal_freq\n");
-    }
-    NOTICE("rtl_freq=%0.2f  tuner_freq=%0.2f\n", (double)rtl_freq/MHZ, (double)tuner_freq/MHZ);
-
-    // get manufacturer
-    char manufact[256], product[256], serial[256];
-    rc = rtlsdr_get_usb_strings(dev, manufact, product, serial);
-    NOTICE("manufact='%s'  product='%s'  serial='%s'\n",
-           manufact, product, serial);
-
-    // get tuner type
-    enum rtlsdr_tuner tuner;
-    tuner = rtlsdr_get_tuner_type(dev);
-    NOTICE("tuner=%d %s\n", tuner, TUNER_TYPE_STR(tuner));   // is RTLSDR_TUNER_R820T
-
-    // get gains
-    int num_gains, *gains;
-    get_gains(dev, &num_gains, &gains);
-    p = str;
-    p += sprintf(p, "num_gains=%d: ", num_gains);
-    for (int i = 0; i < num_gains; i++) {
-        p += sprintf(p, "%d ", gains[i]);
-    }
-    NOTICE("%s\n", str);
-    NOTICE("max_gain = %d\n", gains[num_gains-1]);
-    free(gains);
-}
-
-static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int **gains_arg)
-{
-    int num_gains, *gains;
-
-    num_gains = rtlsdr_get_tuner_gains(dev, NULL);
-    gains = calloc(num_gains, sizeof(int));
-    rtlsdr_get_tuner_gains(dev, gains);
-
-    *num_gains_arg = num_gains;
-    *gains_arg = gains;
-}
-
-static int get_max_gain(rtlsdr_dev_t *dev)
-{
-    int num_gains, *gains, max_gain;
-
-    get_gains(dev, &num_gains, &gains);
-    max_gain = gains[num_gains-1];
-    free(gains);
-    return max_gain;
-}
 
 static void *async_reader_thread(void *cx)
 {
     NOTICE("BEFORE rtlsdr_read_async\n");
     rtlsdr_read_async(dev, async_reader_cb, NULL, 0, 0);
     NOTICE("AFTER rtlsdr_read_async\n");
-
-    free(cx);
 
     return NULL;
 }
@@ -286,20 +343,5 @@ static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx)
 
 
 #if 0
-    // xxx add code for test mode
-    // test mode 
-    #define TEST_MODE_ON  1
-    #define TEST_MODE_OFF 0
-    rc = rtlsdr_set_testmode(dev, TEST_MODE_ON);
-
-    rc = rtlsdr_reset_buffer(dev);
-    NOTICE("rtlsdr_reset_buffer rc=%d\n", rc);
-
-    pthread_t tid;
-    pthread_create(&tid, NULL, reader, NULL);
-    sleep(5);
-    NOTICE("cancelling\n");
-    rc = rtlsdr_cancel_async(dev);
-    NOTICE("cancel ret %d\n", rc);
-    sleep(5);
+#endif
 #endif

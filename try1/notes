@@ -1,4 +1,20 @@
 =============
+todo  
+============
+
+fft util
+should sdr.c be a util?
+allocate the band structs
+cleanup sdr.c  and add routine to get a certain amount of data
+
+=============
+todo later
+============
+
+are all utils used
+
+
+=============
 ctrls
 ============
 
@@ -15,50 +31,5 @@ switch between bands with
 - click on the display
 - tab, ctrl tab
 
-=============
-todo  
-============
 
-are all utils used
-
-==============
-outline   
-==============
-
-main
-
-config
-- reads and writes config settings
-
-sdr
-- interface with radio
-
-display
-- sdl routines
-
-
-audio
-
-fft
-
-
-common.h
-- data structs, global vars and routines
-
-
-main()
-{
-    call init routines
-
-    while true
-        if display has changed
-            update display
-
-        while ctrl event avail
-            process ctrl event
-
-        if exit requested
-            terminate
-    end
-}
 

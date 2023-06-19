@@ -1,10 +1,6 @@
 
-#include <complex.h>  // xxx comment
+#include <complex.h>  // xxx comment this needs to be before fftw3.h
 #include <fftw3.h>
-
-void init_fft(void);
-
-// xxx clean up
 
 void fft_fwd_r2c(double *in, complex *out, int n);
 void fft_back_c2r(complex *in, double *out, int n, bool normalize);
