@@ -4,14 +4,13 @@
 
 int main(int argc, char **argv)
 {
-    NOTICE("program starting\n");
-
     // xxx
     if (setlocale(LC_ALL, "") == NULL) {
         FATAL("setlocale failed, %m\n");
     }
-    NOTICE("MB_CUR_MAX = %ld\n", MB_CUR_MAX);
-    BLANKLINE;
+    if (MB_CUR_MAX <= 1) {
+        FATAL("MB_CUR_MAX = %ld\n", MB_CUR_MAX);
+    }
 
     // get options
     // xxx more options
@@ -22,20 +21,22 @@ int main(int argc, char **argv)
     while (true) {
        static struct option options[] = {
            {"list", no_argument,       NULL,  'l' },
-           {"test", required_argument, NULL,  't' },
+           {"test", no_argument,       NULL,  't' },
            {0,      0,                 NULL,  0   } };
 
-        int c = getopt_long(argc, argv, "lt:", options, NULL);
-        if (c == -1) break;
+        int c = getopt_long(argc, argv, "lt", options, NULL);
+        if (c == -1) {
+            break;
+        }
+        DEBUG("option = %c\n", c);
 
         switch (c) {
         case 'l':
-            NOTICE("option = list\n");
             sdr_list_devices();
             return 0;
         case 't':
-            NOTICE("option = test, arg = '%s'\n", optarg);
-            break;
+            sdr_test(0, SDR_SAMPLE_RATE);  // xxx opt needed for idx
+            return 0;
         case '?':
             return 1;
         default:
@@ -45,13 +46,9 @@ int main(int argc, char **argv)
     }
 
     // initialization
+    sdr_init(0, SDR_SAMPLE_RATE);  // xxx opt for idx
     config_init();
-    sdr_init(0, SDR_SAMPLE_RATE);
-return 1;
-
-
     audio_init();
-    //fft_init();
     display_init();
 
     // runtime

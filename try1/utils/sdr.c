@@ -62,6 +62,9 @@
      (x) == DIRECT_SAMPLING_Q_ADC_ENABLED ? "Q_ADC_ENABLED" : \
                                             "????")
 
+#define TEST_MODE_ON  1
+#define TEST_MODE_OFF 0
+
 #define KHZ 1000
 #define MHZ 1000000
 
@@ -82,11 +85,11 @@ static struct {
     char manufact[256];
     char product[256];
     char serial[256];
-    enum rtlsdr_tuner  tuner_type;  //xxx is the enum required
+    int  tuner_type;
     int  tuner_gains[100];  // units = tenth db
     int  num_tuner_gains;
-    unsigned int  rtl2832_xtal_freq;
-    unsigned int  tuner_xtal_freq;
+    unsigned int rtl2832_xtal_freq;
+    unsigned int tuner_xtal_freq;
     // configurable fields
     int  sample_rate;
     bool rtl2832_agc_enabled;
@@ -117,7 +120,6 @@ void sdr_list_devices(void)
     int dev_cnt, idx;
 
     dev_cnt = rtlsdr_get_device_count();
-    NOTICE("dev_cnt = %d\n", dev_cnt);
     if (dev_cnt == 0) {
         ERROR("no sdr devices found\n");
     }
@@ -128,30 +130,6 @@ void sdr_list_devices(void)
         NOTICE("dev_idx=%d dev_name='%s' manufact='%s' product='%s' serial='%s'\n",
                idx, rtlsdr_get_device_name(idx), manufact, product, serial);
     }
-}
-
-// -----------------  TEST A DEVICE  -----------------------------------
-
-void sdr_test(int idx)
-{
-#if 0
-    // xxx add code for test mode
-    // test mode 
-    #define TEST_MODE_ON  1
-    #define TEST_MODE_OFF 0
-    rc = rtlsdr_set_testmode(dev, TEST_MODE_ON);
-
-    rc = rtlsdr_reset_buffer(dev);
-    NOTICE("rtlsdr_reset_buffer rc=%d\n", rc);
-
-    pthread_t tid;
-    pthread_create(&tid, NULL, reader, NULL);
-    sleep(5);
-    NOTICE("cancelling\n");
-    rc = rtlsdr_cancel_async(dev);
-    NOTICE("cancel ret %d\n", rc);
-    sleep(5);
-#endif
 }
 
 // -----------------  OPEN AND INIT A DEVICE  --------------------------
@@ -223,6 +201,7 @@ void sdr_print_info(void)
 
     // xxx if gain mode is auto may need to read the gain again
 
+    NOTICE("---------- Static Values ----------\n");
     NOTICE("dev_idx         = %d\n",
            info.dev_idx);
     NOTICE("dev_name        = %s\n",
@@ -235,9 +214,10 @@ void sdr_print_info(void)
            TUNER_TYPE_STR(info.tuner_type));
     NOTICE("tuner_gains     = %s\n", 
            tuner_gains_str);
-    NOTICE("xtral_freq      = %d (rtl2832)  %d (tuner)\n",
+    NOTICE("xtal_freq       = %d (rtl2832)  %d (tuner)\n",
            info.rtl2832_xtal_freq, 
            info.tuner_xtal_freq);
+    NOTICE("---------- Configurable Values ----------\n");
     NOTICE("sample_rate     = %d\n",
            info.sample_rate);
     NOTICE("rtl2832_agc     = %s\n",
@@ -251,6 +231,61 @@ void sdr_print_info(void)
            info.ctr_freq);
 }
 
+// -----------------  TEST A DEVICE  -----------------------------------
+
+void sdr_test(int dev_idx, int sample_rate)
+{
+    unsigned char *buff, val;
+    int rc, n_read, buff_len, err_count=0;;
+    const int secs = 3;
+
+    sdr_init(dev_idx, sample_rate);
+
+    NOTICE("---------- Testing ----------\n");
+    NOTICE("enabling test mode\n");
+    rc = rtlsdr_set_testmode(dev, TEST_MODE_ON);
+    if (rc != 0) {
+        ERROR("failed to enable test mode\n");
+        return;
+    }
+
+    rc = rtlsdr_reset_buffer(dev);
+    if (rc != 0) {
+        ERROR("failed to reset buffer\n");
+        return;
+    }
+
+    buff_len = secs * sample_rate;
+    buff = malloc(buff_len);
+    memset(buff, 0, buff_len);
+    
+    NOTICE("reading test data ...\n");
+    rtlsdr_read_sync(dev, buff, buff_len, &n_read);
+    NOTICE("done reading test data, n_read=%d\n", n_read);
+
+    if (n_read < buff_len-32768) {
+        ERROR("n_read is smaller than expected\n");
+        return;
+    }
+
+    NOTICE("checking test data\n");
+    val = buff[0];
+    for (int i = 0; i < n_read; i++) {
+        if (buff[i] != val) {
+            if (++err_count < 10) {
+                ERROR("buff[%d...%d] = %d %d %d %d %d %d %d\n", 
+                    i-3, i+3, buff[i-3], buff[i-2], buff[i-1], buff[i-0], buff[i+1], buff[i+2], buff[i+3]);
+            }
+            val = buff[i];
+        }
+        val++;
+    }
+    NOTICE("number of errors detected = %d : %s\n", 
+           err_count,
+           err_count <= 3 ? "TEST PASSED" : "TEST FAILED");
+
+    free(buff);
+}
 
 
 #if 0
@@ -343,5 +378,20 @@ static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx)
 
 
 #if 0
+    // xxx add code for test mode
+    // test mode 
+    rc = rtlsdr_set_testmode(dev, TEST_MODE_ON);
+
+    rc = rtlsdr_reset_buffer(dev);
+    NOTICE("rtlsdr_reset_buffer rc=%d\n", rc);
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, reader, NULL);
+    sleep(5);
+    NOTICE("cancelling\n");
+    rc = rtlsdr_cancel_async(dev);
+    NOTICE("cancel ret %d\n", rc);
+    sleep(5);
 #endif
+
 #endif
