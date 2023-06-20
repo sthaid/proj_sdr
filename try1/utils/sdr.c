@@ -3,7 +3,14 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
+#include <math.h>
 //#include <pthread.h>
+
+// xxx for test file
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 
 #include <rtl-sdr.h>
 
@@ -132,11 +139,13 @@ void sdr_list_devices(void)
     }
 }
 
-// -----------------  OPEN AND INIT A DEVICE  --------------------------
+// -----------------  OPEN AND INIT  -----------------------------------
 
 void sdr_init(int dev_idx, int sample_rate)
 {
     int rc;
+
+// xxx check no dev
 
     // open
     rc = rtlsdr_open(&dev, dev_idx);
@@ -231,8 +240,9 @@ void sdr_print_info(void)
            info.ctr_freq);
 }
 
-// -----------------  TEST A DEVICE  -----------------------------------
+// -----------------  TEST  --------------------------------------------
 
+// xxx the init call should be done separately, no args to this routine
 void sdr_test(int dev_idx, int sample_rate)
 {
     unsigned char *buff, val;
@@ -240,6 +250,8 @@ void sdr_test(int dev_idx, int sample_rate)
     const int secs = 3;
 
     sdr_init(dev_idx, sample_rate);
+
+// xxx verify dev
 
     NOTICE("---------- Testing ----------\n");
     NOTICE("enabling test mode\n");
@@ -287,6 +299,71 @@ void sdr_test(int dev_idx, int sample_rate)
     free(buff);
 }
 
+// -----------------  GET DATA  ----------------------------------------
+
+#if 1
+void sdr_get_data(double ctr_freq, complex *buff, int n)
+{
+    static int fd = -1;
+    static double t = 0;
+    static size_t file_offset = 0;
+    static size_t file_size;
+    static double *antenna;
+
+    int len_to_read, len_read;
+    struct stat statbuf;
+    double w;
+
+    // antenna.dat contains real (double) values
+    #define ANTENNA_FILENAME "antenna.dat"
+    #define DELTA_T (1. / info.sample_rate)
+
+    #define MAX_ANTENNA 1000000
+
+    #define TWO_PI (2 * M_PI)
+
+    if (n > MAX_ANTENNA) {
+        FATAL("n = %d is greater than MAX_ANTENNA\n", n);
+    }
+
+    if (fd < 0) {
+        // open ANTENNA_FILENAME
+        fd = open(ANTENNA_FILENAME, O_RDONLY);
+        if (fd < 0) {
+            FATAL("failed open %s, %m\n", ANTENNA_FILENAME);
+        }
+
+        // get size of ANTENNA_FILENAME
+        fstat(fd, &statbuf);
+        file_size = statbuf.st_size;
+
+        antenna = malloc(MAX_ANTENNA * sizeof(double));
+
+        NOTICE("opened antenna file\n");
+    }
+
+    len_to_read = n * sizeof(double);
+
+    if (file_offset + len_to_read > file_size) {
+        file_offset = 0;
+    }
+
+    len_read = pread(fd, antenna, len_to_read, file_offset);
+    if (len_read != len_to_read) {
+        FATAL("read %s, len=%d, %d\n", ANTENNA_FILENAME, len_read, len_to_read);
+    }
+    file_offset += len_read;
+
+    w = TWO_PI * ctr_freq;
+    for (int i = 0; i < n; i++) {
+        buff[i] = antenna[i] * cexp(-I * w * t);
+        t += DELTA_T;
+    }
+
+    // xxx later
+    //rtlsdr_read_sync(dev, buff, buff_len, &n_read);
+}
+#endif
 
 #if 0
 xxx disable

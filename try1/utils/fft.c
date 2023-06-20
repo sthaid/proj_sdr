@@ -98,9 +98,21 @@ static fftw_plan get_plan(int type, int n, void *in, void *out, int dir)
     return p->plan;
 }
 
+// -----------------  ALLOC FFT BUFFERS  ------------------------------
+
+complex * fft_alloc_complex(int n)
+{
+    return fftw_alloc_complex(n);
+}
+
+double * fft_alloc_real(int n)
+{
+    return fftw_alloc_real(n);
+}
+
 // -----------------  EXECUTE FFT  ------------------------------------
 
-// note that for fft_fwd_r2c and fft_back_ctr:
+// note that for fft_fwd_r2c and fft_back_c2r:
 // - real array has n elements
 // - complex array has n/2+1 elements
 

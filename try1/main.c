@@ -2,6 +2,8 @@
 
 #include "common.h"
 
+void test(void);
+
 int main(int argc, char **argv)
 {
     // xxx
@@ -46,8 +48,12 @@ int main(int argc, char **argv)
     }
 
     // initialization
-    sdr_init(0, SDR_SAMPLE_RATE);  // xxx opt for idx
+    //sdr_init(0, SDR_SAMPLE_RATE);  // xxx opt for idx
     config_init();
+
+    test();
+    return 1;
+
     audio_init();
     display_init();
 
@@ -59,3 +65,48 @@ int main(int argc, char **argv)
     NOTICE("program terminating\n");
 }
 
+void test(void)
+{
+    band_t *b = &band[0];
+
+    // verify the 1st band is fm
+    if (strcmp(b->name, "TEST") != 0) {
+        FATAL("not TEST\n");
+    }
+
+    // divide the band into N intervals of less than 1.2MHz
+    double full_span, intvl;
+    int n;
+    #define FFT_SPAN  1.0
+    full_span = b->f_max - b->f_min;
+    n = ceil(full_span / FFT_SPAN);
+    intvl = full_span / n;
+    NOTICE("full_span = %f  n = %d  intvl = %f\n", full_span, n, intvl);
+
+    // determine the number of samples in the fft, so that each bin is 10Hz
+    int samples = (intvl * 1000000 * 2) / 10;
+    NOTICE("samples = %d\n", samples);
+
+    // alloc buff for fft
+    complex *data = fft_alloc_complex(samples);
+    complex *fft = fft_alloc_complex(samples);
+
+    // loop over the intervals
+    // FM 88 - 108
+    // TEST 0.4 to 3.4
+    double ctr_freq = b->f_min + intvl/2;
+    for (int i = 0; i < n; i++) {
+        NOTICE("i=%d  ctr_freq=%f\n", i, ctr_freq);
+
+        // xxx init data with a test pattern of freqs in each intvl 
+        sdr_get_data(ctr_freq, data, samples);
+
+        // do the fft
+        fft_fwd_c2c(data, fft, samples);
+
+        // save the fft result
+
+        // move to next interval in the band
+        ctr_freq += intvl;
+    }
+}

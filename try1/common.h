@@ -21,8 +21,9 @@
 
 #include <misc.h>
 #include <sdl.h>
-#include <sdr.h>
+#include <sdr.h>  // xxx move out of utils
 #include <pa.h>
+#include <fft.h>
 
 #ifdef MAIN
   #define EXTERN
@@ -40,7 +41,7 @@
 #define MAX_STATION 20
 
 // xxx malloc these
-struct band_s {
+typedef struct band_s {
     // static config
     char *name;
     double f_min;
@@ -58,10 +59,10 @@ struct band_s {
     int squelch;
     int selected;
     int active;
-};
+} band_t;
 
 EXTERN int           max_band;
-EXTERN struct band_s band[MAX_BAND];
+EXTERN band_t        band[MAX_BAND];
 
 EXTERN int           zoom;
 EXTERN int           volume;
