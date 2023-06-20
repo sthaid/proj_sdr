@@ -1,21 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <string.h>
-#include <math.h>
-//#include <pthread.h>
-
-// xxx for test file
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-
+#include "common.h"
 
 #include <rtl-sdr.h>
-
-#include <misc.h>
-#include <sdr.h>
 
 // xxx add references
 // https://pa3fwm.nl/technotes/tn20.html
@@ -319,8 +304,6 @@ void sdr_get_data(double ctr_freq, complex *buff, int n)
     #define DELTA_T (1. / info.sample_rate)
 
     #define MAX_ANTENNA 1000000
-
-    #define TWO_PI (2 * M_PI)
 
     if (n > MAX_ANTENNA) {
         FATAL("n = %d is greater than MAX_ANTENNA\n", n);

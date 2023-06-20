@@ -6,22 +6,16 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <locale.h>
-
-
 #include <string.h>
-//#include <errno.h>
-#include <time.h>
-#include <pthread.h>
-//#include <ctype.h>
-//#include <sys/types.h>
-//#include <sys/stat.h>
-//#include <fcntl.h>
 #include <complex.h>
 #include <math.h>
+#include <pthread.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <misc.h>
 #include <sdl.h>
-#include <sdr.h>  // xxx move out of utils
 #include <pa.h>
 #include <fft.h>
 
@@ -86,4 +80,11 @@ void display_handler(void);
 void audio_init(void);
 void audio_out(double yo);
 
-//void fft_init(void);
+// rtlsdr.c
+// xxx check these
+void sdr_list_devices(void);
+void sdr_init(int dev_idx, int sample_rate);
+void sdr_print_info(void);
+void sdr_test(int dev_idx, int sample_rate);
+void sdr_get_data(double ctr_freq, complex *buff, int n);
+
