@@ -286,11 +286,12 @@ void sdr_test(int dev_idx, int sample_rate)
 
 // -----------------  GET DATA  ----------------------------------------
 
-#if 1
+#define TEST
+#ifdef TEST
 void sdr_get_data(double ctr_freq, complex *buff, int n)
 {
     static int fd = -1;
-    static double t = 0;
+    static double t;
     static size_t file_offset = 0;
     static size_t file_size;
     static double *antenna;
@@ -301,9 +302,8 @@ void sdr_get_data(double ctr_freq, complex *buff, int n)
 
     // antenna.dat contains real (double) values
     #define ANTENNA_FILENAME "antenna.dat"
-    #define DELTA_T (1. / info.sample_rate)
-
-    #define MAX_ANTENNA 1000000
+    #define DELTA_T          (1. / SDR_SAMPLE_RATE)
+    #define MAX_ANTENNA      1000000
 
     if (n > MAX_ANTENNA) {
         FATAL("n = %d is greater than MAX_ANTENNA\n", n);
@@ -319,12 +319,13 @@ void sdr_get_data(double ctr_freq, complex *buff, int n)
         // get size of ANTENNA_FILENAME
         fstat(fd, &statbuf);
         file_size = statbuf.st_size;
+        NOTICE("opened antenna file, size = %ld\n", file_size);
 
+        // alloc buffer
         antenna = malloc(MAX_ANTENNA * sizeof(double));
-
-        NOTICE("opened antenna file\n");
     }
 
+    // read n samples from antenna file
     len_to_read = n * sizeof(double);
 
     if (file_offset + len_to_read > file_size) {
@@ -337,13 +338,21 @@ void sdr_get_data(double ctr_freq, complex *buff, int n)
     }
     file_offset += len_read;
 
+    // shift the frequency to ctr_freq, and copy to caller's buffer
     w = TWO_PI * ctr_freq;
+    t = 0;
     for (int i = 0; i < n; i++) {
         buff[i] = antenna[i] * cexp(-I * w * t);
         t += DELTA_T;
     }
 
-    // xxx later
+    // sleep to simulate the normal duration
+    NOTICE("usleep time = %ld\n", (unsigned long)(1000000*t));
+    usleep(1000000 * t);
+}
+#else // xxx later
+void sdr_get_data(double ctr_freq, complex *buff, int n)
+{
     //rtlsdr_read_sync(dev, buff, buff_len, &n_read);
 }
 #endif

@@ -53,6 +53,9 @@ typedef struct band_s {
     int squelch;
     int selected;
     int active;
+
+    // xxx
+    double *cabs_fft;
 } band_t;
 
 EXTERN int           max_band;

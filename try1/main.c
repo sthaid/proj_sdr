@@ -91,22 +91,41 @@ void test(void)
     complex *data = fft_alloc_complex(samples);
     complex *fft = fft_alloc_complex(samples);
 
+    // xxx
+    if (b->cabs_fft == NULL) {
+        b->cabs_fft = malloc(n * samples * sizeof(double));
+    }
+
     // loop over the intervals
     // FM 88 - 108
     // TEST 0.4 to 3.4
     double ctr_freq = b->f_min + intvl/2;
-    for (int i = 0; i < n; i++) {
+    int i, j, k=0;
+    unsigned long start, dur_sdr_get_data=0, dur_fft=0, dur_cabs=0;
+    for (i = 0; i < n; i++) {
         NOTICE("i=%d  ctr_freq=%f\n", i, ctr_freq);
 
-        // xxx init data with a test pattern of freqs in each intvl 
+        // get a block of rtlsdr data at ctr_freq
+        start = microsec_timer();
         sdr_get_data(ctr_freq, data, samples);
+        dur_sdr_get_data += (microsec_timer() - start);
 
-        // do the fft
+        // fft the data block
+        start = microsec_timer();
         fft_fwd_c2c(data, fft, samples);
+        dur_fft += (microsec_timer() - start);
 
-        // save the fft result
+        // save the cabs of fft result
+        start = microsec_timer();
+        for (j = 0; j < samples; j++) {
+            b->cabs_fft[k++] = cabs(fft[j]);
+        }
+        dur_cabs += (microsec_timer() - start);
 
         // move to next interval in the band
         ctr_freq += intvl;
     }
+    NOTICE("dur_sdr_get_data = %ld ms\n", dur_sdr_get_data/1000);
+    NOTICE("dur_fft          = %ld ms\n", dur_fft/1000);
+    NOTICE("dur_cabs          = %ld ms\n", dur_cabs/1000);
 }
