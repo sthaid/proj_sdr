@@ -50,12 +50,10 @@ int main(int argc, char **argv)
     // initialization
     //sdr_init(0, SDR_SAMPLE_RATE);  // xxx opt for idx
     config_init();
+    //audio_init();
+    display_init();
 
     test();
-    return 1;
-
-    audio_init();
-    display_init();
 
     // runtime
     display_handler();
@@ -78,13 +76,13 @@ void test(void)
     double full_span, intvl;
     int n;
     #define FFT_SPAN  1.0
-    full_span = b->f_max - b->f_min;
+    full_span = b->f_max - b->f_min;  // xxx precision problem?
     n = ceil(full_span / FFT_SPAN);
     intvl = full_span / n;
     NOTICE("full_span = %f  n = %d  intvl = %f\n", full_span, n, intvl);
 
     // determine the number of samples in the fft, so that each bin is 10Hz
-    int samples = (intvl * 1000000 * 2) / 10;
+    int samples = nearbyint((intvl * 1200000 * 2) / 10);
     NOTICE("samples = %d\n", samples);
 
     // alloc buff for fft
@@ -93,14 +91,21 @@ void test(void)
 
     // xxx
     if (b->cabs_fft == NULL) {
-        b->cabs_fft = malloc(n * samples * sizeof(double));
+#if 1
+        b->cabs_fft = malloc(n * samples / 2 * sizeof(double) + 20);
+        b->max_cabs_fft = n * samples / 2;
+#else
+        b->cabs_fft = malloc(n * samples* sizeof(double) + 20);
+        b->max_cabs_fft = n * samples;
+#endif
+        NOTICE("max_cabs_fft = %d\n", b->max_cabs_fft);
     }
 
     // loop over the intervals
     // FM 88 - 108
     // TEST 0.4 to 3.4
     double ctr_freq = b->f_min + intvl/2;
-    int i, j, k=0;
+    int i, j, k=0, k2;
     unsigned long start, dur_sdr_get_data=0, dur_fft=0, dur_cabs=0;
     for (i = 0; i < n; i++) {
         NOTICE("i=%d  ctr_freq=%f\n", i, ctr_freq);
@@ -116,10 +121,19 @@ void test(void)
         dur_fft += (microsec_timer() - start);
 
         // save the cabs of fft result
+        // xxx just the middle
         start = microsec_timer();
+#if 1
+        k2 = samples * 3 / 4;
+        for (j = 0; j < samples/2; j++) {
+            b->cabs_fft[k++] = cabs(fft[k2++]);
+            if (k2 == samples) k2 = 0;
+        }
+#else
         for (j = 0; j < samples; j++) {
             b->cabs_fft[k++] = cabs(fft[j]);
         }
+#endif
         dur_cabs += (microsec_timer() - start);
 
         // move to next interval in the band
@@ -127,5 +141,6 @@ void test(void)
     }
     NOTICE("dur_sdr_get_data = %ld ms\n", dur_sdr_get_data/1000);
     NOTICE("dur_fft          = %ld ms\n", dur_fft/1000);
-    NOTICE("dur_cabs          = %ld ms\n", dur_cabs/1000);
+    NOTICE("dur_cabs         = %ld ms\n", dur_cabs/1000);
+    NOTICE("k                = %d\n", k);
 }

@@ -28,6 +28,7 @@
 #define TWO_PI (2*M_PI)
 
 #define SDR_SAMPLE_RATE 2400000   // 2.4 MS/sec
+//#define SDR_SAMPLE_RATE 2000000   // 2.0 MS/sec  xxx temp
 
 // -----------------  CONFIG  ----------------------------
 
@@ -56,6 +57,7 @@ typedef struct band_s {
 
     // xxx
     double *cabs_fft;
+    int max_cabs_fft;
 } band_t;
 
 EXTERN int           max_band;

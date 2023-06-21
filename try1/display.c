@@ -42,6 +42,42 @@ void display_init(void)
 
 // -----------------  DISPLAY HANDLER  ----------------------------
 
+void do_plot(void)
+{
+    rect_t loc;
+    band_t *b = &band[0];
+    unsigned long i;
+    double max = 0, scaling;
+
+    #define MAX_POINTS 1000000
+    static point_t points[MAX_POINTS];
+
+    if (b->max_cabs_fft > MAX_POINTS) {
+        FATAL("max_cabs_fft %d, too large\n", b->max_cabs_fft);
+    }
+
+    //NOTICE("--------- PLOT --------\n");
+
+    loc.x = 50;
+    loc.y = 50;
+    loc.w = W - 100;
+    loc.h = 400;
+    sdl_render_rect(&loc, 2, SDL_GREEN);
+
+    for (i = 0; i < b->max_cabs_fft; i++) {
+        if (b->cabs_fft[i] > max) max = b->cabs_fft[i];
+    }
+    scaling = loc.h / max;
+    //NOTICE("max = %f  scaling = %f\n", max, scaling);
+
+    for (i = 0; i < b->max_cabs_fft; i++) {
+        points[i].x = loc.x + i * loc.w / b->max_cabs_fft;
+        points[i].y = (loc.y+loc.h) - b->cabs_fft[i] * scaling;
+    }
+    
+    sdl_render_lines(points, b->max_cabs_fft, SDL_WHITE);
+}
+
 void display_handler(void)
 {
     while (true) {
@@ -51,6 +87,8 @@ void display_handler(void)
         // Hello
         sdl_render_text(0, 0, FTSZ1, "Hello!", SDL_WHITE, SDL_BLACK);
 
+        do_plot();
+
         // register events
         sdl_render_text_and_register_event(
             0, H - FTCH2, FTSZ2,
@@ -58,7 +96,7 @@ void display_handler(void)
             SDL_EVENT_END_PROGRAM, SDL_EVENT_TYPE_MOUSE_LEFT_CLICK);
 
         sdl_render_text_and_register_event(
-            W/2-3*FTCW1, 0, FTSZ2,
+            W/2-3.5*FTCW2, 0, FTSZ2,
             "FULLSCR", SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_FULLSCR, SDL_EVENT_TYPE_MOUSE_LEFT_CLICK);
 

@@ -339,7 +339,7 @@ void sdr_get_data(double ctr_freq, complex *buff, int n)
     file_offset += len_read;
 
     // shift the frequency to ctr_freq, and copy to caller's buffer
-    w = TWO_PI * ctr_freq;
+    w = TWO_PI * ctr_freq * 1000000;
     t = 0;
     for (int i = 0; i < n; i++) {
         buff[i] = antenna[i] * cexp(-I * w * t);
