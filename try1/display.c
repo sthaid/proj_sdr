@@ -68,7 +68,7 @@ void do_plot(void)
         if (b->cabs_fft[i] > max) max = b->cabs_fft[i];
     }
     scaling = loc.h / max;
-    //NOTICE("max = %f  scaling = %f\n", max, scaling);
+    DEBUG("display: max = %f  scaling = %f\n", max, scaling);
 
     for (i = 0; i < b->max_cabs_fft; i++) {
         points[i].x = loc.x + i * loc.w / b->max_cabs_fft;

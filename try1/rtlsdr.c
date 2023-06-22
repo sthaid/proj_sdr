@@ -57,9 +57,6 @@
 #define TEST_MODE_ON  1
 #define TEST_MODE_OFF 0
 
-#define KHZ 1000
-#define MHZ 1000000
-
 //
 // typedef
 //
@@ -288,7 +285,7 @@ void sdr_test(int dev_idx, int sample_rate)
 
 #define TEST
 #ifdef TEST
-void sdr_get_data(double ctr_freq, complex *buff, int n)
+void sdr_get_data(freq_t ctr_freq, complex *buff, int n)
 {
     static int fd = -1;
     static double t;
@@ -339,7 +336,7 @@ void sdr_get_data(double ctr_freq, complex *buff, int n)
     file_offset += len_read;
 
     // shift the frequency to ctr_freq, and copy to caller's buffer
-    w = TWO_PI * ctr_freq * 1000000;
+    w = TWO_PI * ctr_freq;
     t = 0;
     for (int i = 0; i < n; i++) {
         buff[i] = antenna[i] * cexp(-I * w * t);
@@ -347,11 +344,11 @@ void sdr_get_data(double ctr_freq, complex *buff, int n)
     }
 
     // sleep to simulate the normal duration
-    NOTICE("usleep time = %ld\n", (unsigned long)(1000000*t));
+    NOTICE("usleep time = %ld\n", (unsigned long)nearbyint(1000000*t));
     usleep(1000000 * t);
 }
 #else // xxx later
-void sdr_get_data(double ctr_freq, complex *buff, int n)
+void sdr_get_data(freq_t ctr_freq, complex *buff, int n)
 {
     //rtlsdr_read_sync(dev, buff, buff_len, &n_read);
 }

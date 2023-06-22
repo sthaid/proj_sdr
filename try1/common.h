@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <assert.h>
 
 #include <misc.h>
 #include <sdl.h>
@@ -30,7 +31,13 @@
 #define SDR_SAMPLE_RATE 2400000   // 2.4 MS/sec
 //#define SDR_SAMPLE_RATE 2000000   // 2.0 MS/sec  xxx temp
 
+#define KHZ 1000
+#define MHZ 1000000
+
+
 // -----------------  CONFIG  ----------------------------
+
+typedef unsigned long freq_t;
 
 #define MAX_BAND    20
 #define MAX_STATION 20
@@ -39,17 +46,17 @@
 typedef struct band_s {
     // static config
     char *name;
-    double f_min;
-    double f_max;
-    double f_step;
+    freq_t f_min;
+    freq_t f_max;
+    freq_t f_step;
     int max_station;
     struct {
-        double freq;
+        freq_t f;
         char *name;
     } station[MAX_STATION];
 
     // dynamic config
-    double f_curr;
+    freq_t f;
     int demod;
     int squelch;
     int selected;
@@ -58,6 +65,8 @@ typedef struct band_s {
     // xxx
     double *cabs_fft;
     int max_cabs_fft;
+    complex *fft_in;
+    complex *fft_out;
 } band_t;
 
 EXTERN int           max_band;
@@ -91,5 +100,5 @@ void sdr_list_devices(void);
 void sdr_init(int dev_idx, int sample_rate);
 void sdr_print_info(void);
 void sdr_test(int dev_idx, int sample_rate);
-void sdr_get_data(double ctr_freq, complex *buff, int n);
+void sdr_get_data(freq_t ctr_freq, complex *buff, int n);
 

@@ -23,6 +23,7 @@ void config_init(void)
     int            i, cnt, line_num=0;
     char           s[200];
     struct band_s *b=NULL;
+    double         f_min, f_max, f_step, f;
 
     #define BAD_CONFIG_FILE_LINE \
         do { \
@@ -55,10 +56,7 @@ void config_init(void)
 
             cnt = sscanf(s+5, "%ms %lf %lf %lf %lf %d %d %d %d",
                          &b->name, 
-                         &b->f_min,
-                         &b->f_max,
-                         &b->f_step,
-                         &b->f_curr,
+                         &f_min, &f_max, &f_step, &f,
                          &b->demod,
                          &b->squelch,
                          &b->selected,
@@ -66,14 +64,19 @@ void config_init(void)
             if (cnt != 9) {
                 BAD_CONFIG_FILE_LINE;
             }
+            b->f_min  = nearbyint(f_min * MHZ);
+            b->f_max  = nearbyint(f_max * MHZ);
+            b->f_step = nearbyint(f_step * MHZ);
+            b->f      = nearbyint(f * MHZ);
         } else if (strncmp(s, "STATION ", 8) == 0) {
             if (b == NULL) {
                 BAD_CONFIG_FILE_LINE;
             }
 
             cnt = sscanf(s+8, "%lf %ms",
-                        &b->station[b->max_station].freq,
+                        &f,
                         &b->station[b->max_station].name);
+            b->station[b->max_station].f = nearbyint(f * MHZ);
             if (cnt != 2) {
                 BAD_CONFIG_FILE_LINE;
             }
@@ -111,17 +114,17 @@ void config_write(void)
 
         fprintf(fp, "BAND %s %f %f %f %f %d %d %d %d\n",
                 b->name, 
-                b->f_min,
-                b->f_max,
-                b->f_step,
-                b->f_curr,
+                (double)b->f_min / MHZ,
+                (double)b->f_max / MHZ,
+                (double)b->f_step / MHZ,
+                (double)b->f / MHZ,
                 b->demod,
                 b->squelch,
                 b->selected,
                 b->active);
         for (j = 0; j < b->max_station; j++) {
             fprintf(fp, "STATION %10f %s\n",
-                    b->station[j].freq,
+                    (double)b->station[j].f / MHZ,
                     b->station[j].name);
         }
         fprintf(fp, "\n");
