@@ -4,7 +4,7 @@ FLAGS   = -g -O2 -Wall
 
 UTILS = utils/misc.c utils/sdl.c utils/png_rw.c utils/pa.c utils/fft.c
 
-sdr: main.c config.c display.c audio.c rtlsdr.c $(UTILS)
+sdr: main.c config.c display.c audio.c rtlsdr.c scan.c $(UTILS)
 	gcc $(FLAGS) $(INCLUDE) -o $@ $^ $(LIBS)
 
 clean:

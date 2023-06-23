@@ -53,6 +53,7 @@ typedef struct band_s {
     struct {
         freq_t f;
         char *name;
+        // xxx demod
     } station[MAX_STATION];
 
     // dynamic config
@@ -101,4 +102,7 @@ void sdr_init(int dev_idx, int sample_rate);
 void sdr_print_info(void);
 void sdr_test(int dev_idx, int sample_rate);
 void sdr_get_data(freq_t ctr_freq, complex *buff, int n);
+
+// scan.c
+void scan_init(void);
 
