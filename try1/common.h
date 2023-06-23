@@ -19,6 +19,7 @@
 #include <sdl.h>
 #include <pa.h>
 #include <fft.h>
+#include <filter.h>
 
 #ifdef MAIN
   #define EXTERN
@@ -28,8 +29,8 @@
 
 #define TWO_PI (2*M_PI)
 
-#define SDR_SAMPLE_RATE 2400000   // 2.4 MS/sec
-//#define SDR_SAMPLE_RATE 2000000   // 2.0 MS/sec  xxx temp
+#define SDR_SAMPLE_RATE   2400000   // 2.4 MS/sec
+#define AUDIO_SAMPLE_RATE 22000
 
 #define KHZ 1000
 #define MHZ 1000000
@@ -68,6 +69,9 @@ typedef struct band_s {
     int max_cabs_fft;
     complex *fft_in;
     complex *fft_out;
+
+    int num_fft;
+    freq_t fft_freq_span;
 } band_t;
 
 EXTERN int           max_band;

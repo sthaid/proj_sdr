@@ -2,8 +2,6 @@
 
 // xxx volume control
 
-#define AUDIO_SAMPLE_RATE 22000  // xxx move to common?
-
 #define MAX_AO_BUFF 2000
 
 static double        ao_buff[MAX_AO_BUFF];

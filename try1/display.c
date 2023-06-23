@@ -160,4 +160,15 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
     }
     
     sdl_render_lines(points, b->max_cabs_fft, SDL_WHITE);
+
+    freq_t f = b->f_min + b->fft_freq_span/2;
+    for (i = 0; i < b->num_fft; i++) {
+        int x, y;
+
+        y = loc->y + loc->h;
+        x = loc->x + (double)(f - b->f_min) / (b->f_max - b->f_min) * loc->w;
+        sdl_render_point(x, y, SDL_RED, 5);
+
+        f += b->fft_freq_span;
+    }
 }

@@ -300,7 +300,7 @@ void sdr_get_data(freq_t ctr_freq, complex *buff, int n)
     // antenna.dat contains real (double) values
     #define ANTENNA_FILENAME "antenna.dat"
     #define DELTA_T          (1. / SDR_SAMPLE_RATE)
-    #define MAX_ANTENNA      1000000
+    #define MAX_ANTENNA      12000000
 
     if (n > MAX_ANTENNA) {
         FATAL("n = %d is greater than MAX_ANTENNA\n", n);
@@ -344,7 +344,7 @@ void sdr_get_data(freq_t ctr_freq, complex *buff, int n)
     }
 
     // sleep to simulate the normal duration
-    NOTICE("usleep time = %ld\n", (unsigned long)nearbyint(1000000*t));
+    //NOTICE("usleep time = %ld\n", (unsigned long)nearbyint(1000000*t));
     usleep(1000000 * t);
 }
 #else // xxx later

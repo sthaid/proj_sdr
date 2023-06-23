@@ -46,11 +46,14 @@ int main(int argc, char **argv)
 
     // initialization
     //sdr_init(0, SDR_SAMPLE_RATE);  // xxx opt for idx
+
     config_init();
     config_write(); // xxx
-    //audio_init();
+    audio_init();
     scan_init();
     display_init();
+
+    sleep(3);
 
     // runtime
     display_handler();
