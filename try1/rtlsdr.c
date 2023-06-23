@@ -285,7 +285,20 @@ void sdr_test(int dev_idx, int sample_rate)
 
 #define TEST
 #ifdef TEST
-void sdr_get_data(freq_t ctr_freq, complex *buff, int n)
+static void get_simulated_data(freq_t ctr_freq, complex *buff, int n);
+
+void sdr_read_sync(freq_t ctr_freq, complex *buff, int n)
+{
+    #define DELTA_T (1. / SDR_SAMPLE_RATE)
+
+    get_simulated_data(ctr_freq, buff, n);
+
+    // sleep to simulate the normal duration
+    //NOTICE("usleep time = %ld\n", (unsigned long)nearbyint(1000000*t));
+    usleep(1000000 * (n * DELTA_T));
+}
+
+static void get_simulated_data(freq_t ctr_freq, complex *buff, int n)
 {
     static int fd = -1;
     static double t;
@@ -342,13 +355,88 @@ void sdr_get_data(freq_t ctr_freq, complex *buff, int n)
         buff[i] = antenna[i] * cexp(-I * w * t);
         t += DELTA_T;
     }
-
-    // sleep to simulate the normal duration
-    //NOTICE("usleep time = %ld\n", (unsigned long)nearbyint(1000000*t));
-    usleep(1000000 * t);
 }
+
+// ---- async ----
+
+struct {
+    pthread_t tid;
+    bool cancel;
+    sdr_async_rb_t *rb;
+    freq_t ctr_freq;
+} async;
+static void *async_read_thread(void *cx);
+
+void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb)
+{
+    // error if the async read thread is currently running
+    if (async.tid != 0) {
+        ERROR("sdr async read is already active\n");
+        return;
+    }
+
+    // xxx
+    rb->head = rb->tail = 0;
+    async.ctr_freq = ctr_freq;
+    async.rb = rb;
+
+    // create the async read thread
+    pthread_create(&async.tid, NULL, async_read_thread, NULL);
+}
+
+void sdr_cancel_async(void)
+{
+    async.cancel = true;
+
+    pthread_join(async.tid, NULL);
+
+    async.cancel = false;
+    async.rb = NULL;
+    async.ctr_freq = 0;
+    __sync_synchronize();
+    async.tid = 0;
+}
+
+static void *async_read_thread(void *cx)
+{
+    #define MAX_DATA 131072
+    static complex data[MAX_DATA];
+    int i, n=MAX_DATA, rb_avail;
+    sdr_async_rb_t *rb = async.rb;
+    unsigned long rb_tail;
+
+    NOTICE("async read thread starting, f=%ld\n", async.ctr_freq);
+
+    while (true) {
+        // get a block of data  xxx no delay
+        get_simulated_data(async.ctr_freq, data, n);
+        //usleep(1000000 * (n * DELTA_T)); //xxx
+        usleep(1000000 * (n * DELTA_T * .8)); //xxx
+
+        // add the data to the ring buffer
+        rb_avail = MAX_SDR_ASYNC_RB_DATA - (rb->tail - rb->head);
+        if (n > rb_avail) {
+            n = rb_avail;
+        }
+
+        NOTICE("art publising %d\n",  n);
+        rb_tail = rb->tail;
+        for (i = 0; i < n; i++) {
+            rb->data[rb_tail++ % MAX_SDR_ASYNC_RB_DATA] = data[i];
+        }
+        rb->tail = rb_tail;
+
+        // check for cancel request
+        if (async.cancel) {
+            break;
+        }
+    }
+
+    return NULL;
+}
+
 #else // xxx later
-void sdr_get_data(freq_t ctr_freq, complex *buff, int n)
+void sdr_read_sync(freq_t ctr_freq, complex *buff, int n)
 {
     //rtlsdr_read_sync(dev, buff, buff_len, &n_read);
 }

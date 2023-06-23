@@ -101,11 +101,21 @@ void audio_out(double yo);
 
 // rtlsdr.c
 // xxx check these
+#define MAX_SDR_ASYNC_RB_DATA  (16*32*512/2 * 2)  // 131072 * 2 = 262144
+typedef struct {
+    unsigned long head;
+    unsigned long tail;
+    complex data[MAX_SDR_ASYNC_RB_DATA];
+} sdr_async_rb_t;
+
 void sdr_list_devices(void);
 void sdr_init(int dev_idx, int sample_rate);
 void sdr_print_info(void);
 void sdr_test(int dev_idx, int sample_rate);
-void sdr_get_data(freq_t ctr_freq, complex *buff, int n);
+void sdr_read_sync(freq_t ctr_freq, complex *buff, int n);
+
+void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb);
+void sdr_cancel_async(void);
 
 // scan.c
 void scan_init(void);

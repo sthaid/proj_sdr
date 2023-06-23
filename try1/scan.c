@@ -53,7 +53,7 @@ static void fft_band(band_t *b)
     int         fft_n;
     int         fft_plot_n;
     int         i, j, k1, k2;
-    unsigned long start, dur_sdr_get_data=0, dur_fft=0, dur_cabs=0;
+    unsigned long start, dur_sdr_read_sync=0, dur_fft=0, dur_cabs=0;
 
     #define MAX_FFT_FREQ_SPAN  1200000  // must be <= SDR_SAMPLE_RATE/2
     #define FFT_ELEMENT_HZ     10
@@ -98,8 +98,8 @@ static void fft_band(band_t *b)
 
         // get a block of rtlsdr data at ctr_freq
         start = microsec_timer();
-        sdr_get_data(ctr_freq, b->fft_in, fft_n);
-        dur_sdr_get_data += (microsec_timer() - start);
+        sdr_read_sync(ctr_freq, b->fft_in, fft_n);
+        dur_sdr_read_sync += (microsec_timer() - start);
 
         // run fft
         start = microsec_timer();
@@ -120,7 +120,7 @@ static void fft_band(band_t *b)
     }
     assert(k1 == b->max_cabs_fft);
 
-    //NOTICE("dur_sdr_get_data = %ld ms\n", dur_sdr_get_data/1000);
+    //NOTICE("dur_sdr_read_sync = %ld ms\n", dur_sdr_read_sync/1000);
     //NOTICE("dur_fft          = %ld ms\n", dur_fft/1000);
     //NOTICE("dur_cabs         = %ld ms\n", dur_cabs/1000);
 
@@ -161,28 +161,41 @@ static void play_band(band_t *b)
 
 static void play(freq_t f, int secs)
 {
-    unsigned int n, i;
     #define VOLUME_SCALE 10
-    complex *data, data_lpf;
-    double data_demod;
 
-    // get data
-    n = secs * SDR_SAMPLE_RATE;
-    data = malloc(n * sizeof(complex));
+    complex data, data_lpf;
+    double data_demod, data_demod_volscale;
+    sdr_async_rb_t *rb;
+    int max = secs * SDR_SAMPLE_RATE;
 
-// xxx need to overlap
+    rb = malloc(sizeof(sdr_async_rb_t));
+    sdr_read_async(f, rb);
 
-    sdr_get_data(f, data, n);
+    while (true) {
+        // wait for data to be available
+        if (rb->head == rb->tail) {
+            usleep(1000);
+            continue;
+        }
 
-    // demod and audio out
-    for (i = 0; i < n; i++) {
-        data_lpf = lpf(data[i], 4000);
+        // process the data
+        data = rb->data[rb->head % MAX_SDR_ASYNC_RB_DATA];
+        data_lpf = lpf(data, 4000);
         data_demod = cabs(data_lpf);
-        data_demod = data_demod * VOLUME_SCALE;
-        downsample_and_audio_out(data_demod);
+        data_demod_volscale = data_demod * VOLUME_SCALE;
+        downsample_and_audio_out(data_demod_volscale);
+
+        // if 5 secs have been processed then we are done playing
+        rb->head++;
+        if (rb->head == max) {
+            break;
+        }
     }
 
-    free(data);
+    sdr_cancel_async();
+    free(rb);
+//program_terminating = true;
+//exit(1);
 }
 
 #define LPF_ORDER  20 //xxx ?
@@ -210,7 +223,8 @@ static void downsample_and_audio_out(double x)
 
     int tc_volume = 50;
 
-    #define NUM_DS ((int)(0.97 * SDR_SAMPLE_RATE / AUDIO_SAMPLE_RATE))
+    //#define NUM_DS ((int)(0.97 * SDR_SAMPLE_RATE / AUDIO_SAMPLE_RATE))
+    #define NUM_DS ((int)((double)SDR_SAMPLE_RATE / AUDIO_SAMPLE_RATE))
 
     ma = moving_avg(x, NUM_DS, &ma_cx);
 
