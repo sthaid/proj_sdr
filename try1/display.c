@@ -196,14 +196,14 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
         b->wf.texture = sdl_create_texture(loc->w, MAX_WATERFALL);
         b->wf.pixels8 = calloc(MAX_WATERFALL*loc->w, BYTES_PER_PIXEL);
 
-        NOTICE("ALLOCING\n");
+        NOTICE("ALLOCING   max_cabs_fft=%d\n", b->max_cabs_fft);
         for (int row = 0; row < MAX_WATERFALL; row++) {
             cvt_wf_to_pixels(b, row, loc->w);
         }
 
         b->wf.last_displayed_width = loc->w;
     } else if (num_new_lines > 0) {
-        NOTICE("new lines %d\n", num_new_lines);
+        //NOTICE("new lines %d\n", num_new_lines);
         memmove(b->wf.pixels8 + num_new_lines * pitch, 
                 b->wf.pixels8, 
                 pitch * (MAX_WATERFALL - num_new_lines));
@@ -227,11 +227,11 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
 static void cvt_wf_to_pixels(band_t *b, int row, int width)
 {
     unsigned char *wf;
-    unsigned int *pixels32;
-    long i;
-    int pitch = width * BYTES_PER_PIXEL;
-    unsigned int wfent, wvlen;
-    unsigned char red,green,blue;
+    unsigned int  *pixels32;
+    int            pitch, i, j1, j2, k, n, sum, wf_ent_max, wvlen;
+    unsigned char red, green, blue;
+
+    pitch = width * BYTES_PER_PIXEL;
 
     wf = get_waterfall(b, row);
     pixels32 = (unsigned int *)(b->wf.pixels8 + row * pitch);
@@ -242,13 +242,22 @@ static void cvt_wf_to_pixels(band_t *b, int row, int width)
     }
 
     for (i = 0; i < width; i++) {
-        wfent = wf [ i * b->max_cabs_fft / width ];  // xxx avg?
+        j1 = (long)i * b->max_cabs_fft / width;
+        j2 = (long)(i+1) * b->max_cabs_fft / width;
+        n = j2 - j1;
+        if (n == 0) n = 1;
 
-        wvlen = 440 + wfent * 225 / 256;
+        wf_ent_max = 0;
+        for (sum = 0, k = 0; k < n; k++) {
+            if (wf[j1+k] > wf_ent_max) {
+                wf_ent_max = wf[j1+k];
+            }
+        }
+
+        wvlen = 440 + wf_ent_max * 225 / 256;
 
         sdl_wavelen_to_rgb(wvlen, &red, &green, &blue);
 
         *pixels32++ = PIXEL(red, green, blue);
     }
-    b->wf.x++;
 }

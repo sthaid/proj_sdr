@@ -40,7 +40,7 @@ static void *scan_thread(void *cx)
             fft_band(b);
         }
 
-#if 0
+#if 1
         for (i = 0; i < max_band; i++) {
             if (program_terminating) {
                 goto terminate;

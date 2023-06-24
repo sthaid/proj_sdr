@@ -84,13 +84,7 @@ typedef struct band_s {
         int            last_displayed_width;
         unsigned char *pixels8;
         texture_t      texture;
-        int x; //xxx
     } wf;
-
-    //unsigned char *waterfall;
-    //int num_waterfall;
-    //unsigned char *pixels;
-    //texture_t *t;
 } band_t;
 
 #define MAX_WATERFALL 500
