@@ -10,6 +10,8 @@ void scan_init(void)
 {
     pthread_t tid;
 
+    // xxx do all the init here
+
     pthread_create(&tid, NULL, scan_thread, NULL);
 }
 
@@ -18,8 +20,13 @@ void scan_init(void)
 static void *scan_thread(void *cx)
 {
     int i;
+    int cnt=0;
+
+    pthread_setname_np(pthread_self(), "sdr_scan");
 
     while (true) {
+        //NOTICE("SCAN %d\n", ++cnt);
+
         for (i = 0; i < max_band; i++) {
             if (program_terminating) {
                 goto terminate;
@@ -33,6 +40,7 @@ static void *scan_thread(void *cx)
             fft_band(b);
         }
 
+#if 0
         for (i = 0; i < max_band; i++) {
             if (program_terminating) {
                 goto terminate;
@@ -45,11 +53,14 @@ static void *scan_thread(void *cx)
 
             play_band(b);
         }
+#endif
     }
 
 terminate:
     return NULL;
 }
+
+// -----------------------------------------------------------------
 
 // xxx clean this up
 // xxx display dot where the play is occurring
@@ -66,7 +77,7 @@ static void fft_band(band_t *b)
     unsigned long start, dur_sdr_read_sync=0, dur_fft=0, dur_cabs=0;
 
     #define MAX_FFT_FREQ_SPAN  1200000  // must be <= SDR_SAMPLE_RATE/2
-    #define FFT_ELEMENT_HZ     10
+    #define FFT_ELEMENT_HZ     100
 
     assert(MAX_FFT_FREQ_SPAN <= SDR_SAMPLE_RATE/2);
 
@@ -77,7 +88,7 @@ static void fft_band(band_t *b)
     assert(fft_freq_span <= MAX_FFT_FREQ_SPAN);
     //NOTICE("band_freq_span = %ld  num_fft = %d  fft_freq_span = %ld\n", band_freq_span, num_fft, fft_freq_span);
 
-    // xxx publish
+    // publish
     b->num_fft = num_fft;
     b->fft_freq_span = fft_freq_span;
 
@@ -97,10 +108,11 @@ static void fft_band(band_t *b)
         b->fft_in   = fft_alloc_complex(fft_n);
         b->fft_out  = fft_alloc_complex(fft_n);
         b->cabs_fft = calloc(b->max_cabs_fft, sizeof(double));
+
+        b->wf.data = calloc(MAX_WATERFALL * b->max_cabs_fft, 1);
     }
 
     // loop over the intervals
-    // xxx keep track of the intervals for plotting
     ctr_freq = b->f_min + fft_freq_span/2;
     k1 = 0;
     for (i = 0; i < num_fft; i++) {
@@ -130,19 +142,21 @@ static void fft_band(band_t *b)
     }
     assert(k1 == b->max_cabs_fft);
 
+    // save new waterfall entry
+    unsigned char *wf;
+    wf = get_waterfall(b, -1);
+    for (i = 0; i < b->max_cabs_fft; i++) {
+        // max = 60000
+        wf[i] = b->cabs_fft[i] * (256. / 60000);
+    }
+    b->wf.num++;
+
+    // xxx keep timing stats
     //NOTICE("dur_sdr_read_sync = %ld ms\n", dur_sdr_read_sync/1000);
     //NOTICE("dur_fft          = %ld ms\n", dur_fft/1000);
     //NOTICE("dur_cabs         = %ld ms\n", dur_cabs/1000);
 
-    // xxx
-    // - search fft for signals
-    // - publish
-    // - play each for 5 secs
-
     // xxx save waterfaull
-
-
-//xxx init complete
 }
 
 // ---------------------------------------------------------------------
@@ -165,7 +179,9 @@ static void play_band(band_t *b)
 
     // play 
     for (int i = 0; i < max; i++) {
+        b->f_play = f[i];
         play(f[i], 5);
+        b->f_play = 0;
     }
 }
 

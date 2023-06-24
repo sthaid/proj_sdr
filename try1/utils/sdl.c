@@ -395,6 +395,8 @@ void sdl_wavelen_to_rgb(double wavelength, uint8_t *r, uint8_t *g, uint8_t *b)
     double gamma = 0.8;
     double R,G,B;
 
+// xxx use a lookup table
+
     if (wavelength >= 380 && wavelength <= 440) {
         double attenuation = 0.3 + 0.7 * (wavelength - 380) / (440 - 380);
         R = pow((-(wavelength - 440) / (440 - 380)) * attenuation, gamma);

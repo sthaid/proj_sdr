@@ -1,4 +1,6 @@
 //xxx are all these needed
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -72,7 +74,39 @@ typedef struct band_s {
 
     int num_fft;
     freq_t fft_freq_span;
+
+    freq_t f_play;
+
+    struct {
+        unsigned char *data;
+        int            num;
+        int            last_displayed_num;
+        int            last_displayed_width;
+        unsigned char *pixels8;
+        texture_t      texture;
+        int x; //xxx
+    } wf;
+
+    //unsigned char *waterfall;
+    //int num_waterfall;
+    //unsigned char *pixels;
+    //texture_t *t;
 } band_t;
+
+#define MAX_WATERFALL 500
+
+
+// use -1 is for a new entry
+static inline unsigned char * get_waterfall(band_t *b, int row)
+{
+    int tmp = (b->wf.num - 1 - row);
+
+    if (tmp < 0) {
+        return NULL;
+    }
+
+    return b->wf.data + ((tmp % MAX_WATERFALL) * b->max_cabs_fft);
+}
 
 EXTERN int           max_band;
 EXTERN band_t       *band[MAX_BAND];

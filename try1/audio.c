@@ -54,6 +54,7 @@ static void *pa_play_thread(void*cx)
     int num_chan = 1;
     int sample_rate = AUDIO_SAMPLE_RATE;
 
+    pthread_setname_np(pthread_self(), "sdr_pa_play");
     NOTICE("pa_play_thread starting\n");
 
     ret = pa_play2(DEFAULT_OUTPUT_DEVICE, num_chan, sample_rate, PA_FLOAT32, pa_play_cb, NULL);

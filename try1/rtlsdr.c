@@ -387,6 +387,8 @@ static void *async_read_thread(void *cx)
     sdr_async_rb_t *rb = async.rb;
     complex         data[MAX_DATA];
 
+    pthread_setname_np(pthread_self(), "sdr_async_read");
+
     NOTICE("async read thread starting, f=%ld\n", async.ctr_freq);
 
     while (true) {

@@ -3,6 +3,8 @@
 
 int main(int argc, char **argv)
 {
+    pthread_setname_np(pthread_self(), "sdr_main");
+
     // xxx
     if (setlocale(LC_ALL, "") == NULL) {
         FATAL("setlocale failed, %m\n");

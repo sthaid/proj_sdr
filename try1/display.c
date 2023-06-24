@@ -129,6 +129,8 @@ static bool handle_event(sdl_event_t *ev)
 
 // -----------------  SUPPORT ROUTINES  ---------------------------
 
+static void cvt_wf_to_pixels(band_t *b, int row, int width);
+
 static void do_plot(band_t *b, rect_t *loc)  // xxx name
 {
     unsigned long i;
@@ -152,7 +154,7 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
         if (b->cabs_fft[i] > max) max = b->cabs_fft[i];
     }
     scaling = loc->h / max;
-    DEBUG("display: max = %f  scaling = %f\n", max, scaling);
+    //NOTICE("display: max = %f  scaling = %f\n", max, scaling);
 
     for (i = 0; i < b->max_cabs_fft; i++) {
         points[i].x = loc->x + i * loc->w / b->max_cabs_fft;
@@ -171,4 +173,82 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
 
         f += b->fft_freq_span;
     }
+
+    // scan play 
+    if (b->f_play != 0) {
+        int x, y;
+
+        y = loc->y + loc->h;
+        x = loc->x + (double)(b->f_play - b->f_min) / (b->f_max - b->f_min) * loc->w;
+        sdl_render_point(x, y, SDL_BLUE, 5);
+    }
+
+    // xxx waterfaull
+    int pitch, num_new_lines;
+
+    pitch = loc->w * BYTES_PER_PIXEL;
+    num_new_lines = b->wf.num - b->wf.last_displayed_num;
+
+    if (loc->w != b->wf.last_displayed_width) {
+        free(b->wf.pixels8);
+        sdl_destroy_texture(b->wf.texture);
+
+        b->wf.texture = sdl_create_texture(loc->w, MAX_WATERFALL);
+        b->wf.pixels8 = calloc(MAX_WATERFALL*loc->w, BYTES_PER_PIXEL);
+
+        NOTICE("ALLOCING\n");
+        for (int row = 0; row < MAX_WATERFALL; row++) {
+            cvt_wf_to_pixels(b, row, loc->w);
+        }
+
+        b->wf.last_displayed_width = loc->w;
+    } else if (num_new_lines > 0) {
+        NOTICE("new lines %d\n", num_new_lines);
+        memmove(b->wf.pixels8 + num_new_lines * pitch, 
+                b->wf.pixels8, 
+                pitch * (MAX_WATERFALL - num_new_lines));
+
+        for (int row = 0; row < num_new_lines; row++) {
+            cvt_wf_to_pixels(b, row, loc->w);
+        }
+
+        b->wf.last_displayed_num = b->wf.num; 
+    } else {
+        // display width has not changed AND num wf has not changed,
+        // so no need to udate pixels
+    }
+
+    sdl_update_texture(b->wf.texture, b->wf.pixels8, pitch);
+
+    sdl_render_texture(loc->x, loc->y+loc->h+5, b->wf.texture);
+
+}
+
+static void cvt_wf_to_pixels(band_t *b, int row, int width)
+{
+    unsigned char *wf;
+    unsigned int *pixels32;
+    long i;
+    int pitch = width * BYTES_PER_PIXEL;
+    unsigned int wfent, wvlen;
+    unsigned char red,green,blue;
+
+    wf = get_waterfall(b, row);
+    pixels32 = (unsigned int *)(b->wf.pixels8 + row * pitch);
+
+    if (wf == NULL) {
+        memset(pixels32, 0, pitch);
+        return;
+    }
+
+    for (i = 0; i < width; i++) {
+        wfent = wf [ i * b->max_cabs_fft / width ];  // xxx avg?
+
+        wvlen = 440 + wfent * 225 / 256;
+
+        sdl_wavelen_to_rgb(wvlen, &red, &green, &blue);
+
+        *pixels32++ = PIXEL(red, green, blue);
+    }
+    b->wf.x++;
 }
