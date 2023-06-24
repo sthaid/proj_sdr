@@ -18,31 +18,41 @@ void scan_init(void)
 static void *scan_thread(void *cx)
 {
     int i;
-    int cnt=0;
 
     while (true) {
-        // xxx get a snapshot of the selected bands
-
-        NOTICE("SCAN START %d\n", ++cnt);
         for (i = 0; i < max_band; i++) {
-            band_t *b = &band[i];
+            if (program_terminating) {
+                goto terminate;
+            }
+
+            band_t *b = band[i];
             if (!b->selected) {
                 continue;
             }
+
             fft_band(b);
         }
 
         for (i = 0; i < max_band; i++) {
-            band_t *b = &band[i];
+            if (program_terminating) {
+                goto terminate;
+            }
+
+            band_t *b = band[i];
             if (!b->selected) {
                 continue;
             }
+
             play_band(b);
         }
     }
 
+terminate:
     return NULL;
 }
+
+// xxx clean this up
+// xxx display dot where the play is occurring
 
 static void fft_band(band_t *b)
 {
@@ -175,6 +185,9 @@ static void play(freq_t f, int secs)
         // wait for a data item to be available
         while (rb->head == rb->tail) {
             usleep(1000);
+            if (program_terminating) {
+                return;
+            }
         }
 
         // process the data item

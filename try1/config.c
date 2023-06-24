@@ -51,8 +51,8 @@ void config_init(void)
                 BAD_CONFIG_FILE_LINE;
             }
 
-            b = &band[max_band];
-            max_band++;
+            b = calloc(sizeof(band_t), 1);
+            band[max_band++] = b;
 
             cnt = sscanf(s+5, "%ms %lf %lf %lf %lf %d %d %d %d",
                          &b->name, 
@@ -110,7 +110,7 @@ void config_write(void)
     struct band_s *b;
 
     for (i = 0; i < max_band; i++) {
-        b = &band[i];
+        b = band[i];
 
         fprintf(fp, "BAND %s %f %f %f %f %d %d %d %d\n",
                 b->name, 

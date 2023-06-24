@@ -18,6 +18,8 @@ void audio_init(void)
 {
     pthread_t tid;
 
+    // xxx minimize prints
+    // xxx program option to display devices
     pa_init();
     pthread_create(&tid, NULL, pa_play_thread, NULL);
 }

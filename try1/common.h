@@ -75,7 +75,7 @@ typedef struct band_s {
 } band_t;
 
 EXTERN int           max_band;
-EXTERN band_t        band[MAX_BAND];
+EXTERN band_t       *band[MAX_BAND];
 
 EXTERN int           zoom;
 EXTERN int           volume;

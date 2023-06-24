@@ -55,7 +55,7 @@ void display_handler(void)
         // xxx loop
         int x = 0, i;
         for (i = 0; i < max_band; i++) {
-            band_t *b = &band[i];
+            band_t *b = band[i];
             if (b->cabs_fft == NULL || b->max_cabs_fft == 0) {
                 continue;
             }
