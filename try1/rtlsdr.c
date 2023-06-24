@@ -283,104 +283,88 @@ void sdr_test(int dev_idx, int sample_rate)
 
 // -----------------  GET DATA  ----------------------------------------
 
-#define TEST
-#ifdef TEST
-static void get_simulated_data(freq_t ctr_freq, complex *buff, int n);
+#define TEST_WITH_SIMULATED_ANTENNA_DATA
 
-void sdr_read_sync(freq_t ctr_freq, complex *buff, int n)
+#ifdef TEST_WITH_SIMULATED_ANTENNA_DATA
+
+#define DELTA_T (1. / SDR_SAMPLE_RATE)
+
+static void get_simulated_antenna_data(freq_t ctr_freq, complex *data, int n)
 {
-    #define DELTA_T (1. / SDR_SAMPLE_RATE)
-
-    get_simulated_data(ctr_freq, buff, n);
-
-    // sleep to simulate the normal duration
-    //NOTICE("usleep time = %ld\n", (unsigned long)nearbyint(1000000*t));
-    usleep(1000000 * (n * DELTA_T));
-}
-
-static void get_simulated_data(freq_t ctr_freq, complex *buff, int n)
-{
-    static int fd = -1;
-    static double t;
-    static size_t file_offset = 0;
-    static size_t file_size;
+    static bool first_call = true;
     static double *antenna;
+    static unsigned int idx, max;
+    static double t;
 
-    int len_to_read, len_read;
-    struct stat statbuf;
-    double w;
+    // read the entire anenna.dat file on first_call
+    if (first_call) {
+        int fd;
+        size_t len_read;
+        size_t file_size;
+        struct stat statbuf;
 
-    // antenna.dat contains real (double) values
-    #define ANTENNA_FILENAME "antenna.dat"
-    #define DELTA_T          (1. / SDR_SAMPLE_RATE)
-    #define MAX_ANTENNA      12000000
-
-    if (n > MAX_ANTENNA) {
-        FATAL("n = %d is greater than MAX_ANTENNA\n", n);
-    }
-
-    if (fd < 0) {
-        // open ANTENNA_FILENAME
-        fd = open(ANTENNA_FILENAME, O_RDONLY);
+        fd = open("antenna.dat", O_RDONLY);
         if (fd < 0) {
-            FATAL("failed open %s, %m\n", ANTENNA_FILENAME);
+            FATAL("failed open antenna.dat, %m\n");
         }
 
-        // get size of ANTENNA_FILENAME
         fstat(fd, &statbuf);
         file_size = statbuf.st_size;
-        NOTICE("opened antenna file, size = %ld\n", file_size);
 
-        // alloc buffer
-        antenna = malloc(MAX_ANTENNA * sizeof(double));
+        antenna = malloc(file_size);
+
+        len_read = read(fd, antenna, file_size);
+        if (len_read != file_size) {
+            FATAL("read antenna file, len=%zd, %m\n", len_read);
+        }
+
+        close(fd);
+
+        first_call = false;
+        idx        = 0;
+        max        = file_size / sizeof(double);
+        t          = 0;
     }
-
-    // read n samples from antenna file
-    len_to_read = n * sizeof(double);
-
-    if (file_offset + len_to_read > file_size) {
-        file_offset = 0;
-    }
-
-    len_read = pread(fd, antenna, len_to_read, file_offset);
-    if (len_read != len_to_read) {
-        FATAL("read %s, len=%d, %d\n", ANTENNA_FILENAME, len_read, len_to_read);
-    }
-    file_offset += len_read;
 
     // shift the frequency to ctr_freq, and copy to caller's buffer
-    w = TWO_PI * ctr_freq;
-    t = 0;
+    double w = TWO_PI * ctr_freq;
     for (int i = 0; i < n; i++) {
-        buff[i] = antenna[i] * cexp(-I * w * t);
+        data[i] = antenna[idx++] * cexp(-I * w * t);
+        if (idx == max) idx = 0;
         t += DELTA_T;
     }
 }
 
-// ---- async ----
+// ---- sync read ----
+
+void sdr_read_sync(freq_t ctr_freq, complex *data, int n)
+{
+    get_simulated_antenna_data(ctr_freq, data, n);
+    usleep(1000000 * (n * DELTA_T));
+}
+
+// ---- async read ----
 
 struct {
-    pthread_t tid;
-    bool cancel;
+    pthread_t       tid;
+    bool            cancel;
     sdr_async_rb_t *rb;
-    freq_t ctr_freq;
+    freq_t          ctr_freq;
 } async;
+
 static void *async_read_thread(void *cx);
 
 void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb)
 {
-    // error if the async read thread is currently running
     if (async.tid != 0) {
         ERROR("sdr async read is already active\n");
         return;
     }
 
-    // xxx
     rb->head = rb->tail = 0;
     async.ctr_freq = ctr_freq;
     async.rb = rb;
 
-    // create the async read thread
     pthread_create(&async.tid, NULL, async_read_thread, NULL);
 }
 
@@ -393,44 +377,52 @@ void sdr_cancel_async(void)
     async.cancel = false;
     async.rb = NULL;
     async.ctr_freq = 0;
-    __sync_synchronize();
     async.tid = 0;
 }
 
 static void *async_read_thread(void *cx)
 {
     #define MAX_DATA 131072
-    static complex data[MAX_DATA];
-    int i, n=MAX_DATA, rb_avail;
+
     sdr_async_rb_t *rb = async.rb;
-    unsigned long rb_tail;
+    complex         data[MAX_DATA];
 
     NOTICE("async read thread starting, f=%ld\n", async.ctr_freq);
 
     while (true) {
-        // get a block of data  xxx no delay
-        get_simulated_data(async.ctr_freq, data, n);
-        //usleep(1000000 * (n * DELTA_T)); //xxx
-        usleep(1000000 * (n * DELTA_T * .8)); //xxx
+        // get a block of simulated antenna data
+        get_simulated_antenna_data(async.ctr_freq, data, MAX_DATA);
 
-        // add the data to the ring buffer
-        rb_avail = MAX_SDR_ASYNC_RB_DATA - (rb->tail - rb->head);
-        if (n > rb_avail) {
-            n = rb_avail;
+        // wait for room in the ring buffer
+        while (true) {
+            if (async.cancel || program_terminating) {
+                goto terminate;
+            }
+
+            int rb_avail = MAX_SDR_ASYNC_RB_DATA - (rb->tail - rb->head);
+            if (rb_avail >= MAX_DATA) {
+                break;
+            }
+
+            usleep(1000);
         }
 
-        NOTICE("art publising %d\n",  n);
-        rb_tail = rb->tail;
-        for (i = 0; i < n; i++) {
-            rb->data[rb_tail++ % MAX_SDR_ASYNC_RB_DATA] = data[i];
+        // copy the data to the tail of ring buffer
+        unsigned long rb_tail = rb->tail;
+        for (int i = 0; i < MAX_DATA; i++) {
+            rb->data[rb_tail % MAX_SDR_ASYNC_RB_DATA] = data[i];
+            rb_tail++;
         }
         rb->tail = rb_tail;
 
         // check for cancel request
-        if (async.cancel) {
-            break;
+        if (async.cancel || program_terminating) {
+            goto terminate;
         }
     }
+
+terminate:
+    NOTICE("async read thread terminating, f=%ld\n", async.ctr_freq);
 
     return NULL;
 }

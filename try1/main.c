@@ -53,8 +53,6 @@ int main(int argc, char **argv)
     scan_init();
     display_init();
 
-    sleep(3);
-
     // runtime
     display_handler();
 

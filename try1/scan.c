@@ -150,7 +150,7 @@ static void play_band(band_t *b)
     NOTICE("PLAY BAND %s\n", b->name);
 
     // find strong signals
-    freq_t f[] = { 460000, 500000, 540000 };
+    freq_t f[] = { 500000, 540000, 460000 };
     int max = sizeof(f) / sizeof(f[0]);
 
     // play 
@@ -163,30 +163,31 @@ static void play(freq_t f, int secs)
 {
     #define VOLUME_SCALE 10
 
-    complex data, data_lpf;
-    double data_demod, data_demod_volscale;
     sdr_async_rb_t *rb;
-    int max = secs * SDR_SAMPLE_RATE;
+    complex         data, data_lpf;
+    double          data_demod, data_demod_volscale;
+    int             max = secs * SDR_SAMPLE_RATE;
 
     rb = malloc(sizeof(sdr_async_rb_t));
     sdr_read_async(f, rb);
 
     while (true) {
-        // wait for data to be available
-        if (rb->head == rb->tail) {
+        // wait for a data item to be available
+        while (rb->head == rb->tail) {
             usleep(1000);
-            continue;
         }
 
-        // process the data
+        // process the data item
         data = rb->data[rb->head % MAX_SDR_ASYNC_RB_DATA];
         data_lpf = lpf(data, 4000);
         data_demod = cabs(data_lpf);
         data_demod_volscale = data_demod * VOLUME_SCALE;
         downsample_and_audio_out(data_demod_volscale);
 
-        // if 5 secs have been processed then we are done playing
+        // done with this rb data item
         rb->head++;
+
+        // if 5 secs have been processed then we are done playing
         if (rb->head == max) {
             break;
         }
@@ -194,8 +195,6 @@ static void play(freq_t f, int secs)
 
     sdr_cancel_async();
     free(rb);
-//program_terminating = true;
-//exit(1);
 }
 
 #define LPF_ORDER  20 //xxx ?
@@ -221,16 +220,14 @@ static void downsample_and_audio_out(double x)
     static void *ma_cx;
     double ma;
 
-    int tc_volume = 50;
+    double volume = 0.5;
 
-    //#define NUM_DS ((int)(0.97 * SDR_SAMPLE_RATE / AUDIO_SAMPLE_RATE))
     #define NUM_DS ((int)((double)SDR_SAMPLE_RATE / AUDIO_SAMPLE_RATE))
 
     ma = moving_avg(x, NUM_DS, &ma_cx);
 
     if (cnt++ == NUM_DS) {
-        audio_out(ma * (tc_volume / 100.));
+        audio_out(ma * volume);
         cnt = 0;
     }
 }
-
