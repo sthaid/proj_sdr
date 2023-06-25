@@ -1,0 +1,12 @@
+#!/bin/bash
+
+git status -suno
+read -p "Continue (Y/n)" yn
+echo $yn
+if [ "$yn" != "" -a "$yn" != y -a "$yn" != Y ]; then
+  echo ABORT
+  exit 1
+fi
+
+git commit --all -m cont
+git push
