@@ -1,5 +1,7 @@
 #include "common.h"
 
+// xxx also decode fm stereo
+
 static void *scan_thread(void *cx);
 static void fft_band(band_t *b);
 static void play_band(band_t *b);
@@ -161,6 +163,7 @@ static void fft_band(band_t *b)
 
 // ---------------------------------------------------------------------
 
+static void find(band_t *b, int n, double limit);
 static void play(freq_t f, int secs);
 static complex lpf(complex x, double f_cut);
 static void downsample_and_audio_out(double x);
@@ -172,55 +175,9 @@ static void play_band(band_t *b)
 // - in display.c,  print the max to display
 // - keep track of station bandwidth
 #if 1
-    #define N 21  // should be odd
-    #define LIMIT 500
-
-    void   *ma_cx = NULL;
-    bool   found  = false;
-    double v, ma, max=0;
-    int    i, idx=0;
-    freq_t f;
-
-//  if (strcmp(b->name, "TEST") != 0) {
-//      return;
-//  }
-
-    for (i = 0; i < b->max_cabs_fft; i++) {
-        v = b->cabs_fft[i];
-        ma = moving_avg(v, N, &ma_cx);
-        if (i < N-1) continue;
-
-        if (!found) {
-            if (ma > LIMIT) {
-                found = true;
-                max = ma;
-                idx = i;
-            }
-        } else {
-            if (ma > max) {
-                max = ma;
-                idx = i;
-            }
-
-            if (ma < LIMIT) {
-                idx -= N/2;
-                f = b->f_min + idx * (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
-                if (true) {
-                    NOTICE("FOUND %s f=%ld  max=%d\n", b->name, f, (int)max);
-                    b->f_play = f;
-                    play(f, 3);
-                    //usleep(500000);
-                    b->f_play = 0;
-                } else {
-                    NOTICE("DISCARD FOUND %s %ld\n", b->name, f);
-                }
-                found = false;
-            }
-        }
-    }
-    BLANKLINE;
-
-    free(ma_cx);
+    //      n    limit
+    find(b, 500, 500);  //xxx was 2000
+    find(b, 10, 500);
 #else
     if (strcmp(b->name, "TEST") != 0) {
         return;
@@ -239,6 +196,70 @@ static void play_band(band_t *b)
         b->f_play = 0;
     }
 #endif
+}
+
+static void find(band_t *b, int n, double limit)
+{
+    //#define N 501  // should be odd  xxx was 21
+    //#define LIMIT 500
+
+    void   *ma_cx = NULL;
+    bool   found  = false;
+    double v, ma, max=0;
+    int    i, idx=0, idx_start=0, idx_end;
+    freq_t f, bandwidth;
+
+    if (strcmp(b->name, "TEST") != 0) {
+        return;
+    }
+    NOTICE("FIND CALLED N=%d  LIMIT=%f\n", n, limit);
+
+    n |= 1;
+
+    for (i = 0; i < b->max_cabs_fft; i++) {
+        v = b->cabs_fft[i];
+        ma = moving_avg(v, n, &ma_cx);
+        if (i < n-1) continue;
+
+        if (!found) {
+            if (ma > limit) {
+                found = true;
+                max = ma;
+                idx = i;
+                idx_start = i;
+            }
+        } else {
+            if (ma > max) {
+                max = ma;
+                idx = i;
+            }
+
+            if (ma < limit) {
+                idx_end = i;
+                bandwidth = (idx_end - idx_start) *  (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
+                if (bandwidth == 0) {
+                    NOTICE("%d %ld %d\n",
+                      (idx_end - idx_start),
+                      (b->f_max - b->f_min),
+                     b->max_cabs_fft);
+                }
+
+                idx -= n/2;
+                f = b->f_min + idx * (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
+                NOTICE("N=%d LIMIT=%f  FOUND %s f=%ld  max=%d  bandwidth=%ld\n", n, limit, b->name, f, (int)max, bandwidth);
+                b->f_play = f;
+                //play(f, 3);
+                usleep(500000);
+                b->f_play = 0;
+
+                found = false;
+            }
+        }
+    }
+    //usleep(1000000);
+    //BLANKLINE;
+
+    free(ma_cx);
 }
 
 // ---------------------------------------------------------------------
