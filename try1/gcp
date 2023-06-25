@@ -18,3 +18,5 @@ echo "GIT PUSH"
 git push
 echo
 
+echo "GIT STATUS"
+git status -suno
