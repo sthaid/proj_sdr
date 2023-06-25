@@ -169,7 +169,7 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
 
         y = loc->y + loc->h;
         x = loc->x + (double)(f - b->f_min) / (b->f_max - b->f_min) * loc->w;
-        sdl_render_point(x, y, SDL_RED, 5);
+        sdl_render_point(x, y, SDL_YELLOW, 3);
 
         f += b->fft_freq_span;
     }
@@ -180,7 +180,7 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
 
         y = loc->y + loc->h;
         x = loc->x + (double)(b->f_play - b->f_min) / (b->f_max - b->f_min) * loc->w;
-        sdl_render_point(x, y, SDL_BLUE, 5);
+        sdl_render_point(x, y, SDL_RED, 7);
     }
 
     // xxx waterfaull
@@ -228,7 +228,7 @@ static void cvt_wf_to_pixels(band_t *b, int row, int width)
 {
     unsigned char *wf;
     unsigned int  *pixels32;
-    int            pitch, i, j1, j2, k, n, sum, wf_ent_max, wvlen;
+    int            pitch, i, j1, j2, k, n, wf_ent_max, wvlen;
     unsigned char red, green, blue;
 
     pitch = width * BYTES_PER_PIXEL;
@@ -248,7 +248,7 @@ static void cvt_wf_to_pixels(band_t *b, int row, int width)
         if (n == 0) n = 1;
 
         wf_ent_max = 0;
-        for (sum = 0, k = 0; k < n; k++) {
+        for (k = 0; k < n; k++) {
             if (wf[j1+k] > wf_ent_max) {
                 wf_ent_max = wf[j1+k];
             }
@@ -256,7 +256,7 @@ static void cvt_wf_to_pixels(band_t *b, int row, int width)
 
         wvlen = 440 + wf_ent_max * 225 / 256;
 
-        sdl_wavelen_to_rgb(wvlen, &red, &green, &blue);
+        sdl_wavelen_to_rgb(wvlen, &red, &green, &blue);  // xxx optimize this routine with table lookup
 
         *pixels32++ = PIXEL(red, green, blue);
     }

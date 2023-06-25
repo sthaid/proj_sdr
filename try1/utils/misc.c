@@ -63,8 +63,7 @@ double moving_avg(double v, int n, void **cx_arg)
 
     if (*cx_arg == NULL) {
         int len = sizeof(*cx) + n*sizeof(double);
-        *cx_arg = malloc(len);
-        memset(*cx_arg, 0, len);
+        *cx_arg = calloc(len,1);
     }
     cx = *cx_arg;
 

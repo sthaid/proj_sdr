@@ -20,7 +20,7 @@ void scan_init(void)
 static void *scan_thread(void *cx)
 {
     int i;
-    int cnt=0;
+    //int cnt=0;
 
     pthread_setname_np(pthread_self(), "sdr_scan");
 
@@ -167,6 +167,61 @@ static void downsample_and_audio_out(double x);
 
 static void play_band(band_t *b)
 {
+// xxx 
+// - unit test moving avg
+// - in display.c,  print the max to display
+// - keep track of station bandwidth
+#if 1
+    #define N 21  // should be odd
+    #define LIMIT 500
+
+    void   *ma_cx = NULL;
+    bool   found  = false;
+    double v, ma, max=0;
+    int    i, idx=0;
+    freq_t f;
+
+//  if (strcmp(b->name, "TEST") != 0) {
+//      return;
+//  }
+
+    for (i = 0; i < b->max_cabs_fft; i++) {
+        v = b->cabs_fft[i];
+        ma = moving_avg(v, N, &ma_cx);
+        if (i < N-1) continue;
+
+        if (!found) {
+            if (ma > LIMIT) {
+                found = true;
+                max = ma;
+                idx = i;
+            }
+        } else {
+            if (ma > max) {
+                max = ma;
+                idx = i;
+            }
+
+            if (ma < LIMIT) {
+                idx -= N/2;
+                f = b->f_min + idx * (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
+                if (true) {
+                    NOTICE("FOUND %s f=%ld  max=%d\n", b->name, f, (int)max);
+                    b->f_play = f;
+                    play(f, 3);
+                    //usleep(500000);
+                    b->f_play = 0;
+                } else {
+                    NOTICE("DISCARD FOUND %s %ld\n", b->name, f);
+                }
+                found = false;
+            }
+        }
+    }
+    BLANKLINE;
+
+    free(ma_cx);
+#else
     if (strcmp(b->name, "TEST") != 0) {
         return;
     }
@@ -183,7 +238,10 @@ static void play_band(band_t *b)
         play(f[i], 5);
         b->f_play = 0;
     }
+#endif
 }
+
+// ---------------------------------------------------------------------
 
 static void play(freq_t f, int secs)
 {
