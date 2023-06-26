@@ -16,6 +16,7 @@
 
 #define SDL_EVENT_END_PROGRAM    (SDL_EVENT_USER_DEFINED+0)
 #define SDL_EVENT_FULLSCR        (SDL_EVENT_USER_DEFINED+1)
+#define SDL_EVENT_PLAY_TIME      (SDL_EVENT_USER_DEFINED+2)
 
 #define W (wi.w)
 #define H (wi.h)
@@ -77,6 +78,14 @@ void display_handler(void)
             "FULLSCR", SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_FULLSCR, SDL_EVENT_TYPE_MOUSE_LEFT_CLICK);
 
+        char play_time_str[100];
+        sprintf(play_time_str, "%d", play_time);
+        sdl_render_text_and_register_event(
+            W - FTCW2*10 , 0, FTSZ2,
+            play_time_str, SDL_LIGHT_BLUE, SDL_BLACK,
+            SDL_EVENT_PLAY_TIME, SDL_EVENT_TYPE_MOUSE_WHEEL);
+
+
         // present the display
         sdl_display_present();
 
@@ -119,6 +128,12 @@ static bool handle_event(sdl_event_t *ev)
         fullscr = !fullscr;
         sdl_full_screen(fullscr);
         break;
+    case SDL_EVENT_PLAY_TIME: {
+        int tmp = play_time + ev->mouse_wheel.delta_y;
+        if (tmp < 0) tmp = 0;
+        if (tmp > 10) tmp = 10;
+        play_time = tmp;
+        break; }
     default:
         redraw = false;
         break;
@@ -136,8 +151,10 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
     unsigned long i;
     double max = 0, scaling;
 
-    #define MAX_POINTS 1000000
+    #define MAX_POINTS 1000000  //xxx why so many
     static point_t points[MAX_POINTS];
+
+    #define F2X(_f) (loc->x + ((_f) - b->f_min) * loc->w / (b->f_max - b->f_min))
 
     if (b->max_cabs_fft > MAX_POINTS) {
         FATAL("max_cabs_fft %d, too large\n", b->max_cabs_fft);
@@ -163,27 +180,23 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
     
     sdl_render_lines(points, b->max_cabs_fft, SDL_WHITE);
 
+
+    // FFT LOCS
+
     freq_t f = b->f_min + b->fft_freq_span/2;
     for (i = 0; i < b->num_fft; i++) {
         int x, y;
 
         y = loc->y + loc->h;
-        x = loc->x + (double)(f - b->f_min) / (b->f_max - b->f_min) * loc->w;
+        //x = loc->x + (double)(f - b->f_min) / (b->f_max - b->f_min) * loc->w;
+        x = F2X(f);
         sdl_render_point(x, y, SDL_YELLOW, 3);
 
         f += b->fft_freq_span;
     }
 
-    // scan play 
-    if (b->f_play != 0) {
-        int x, y;
+    // WATERFALL
 
-        y = loc->y + loc->h;
-        x = loc->x + (double)(b->f_play - b->f_min) / (b->f_max - b->f_min) * loc->w;
-        sdl_render_point(x, y, SDL_RED, 7);
-    }
-
-    // xxx waterfaull
     int pitch, num_new_lines;
 
     pitch = loc->w * BYTES_PER_PIXEL;
@@ -196,7 +209,7 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
         b->wf.texture = sdl_create_texture(loc->w, MAX_WATERFALL);
         b->wf.pixels8 = calloc(MAX_WATERFALL*loc->w, BYTES_PER_PIXEL);
 
-        NOTICE("ALLOCING   max_cabs_fft=%d\n", b->max_cabs_fft);
+        //NOTICE("ALLOCING   max_cabs_fft=%d\n", b->max_cabs_fft);
         for (int row = 0; row < MAX_WATERFALL; row++) {
             cvt_wf_to_pixels(b, row, loc->w);
         }
@@ -222,6 +235,37 @@ static void do_plot(band_t *b, rect_t *loc)  // xxx name
 
     sdl_render_texture(loc->x, loc->y+loc->h+5, b->wf.texture);
 
+
+    // LOCATION OF FOUND STATIONS
+    for (i = 0; i < b->max_scan_station; i++) {
+        struct scan_station_s *ss = &b->scan_station[i];
+        int x1, x2, y;
+
+        x1 = F2X(ss->f - ss->bw/2);
+        x2 = F2X(ss->f + ss->bw/2);
+        y = loc->y + loc->h;
+
+        if (x2-x1 > 2) {
+            sdl_render_line(x1, y-2, x2, y-2, SDL_ORANGE);
+            sdl_render_line(x1, y-1, x2, y-1, SDL_ORANGE);
+            sdl_render_line(x1, y, x2, y, SDL_ORANGE);
+            sdl_render_line(x1, y+1, x2, y+1, SDL_ORANGE);
+            sdl_render_line(x1, y+2, x2, y+2, SDL_ORANGE);
+        } else {
+            sdl_render_point((x1+x2)/2, y, SDL_ORANGE, 3);
+        }
+    }
+
+    // WHICH STATION IS PLAYING
+    if (b->f_play != 0) {
+        int x, y;
+
+        y = loc->y + loc->h;
+        //x = loc->x + (double)(b->f_play - b->f_min) / (b->f_max - b->f_min) * loc->w;
+        //x = loc->x + (b->f_play - b->f_min) * loc->w / (b->f_max - b->f_min);
+        x = F2X(b->f_play);
+        sdl_render_point(x, y, SDL_RED, 7);
+    }
 }
 
 static void cvt_wf_to_pixels(band_t *b, int row, int width)

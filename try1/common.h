@@ -44,6 +44,7 @@ typedef unsigned long freq_t;
 
 #define MAX_BAND    20
 #define MAX_STATION 20
+#define MAX_SCAN_STATION 100
 
 // xxx malloc these
 typedef struct band_s {
@@ -53,7 +54,7 @@ typedef struct band_s {
     freq_t f_max;
     freq_t f_step;
     int max_station;
-    struct {
+    struct station_s {
         freq_t f;
         char *name;
         // xxx demod
@@ -67,17 +68,14 @@ typedef struct band_s {
     int active;
 
     // xxx
-    double *cabs_fft;
-    int max_cabs_fft;
+    int      num_fft;
+    freq_t   fft_freq_span;
+    double  *cabs_fft;
+    int      max_cabs_fft;
     complex *fft_in;
     complex *fft_out;
 
-    int num_fft;
-    freq_t fft_freq_span;
-
-    freq_t f_play;
-
-    struct {
+    struct wf_s {
         unsigned char *data;
         int            num;
         int            last_displayed_num;
@@ -85,6 +83,13 @@ typedef struct band_s {
         unsigned char *pixels8;
         texture_t      texture;
     } wf;
+
+    freq_t f_play;
+    int max_scan_station;
+    struct scan_station_s {
+        freq_t f;
+        freq_t bw;
+    } scan_station[MAX_SCAN_STATION];
 } band_t;
 
 #define MAX_WATERFALL 500
@@ -105,13 +110,19 @@ static inline unsigned char * get_waterfall(band_t *b, int row)
 EXTERN int           max_band;
 EXTERN band_t       *band[MAX_BAND];
 
+EXTERN int           play_time;
+
+EXTERN bool          program_terminating;
+
+
+
+// xxx not used yet
 EXTERN int           zoom;
 EXTERN int           volume;
 EXTERN int           mute;
 EXTERN int           scan_intvl;
 EXTERN int           help;
 
-EXTERN bool          program_terminating;
 
 // -----------------  PROTOTYPES  ------------------------
 

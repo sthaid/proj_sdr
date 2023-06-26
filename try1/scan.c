@@ -162,59 +162,69 @@ static void fft_band(band_t *b)
 }
 
 // ---------------------------------------------------------------------
+// xxx todo
+// - display range of stations in the band being played
+// - snap the freq ?
+// - adjust play time
+// - ctrl chars
+//     skip to next
+//     pause
+//     continue
 
 static void find(band_t *b, int n, double limit);
+static int compare(const void *a_arg, const void *b_arg);
+static int add(band_t *b, freq_t f, freq_t bw);
 static void play(freq_t f, int secs);
 static complex lpf(complex x, double f_cut);
 static void downsample_and_audio_out(double x);
 
 static void play_band(band_t *b)
 {
-// xxx 
-// - unit test moving avg
-// - in display.c,  print the max to display
-// - keep track of station bandwidth
-#if 1
-    //      n    limit
-    find(b, 500, 500);  //xxx was 2000
-    find(b, 10, 500);
-#else
-    if (strcmp(b->name, "TEST") != 0) {
-        return;
-    }
+    int i;
+
+//  if (strcmp(b->name, "TEST") != 0) {
+//      return;
+//  }
 
     NOTICE("PLAY BAND %s\n", b->name);
 
-    // find strong signals
-    freq_t f[] = { 500000, 540000, 460000 };
-    int max = sizeof(f) / sizeof(f[0]);
+    b->max_scan_station = 0;
+    find(b, 50000,  500);  // xxx use squelch
+    find(b,  1000,  500);
 
-    // play 
-    for (int i = 0; i < max; i++) {
-        b->f_play = f[i];
-        play(f[i], 5);
+    qsort(b->scan_station, b->max_scan_station, sizeof(struct scan_station_s), compare);
+
+    NOTICE("FIND RESULT cnt=%d\n", b->max_scan_station);
+    for (i = 0; i < b->max_scan_station; i++) {
+        struct scan_station_s *ss = &b->scan_station[i];
+        NOTICE("f=%ld  bw=%ld\n", ss->f, ss->bw);
+    }
+
+    for (i = 0; i < b->max_scan_station; i++) {
+        struct scan_station_s *ss = &b->scan_station[i];
+
+        b->f_play = ss->f;
+        play(ss->f, 1);
         b->f_play = 0;
     }
-#endif
 }
 
-static void find(band_t *b, int n, double limit)
+static void find(band_t *b, int avg_freq_span, double threshold)
 {
-    //#define N 501  // should be odd  xxx was 21
-    //#define LIMIT 500
-
     void   *ma_cx = NULL;
     bool   found  = false;
     double v, ma, max=0;
-    int    i, idx=0, idx_start=0, idx_end;
-    freq_t f, bandwidth;
+    int    i, idx_of_max=0, idx_start=0, idx_end, n;
+    freq_t f, bw;
 
-    if (strcmp(b->name, "TEST") != 0) {
-        return;
-    }
-    NOTICE("FIND CALLED N=%d  LIMIT=%f\n", n, limit);
+//  if (strcmp(b->name, "TEST") != 0) {
+//      return;
+//  }
 
+    n = avg_freq_span / FFT_ELEMENT_HZ;
     n |= 1;
+
+    NOTICE("FIND CALLED AVG_FREQ_SPAN=%d  THRESHOLD=%f  --  N=%d\n", avg_freq_span, threshold, n);
 
     for (i = 0; i < b->max_cabs_fft; i++) {
         v = b->cabs_fft[i];
@@ -222,56 +232,92 @@ static void find(band_t *b, int n, double limit)
         if (i < n-1) continue;
 
         if (!found) {
-            if (ma > limit) {
+            if (ma > threshold) {
                 found = true;
                 max = ma;
-                idx = i;
+                idx_of_max = i;
                 idx_start = i;
             }
         } else {
             if (ma > max) {
                 max = ma;
-                idx = i;
+                idx_of_max = i;
             }
 
-            if (ma < limit) {
+            if (ma < threshold) {
                 idx_end = i;
-                bandwidth = (idx_end - idx_start) *  (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
-                if (bandwidth == 0) {
-                    NOTICE("%d %ld %d\n",
-                      (idx_end - idx_start),
-                      (b->f_max - b->f_min),
-                     b->max_cabs_fft);
+                bw = (idx_end - idx_start) *  (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
+                if (bw == 0) {
+                    ERROR("bw %d %ld %d\n", (idx_end - idx_start), (b->f_max - b->f_min), b->max_cabs_fft);
                 }
 
-                idx -= n/2;
-                f = b->f_min + idx * (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
-                NOTICE("N=%d LIMIT=%f  FOUND %s f=%ld  max=%d  bandwidth=%ld\n", n, limit, b->name, f, (int)max, bandwidth);
-                b->f_play = f;
-                //play(f, 3);
-                usleep(500000);
-                b->f_play = 0;
+                idx_of_max -= n/2;
+                f = b->f_min + idx_of_max * (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
+
+                // xxx snap the freq
+
+                //NOTICE("FOUND %s f=%ld  max=%d  bw=%ld\n", b->name, f, (int)max, bw);
+
+                add(b, f, bw);
 
                 found = false;
             }
         }
     }
-    //usleep(1000000);
-    //BLANKLINE;
 
     free(ma_cx);
 }
 
+// return
+//  0: success
+// -1: scan_station table is full
+// -2: duplicate, not added
+static int add(band_t *b, freq_t f, freq_t bw)
+{
+    struct scan_station_s *ss = &b->scan_station[b->max_scan_station];
+    int j;
+
+    if (b->max_scan_station >= MAX_SCAN_STATION) {
+        ERROR("ADD FULL\n");
+        return -1;
+    }
+
+    for (j = 0; j < b->max_scan_station; j++) {
+        struct scan_station_s *ss = &b->scan_station[j];
+        if ((f >= ss->f - ss->bw/2) && (f <= ss->f + ss->bw/2)) {
+            //NOTICE("DUP f=%ld\n", f);
+            return -2;
+        }
+    }
+
+    ss->f = f;
+    ss->bw = bw;
+    b->max_scan_station++;
+    return 0;
+}
+
+static int compare(const void *a_arg, const void *b_arg)
+{
+    const struct scan_station_s *a = a_arg;
+    const struct scan_station_s *b = b_arg;
+
+    return a->f < b->f ? -1 : a->f == b->f ? 0 : 1;
+}
+
 // ---------------------------------------------------------------------
 
-static void play(freq_t f, int secs)
+static void play(freq_t f, int secs)//xxx secs not used
 {
     #define VOLUME_SCALE 10
 
     sdr_async_rb_t *rb;
     complex         data, data_lpf;
     double          data_demod, data_demod_volscale;
-    int             max = secs * SDR_SAMPLE_RATE;
+    //int             max = secs * SDR_SAMPLE_RATE;
+
+    if (play_time == 0) {
+        return;
+    }
 
     rb = malloc(sizeof(sdr_async_rb_t));
     sdr_read_async(f, rb);
@@ -296,7 +342,7 @@ static void play(freq_t f, int secs)
         rb->head++;
 
         // if 5 secs have been processed then we are done playing
-        if (rb->head == max) {
+        if (rb->head >= play_time * SDR_SAMPLE_RATE) {
             break;
         }
     }
