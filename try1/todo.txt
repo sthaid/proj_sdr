@@ -2,8 +2,8 @@ new antenna sim
 test band mode
 static and dynamic config files
 cleanup common.h
-rename scan.c to sdr.c
 rename ut to unit_test
-mv notes to todo.txt
 
 === DONE ===
+rename scan.c to sdr.c
+mv notes to todo.txt

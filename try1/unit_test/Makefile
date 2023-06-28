@@ -1,4 +1,4 @@
-TARGETS = ut_sdl
+TARGETS = sdl_test
 
 LIBS    = -lSDL2 -lSDL2_ttf -lpng -lm
 INCLUDE = -I../utils -I/usr/include/SDL2
@@ -8,7 +8,7 @@ UTILS   = ../utils/misc.c ../utils/sdl.c ../utils/png_rw.c
 
 all: $(TARGETS)
 
-ut_sdl: ut_sdl.c $(UTILS)
+sdl_test: sdl_test.c $(UTILS)
 	gcc $(FLAGS) $(INCLUDE) -o $@ $^ $(LIBS)
 
 clean:
