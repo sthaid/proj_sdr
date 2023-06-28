@@ -52,7 +52,7 @@ int main(int argc, char **argv)
     config_init();
     config_write(); // xxx
     audio_init();
-    scan_init();
+    radio_init();
     display_init();
 
     // runtime

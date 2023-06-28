@@ -8,7 +8,64 @@ static void play_band(band_t *b);
 
 // -----------------------------------------------------------------
 
-void scan_init(void)
+#if 0
+ctrls:
+- FFT RECV SCAN   3 buttons to set state  AND f1,f2,f3
+- when fft
+    . +/- to adjust interval
+- when scanning
+    . +/- to adjust play time
+    . tab and ctrl-tab to go next,prev station
+    . 'space' to pause/unpause
+- when recv
+    . freq ctrl
+      - arrows
+      - click on the fft
+    . 'z' toggles zoom
+
+displays:
+- FFT RECV SCAN
+- IN FFT mode
+  - the desired and actual fft interval
+- IN scan mode 
+  - the play intvl, and paused or playing state
+  - highlight the band being played,  and the station in the band
+  - the frequency and demod
+- IN Recv mode
+  - the desired and actual fft interval
+  - the frequency and demod
+
+---------------------
+
+thread ...
+when entering a state:
+- clear the published fft
+
+ideas
+- the top waterfall data is also what is displayed in the fft graph
+
+while 1 {
+    if state == SCAN || FFT
+        wait for time to do the fft
+        fft all bands that are selected
+        add waterfall for all other bands,  so they all push down togethor
+        find stations in all selected bands
+        if scan
+            play next station until all bands are done
+               while playing, update the fft, but do not need to include it in the waterfall
+        endif
+    else if state == RECV
+        get data, and play it
+        if time for the fft
+            do the fft,  and it will be displayed
+            add waterfall for all other bands,  so they all push down togethor
+
+            might want seperate fft thread
+    endif
+}
+#endif
+
+void radio_init(void)
 {
     pthread_t tid;
 

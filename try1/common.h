@@ -126,6 +126,9 @@ EXTERN int           help;
 
 // -----------------  PROTOTYPES  ------------------------
 
+// radio.c
+void radio_init(void);
+
 // config.c
 void config_init(void);
 void config_write(void);
@@ -138,8 +141,7 @@ void display_handler(void);
 void audio_init(void);
 void audio_out(double yo);
 
-// rtlsdr.c
-// xxx check these
+// sdr.c xxx check these
 #define MAX_SDR_ASYNC_RB_DATA  (16*32*512/2 * 2)  // 131072 * 2 = 262144
 typedef struct {
     unsigned long head;
@@ -156,6 +158,4 @@ void sdr_read_sync(freq_t ctr_freq, complex *buff, int n);
 void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb);
 void sdr_cancel_async(void);
 
-// scan.c
-void scan_init(void);
 
