@@ -36,7 +36,8 @@ int main(int argc, char **argv)
             sdr_list_devices();
             return 0;
         case 't':
-            sdr_test(0, SDR_SAMPLE_RATE);  // xxx opt needed for idx
+            sdr_init(0, SDR_SAMPLE_RATE);  // xxx opt for idx
+            sdr_hardware_test();
             return 0;
         case '?':
             return 1;

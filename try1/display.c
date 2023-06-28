@@ -32,14 +32,18 @@ static bool       fullscr;
 // prototypes
 //
 
-static bool handle_event(sdl_event_t *ev);
-static void do_plot(band_t *b, rect_t *loc);  // xxx name
+static void handle_events(void);
+static void display_band(band_t *b, rect_t *loc);  // xxx name
 
 // -----------------  DISPLAY INIT  -------------------------------
 
 void display_init(void)
 {
-    sdl_init(1600, 800, false, true, false, &wi);
+    sdl_init(1600, 800, 
+             false,   // fullscreen
+             true,    // resizeable
+             false,   // swap_white_black
+             &wi);
 }
 
 // -----------------  DISPLAY HANDLER  ----------------------------
@@ -50,21 +54,19 @@ void display_handler(void)
         // display init
         sdl_display_init();
 
-        // Hello
+        // display the title line
         sdl_render_text(0, 0, FTSZ1, "Hello!", SDL_WHITE, SDL_BLACK);
 
-        // xxx loop
+        // disaplay the bands that are selected
         int x = 0, i;
         for (i = 0; i < max_band; i++) {
             band_t *b = band[i];
-            if (b->cabs_fft == NULL || b->max_cabs_fft == 0) {
-                continue;
+
+            if (b->selected) {
+                rect_t loc = {x, 50, 700, 400};
+                display_band(b, &loc);
+                x += 800;
             }
-
-            rect_t loc = {x, 50, 700, 400};
-            do_plot(b, &loc);
-
-            x += 800;
         }
 
         // register events
@@ -85,27 +87,11 @@ void display_handler(void)
             play_time_str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_PLAY_TIME, SDL_EVENT_TYPE_MOUSE_WHEEL);
 
-
         // present the display
         sdl_display_present();
 
         // handle events
-        sdl_event_t *ev;
-        int poll_count = 0;
-        bool redraw;
-
-        while (true) {
-            ev = sdl_poll_event();
-            poll_count++;
-
-            redraw = handle_event(ev);
-
-            if (redraw || poll_count == 10) {
-                break;
-            }
-
-            usleep(10000);
-        }
+        handle_events();
 
         // if program is terminating then return
         if (program_terminating) {
@@ -114,40 +100,56 @@ void display_handler(void)
     }
 }
 
-static bool handle_event(sdl_event_t *ev)
+static void handle_events(void)
 {
-    bool redraw = true;
+    bool         event_was_handled;
+    int          poll_count = 0;
+    sdl_event_t *ev;
 
-    switch (ev->event_id) {
-    case SDL_EVENT_QUIT:
-    case SDL_EVENT_END_PROGRAM:
-    case SDL_EVENT_KEYMOD_CTRL + 'q':
-        program_terminating = true;
-        break;
-    case SDL_EVENT_FULLSCR:
-        fullscr = !fullscr;
-        sdl_full_screen(fullscr);
-        break;
-    case SDL_EVENT_PLAY_TIME: {
-        int tmp = play_time + ev->mouse_wheel.delta_y;
-        if (tmp < 0) tmp = 0;
-        if (tmp > 10) tmp = 10;
-        play_time = tmp;
-        break; }
-    default:
-        redraw = false;
-        break;
+    while (true) {
+        ev = sdl_poll_event();
+
+        poll_count++;
+        event_was_handled = true;
+
+        switch (ev->event_id) {
+        case SDL_EVENT_QUIT:
+        case SDL_EVENT_END_PROGRAM:
+        case SDL_EVENT_KEYMOD_CTRL + 'q':
+            program_terminating = true;
+            break;
+        case SDL_EVENT_FULLSCR:
+            fullscr = !fullscr;
+            sdl_full_screen(fullscr);
+            break;
+        case SDL_EVENT_PLAY_TIME: {
+            // xxx redo this
+            int tmp = play_time + ev->mouse_wheel.delta_y;
+            if (tmp < 0) tmp = 0;
+            if (tmp > 10) tmp = 10;
+            play_time = tmp;
+            break; }
+        default:
+            event_was_handled = false;
+            break;
+        }
+
+        if (event_was_handled || poll_count == 10) {
+            break;
+        }
+
+        usleep(10000);
     }
-
-    return redraw;
 }
 
-// -----------------  SUPPORT ROUTINES  ---------------------------
+// -----------------  DISPLAY BAND  -------------------------------
 
 static void cvt_wf_to_pixels(band_t *b, int row, int width);
 
-static void do_plot(band_t *b, rect_t *loc)  // xxx name
+static void display_band(band_t *b, rect_t *loc)  // xxx name
 {
+    // xxx cleanup
+
     unsigned long i;
     double max = 0, scaling;
 

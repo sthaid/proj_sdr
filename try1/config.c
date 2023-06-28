@@ -46,7 +46,7 @@ void config_init(void)
             cnt = sscanf(s+5, "%ms %lf %lf",
                          &b->name, 
                          &f_min, &f_max);
-            if (cnt != 9) {
+            if (cnt != 3) {
                 BAD_CONFIG_FILE_LINE;
             }
             b->f_min  = nearbyint(f_min * MHZ);

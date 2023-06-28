@@ -147,8 +147,7 @@ void audio_out(double yo);
 // sdr.c xxx check these
 void sdr_init(int dev_idx, int sample_rate);
 void sdr_list_devices(void);
-void sdr_print_dev_info(void);
-void sdr_test(int dev_idx, int sample_rate);
+void sdr_hardware_test(void);
 void sdr_read_sync(freq_t ctr_freq, complex *buff, int n);
 void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb);
 void sdr_cancel_async(void);

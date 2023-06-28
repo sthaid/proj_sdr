@@ -6,13 +6,13 @@ cleanup common.h
 rename ut to unit_test
 
 review:
-common.h         more work needed
+common.h         ok for now
 audio.c          ok for now
 config.c         ok for now
-display.c
+display.c       more work needed
 main.c          ok for now
 radio.c
-sdr.c
+sdr.c           needs the real sync/async reads
 
 
 === DONE ===
