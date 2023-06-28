@@ -1,9 +1,27 @@
+sdl text box
 new antenna sim
 test band mode
 static and dynamic config files
 cleanup common.h
 rename ut to unit_test
 
+review:
+common.h         more work needed
+audio.c          ok for now
+config.c         ok for now
+display.c
+main.c          ok for now
+radio.c
+sdr.c
+
+
 === DONE ===
 rename scan.c to sdr.c
 mv notes to todo.txt
+
+
+==== SAVE ===
+old sdr.config
+#    name   min   max step       freq demod squelch selected active
+BAND TEST  0.4  1.0   0         0.8       0       0        1      1
+

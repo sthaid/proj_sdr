@@ -37,16 +37,25 @@
 #define KHZ 1000
 #define MHZ 1000000
 
-
-// -----------------  CONFIG  ----------------------------
+// -----------------  xxxxxxxxxxx  ---------------------------------
 
 typedef unsigned long freq_t;
 
-#define MAX_BAND    20
-#define MAX_STATION 20
-#define MAX_SCAN_STATION 100
+#define MAX_SDR_ASYNC_RB_DATA  (16*32*512/2 * 2)  // 131072 * 2 = 262144
 
-// xxx malloc these
+typedef struct {
+    unsigned long head;
+    unsigned long tail;
+    complex data[MAX_SDR_ASYNC_RB_DATA];
+} sdr_async_rb_t;
+
+// -----------------  STRUCT BAND  ---------------------------------
+
+#define MAX_BAND         20
+#define MAX_STATION      20
+#define MAX_SCAN_STATION 100
+#define MAX_WATERFALL    500
+
 typedef struct band_s {
     // static config
     char *name;
@@ -67,7 +76,7 @@ typedef struct band_s {
     int selected;
     int active;
 
-    // xxx
+    // xxx clean up what follows
     int      num_fft;
     freq_t   fft_freq_span;
     double  *cabs_fft;
@@ -92,46 +101,40 @@ typedef struct band_s {
     } scan_station[MAX_SCAN_STATION];
 } band_t;
 
-#define MAX_WATERFALL 500
-
-
 // use -1 is for a new entry
 static inline unsigned char * get_waterfall(band_t *b, int row)
 {
     int tmp = (b->wf.num - 1 - row);
-
     if (tmp < 0) {
         return NULL;
     }
-
     return b->wf.data + ((tmp % MAX_WATERFALL) * b->max_cabs_fft);
 }
 
-EXTERN int           max_band;
-EXTERN band_t       *band[MAX_BAND];
+EXTERN band_t *band[MAX_BAND];
+EXTERN int     max_band;
 
-EXTERN int           play_time;
+// -----------------  VARIABLES  -----------------------------------
 
-EXTERN bool          program_terminating;
+EXTERN bool program_terminating;
+EXTERN int  play_time; //xxx del
 
-
-
+#if 0
 // xxx not used yet
 EXTERN int           zoom;
 EXTERN int           volume;
 EXTERN int           mute;
 EXTERN int           scan_intvl;
 EXTERN int           help;
+#endif
 
-
-// -----------------  PROTOTYPES  ------------------------
+// -----------------  PROTOTYPES  ----------------------------------
 
 // radio.c
 void radio_init(void);
 
 // config.c
 void config_init(void);
-void config_write(void);
 
 // display.c
 void display_init(void);
@@ -142,20 +145,11 @@ void audio_init(void);
 void audio_out(double yo);
 
 // sdr.c xxx check these
-#define MAX_SDR_ASYNC_RB_DATA  (16*32*512/2 * 2)  // 131072 * 2 = 262144
-typedef struct {
-    unsigned long head;
-    unsigned long tail;
-    complex data[MAX_SDR_ASYNC_RB_DATA];
-} sdr_async_rb_t;
-
-void sdr_list_devices(void);
 void sdr_init(int dev_idx, int sample_rate);
-void sdr_print_info(void);
+void sdr_list_devices(void);
+void sdr_print_dev_info(void);
 void sdr_test(int dev_idx, int sample_rate);
 void sdr_read_sync(freq_t ctr_freq, complex *buff, int n);
-
 void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb);
 void sdr_cancel_async(void);
-
 

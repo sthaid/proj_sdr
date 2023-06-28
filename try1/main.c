@@ -47,10 +47,8 @@ int main(int argc, char **argv)
     }
 
     // initialization
-    //sdr_init(0, SDR_SAMPLE_RATE);  // xxx opt for idx
-
+    sdr_init(0, SDR_SAMPLE_RATE);  // xxx opt for idx
     config_init();
-    config_write(); // xxx
     audio_init();
     radio_init();
     display_init();
@@ -59,6 +57,7 @@ int main(int argc, char **argv)
     display_handler();
 
     // program terminating
-    //config_write();
     NOTICE("program terminating\n");
+
+    return 0;
 }

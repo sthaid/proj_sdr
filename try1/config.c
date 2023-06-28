@@ -1,39 +1,28 @@
 #include "common.h"
 
-#define CONFIG_FILENAME "sdr.config"
+#define FILENAME "sdr.config"
 
-#define MAX_VARS (sizeof(vars) / sizeof(vars[0]))
-
-static struct {
-    char *name;
-    int  *value;
-} vars[] = {
-    { "zoom",       &zoom       },
-    { "volume",     &volume     },
-    { "mute",       &mute       },
-    { "scan_intvl", &scan_intvl },
-    { "help",       &help       },
-            };
+static void config_dump(void);
 
 // -------------------------------------------------------------
 
 void config_init(void)
 {
     FILE          *fp;
-    int            i, cnt, line_num=0;
+    int            cnt, line_num=0;
     char           s[200];
     struct band_s *b=NULL;
-    double         f_min, f_max, f_step, f;
+    double         f_min, f_max, f;
 
     #define BAD_CONFIG_FILE_LINE \
         do { \
-            FATAL("bad config file line %d: '%s'\n", line_num, s); \
+            FATAL("sdr.config line %d: '%s'\n", line_num, s); \
         } while (0)
 
     // open config file
-    fp = fopen(CONFIG_FILENAME, "r");
+    fp = fopen(FILENAME, "r");
     if (fp == NULL) {
-        FATAL("failed to open %s", CONFIG_FILENAME);
+        FATAL("failed to open %s", FILENAME);
     }
 
     // read lines from file
@@ -54,20 +43,14 @@ void config_init(void)
             b = calloc(sizeof(band_t), 1);
             band[max_band++] = b;
 
-            cnt = sscanf(s+5, "%ms %lf %lf %lf %lf %d %d %d %d",
+            cnt = sscanf(s+5, "%ms %lf %lf",
                          &b->name, 
-                         &f_min, &f_max, &f_step, &f,
-                         &b->demod,
-                         &b->squelch,
-                         &b->selected,
-                         &b->active);
+                         &f_min, &f_max);
             if (cnt != 9) {
                 BAD_CONFIG_FILE_LINE;
             }
             b->f_min  = nearbyint(f_min * MHZ);
             b->f_max  = nearbyint(f_max * MHZ);
-            b->f_step = nearbyint(f_step * MHZ);
-            b->f      = nearbyint(f * MHZ);
         } else if (strncmp(s, "STATION ", 8) == 0) {
             if (b == NULL) {
                 BAD_CONFIG_FILE_LINE;
@@ -82,6 +65,49 @@ void config_init(void)
             }
 
             b->max_station++;
+        }
+    }
+
+    // close file
+    fclose(fp);
+
+    // print the config
+    config_dump();
+}
+
+static void config_dump(void)
+{
+    int i, j;
+    struct band_s *b;
+
+    NOTICE("-------- CONFIG DUMP --------\n");
+
+    for (i = 0; i < max_band; i++) {
+        b = band[i];
+
+        NOTICE("BAND %s %f %f\n",
+               b->name, 
+               (double)b->f_min / MHZ,
+               (double)b->f_max / MHZ);
+        for (j = 0; j < b->max_station; j++) {
+            NOTICE("STATION %10f %s\n",
+                   (double)b->station[j].f / MHZ,
+                   b->station[j].name);
+        }
+        BLANKLINE;
+    }
+}
+
+
+#if 0
+// xxx save
+static struct {
+    char *name;
+    int  *value;
+} vars[] = {
+    { NULL,         NULL        },
+            };
+
         } else if (strncmp(s, "VAR ", 4) == 0) {
             char name[100];
             int  value;
@@ -91,47 +117,15 @@ void config_init(void)
                 BAD_CONFIG_FILE_LINE;
             }
 
-            for (i = 0; i < MAX_VARS; i++) {
+            for (i = 0; vars[i].name; i++) {
                 if (strcmp(name, vars[i].name) == 0) {
                     *vars[i].value = value;
                 }
             }
-        }
-    }
 
-    // close file
-    fclose(fp);
-}
 
-void config_write(void)
-{
-    FILE *fp = stdout;
-    int i, j;
-    struct band_s *b;
-
-    for (i = 0; i < max_band; i++) {
-        b = band[i];
-
-        fprintf(fp, "BAND %s %f %f %f %f %d %d %d %d\n",
-                b->name, 
-                (double)b->f_min / MHZ,
-                (double)b->f_max / MHZ,
-                (double)b->f_step / MHZ,
-                (double)b->f / MHZ,
-                b->demod,
-                b->squelch,
-                b->selected,
-                b->active);
-        for (j = 0; j < b->max_station; j++) {
-            fprintf(fp, "STATION %10f %s\n",
-                    (double)b->station[j].f / MHZ,
-                    b->station[j].name);
-        }
-        fprintf(fp, "\n");
-    }
-
-    for (i = 0; i < MAX_VARS; i++) {
+    for (i = 0; vars[i].name; i++) {
         fprintf(fp, "VAR %-10s %d\n",
                 vars[i].name, *vars[i].value);
     }
-}
+#endif

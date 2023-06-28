@@ -172,10 +172,10 @@ void sdr_init(int dev_idx, int sample_rate)
     info.ctr_freq = rtlsdr_get_center_freq(dev);
 
     // print info
-    sdr_print_info();
+    sdr_print_dev_info();
 }
 
-void sdr_print_info(void)
+void sdr_print_dev_info(void)
 {
     char tuner_gains_str[300], *p;
 
