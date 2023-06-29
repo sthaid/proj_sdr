@@ -5,6 +5,10 @@
 #include <complex.h>
 #include <wchar.h>
 
+#define ATTRIB_UNUSED __attribute__ ((unused))
+
+#define TWO_PI (2*M_PI)
+
 // -----------------  LOGGING  --------------------
 
 #define NOTICE(fmt, args...) do { log_msg("NOTICE", fmt, ## args); } while (0)

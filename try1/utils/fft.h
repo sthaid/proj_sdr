@@ -1,4 +1,4 @@
-
+#include <stdbool.h>
 #include <complex.h>  // xxx comment this needs to be before fftw3.h
 #include <fftw3.h>
 
