@@ -51,6 +51,9 @@ void config_init(void)
             }
             b->f_min  = nearbyint(f_min * MHZ);
             b->f_max  = nearbyint(f_max * MHZ);
+
+            // xxx temp
+            if (strncmp(b->name, "SIM", 3) == 0) b->selected = true;
         } else if (strncmp(s, "STATION ", 8) == 0) {
             if (b == NULL) {
                 BAD_CONFIG_FILE_LINE;

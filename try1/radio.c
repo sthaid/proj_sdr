@@ -135,6 +135,8 @@ static void fft_band(band_t *b)
     int         i, j, k1, k2;
     unsigned long start, dur_sdr_read_sync=0, dur_fft=0, dur_cabs=0;
 
+    bool sim = strncmp(b->name, "SIM", 3) == 0;
+
     #define MAX_FFT_FREQ_SPAN  1200000  // must be <= SDR_SAMPLE_RATE/2
     #define FFT_ELEMENT_HZ     100
 
@@ -179,7 +181,7 @@ static void fft_band(band_t *b)
 
         // get a block of rtlsdr data at ctr_freq
         start = microsec_timer();
-        sdr_read_sync(ctr_freq, b->fft_in, fft_n);
+        sdr_read_sync(ctr_freq, b->fft_in, fft_n, sim);
         dur_sdr_read_sync += (microsec_timer() - start);
 
         // run fft
@@ -231,19 +233,22 @@ static void fft_band(band_t *b)
 static void find(band_t *b, int n, double limit);
 static int compare(const void *a_arg, const void *b_arg);
 static int add(band_t *b, freq_t f, freq_t bw);
-static void play(freq_t f, int secs);
+static void play(freq_t f, int secs, bool sim);
 static complex lpf(complex x, double f_cut);
 static void downsample_and_audio_out(double x);
 
 static void play_band(band_t *b)
 {
     int i;
+    bool sim;
 
 //  if (strcmp(b->name, "TEST") != 0) {
 //      return;
 //  }
 
-    NOTICE("PLAY BAND %s\n", b->name);
+    sim = strncmp(b->name, "SIM", 3) == 0;
+
+    NOTICE("PLAY BAND %s  sim=%d\n", b->name, sim);
 
     b->max_scan_station = 0;
     find(b, 50000,  500);  // xxx use squelch
@@ -261,7 +266,7 @@ static void play_band(band_t *b)
         struct scan_station_s *ss = &b->scan_station[i];
 
         b->f_play = ss->f;
-        play(ss->f, 1);
+        play(ss->f, 1, sim);
         b->f_play = 0;
     }
 }
@@ -363,7 +368,7 @@ static int compare(const void *a_arg, const void *b_arg)
 
 // ---------------------------------------------------------------------
 
-static void play(freq_t f, int secs)//xxx secs not used
+static void play(freq_t f, int secs, bool sim)//xxx secs not used
 {
     #define VOLUME_SCALE 10
 
@@ -377,7 +382,7 @@ static void play(freq_t f, int secs)//xxx secs not used
     }
 
     rb = malloc(sizeof(sdr_async_rb_t));
-    sdr_read_async(f, rb);
+    sdr_read_async(f, rb, sim);
 
     while (true) {
         // wait for a data item to be available

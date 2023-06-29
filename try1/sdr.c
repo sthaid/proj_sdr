@@ -287,13 +287,14 @@ int sim=1; //xxx temp
 
 static void sim_sdr_read_sync(freq_t ctr_freq, complex *data, int n);
 
-void sdr_read_sync(freq_t ctr_freq, complex *data, int n)
+void sdr_read_sync(freq_t ctr_freq, complex *data, int n, bool sim)
 {
     if (sim) {
         sim_sdr_read_sync(ctr_freq, data, n);
         return;
     }
 
+    FATAL("not coded\n");
     // xxx, be sure to get the full buffer
     //rtlsdr_read_sync(dev, buff, buff_len, &n_read);
 }
@@ -311,13 +312,14 @@ static void sim_sdr_read_sync(freq_t ctr_freq, complex *data, int n)
 static void sim_sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb);
 static void sim_sdr_cancel_async(void);
 
-void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb)
+void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb, bool sim)
 {
     if (sim) {
         sim_sdr_read_async(ctr_freq, rb);
         return;
     }
 
+    FATAL("not coded\n");
     // xxx  read_async
 }
 
@@ -349,7 +351,7 @@ static void sim_sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb)
         return;
     }
 
-    rb->head = rb->tail = 0;
+    rb->head = rb->tail = 0; //xxx move this
     sim_async.ctr_freq = ctr_freq;
     sim_async.rb = rb;
 
@@ -385,6 +387,7 @@ static void *sim_async_read_thread(void *cx)
         get_simulated_antenna_data(sim_async.ctr_freq, data, MAX_DATA);
 
         // wait for room in the ring buffer
+        // xxx maybe just wait for any room
         while (true) {
             if (sim_async.cancel || program_terminating) {
                 goto terminate;
@@ -427,16 +430,16 @@ static void get_simulated_antenna_data(freq_t ctr_freq, complex *data, int n)
     static unsigned int idx, max;
     static double t;
 
-    // read the entire anenna.dat file on first_call
+    // read the entire sim.dat file on first_call
     if (first_call) {
         int fd;
         size_t len_read;
         size_t file_size;
         struct stat statbuf;
 
-        fd = open("antenna.dat", O_RDONLY);
+        fd = open("sim/sim.dat", O_RDONLY);
         if (fd < 0) {
-            FATAL("failed open antenna.dat, %m\n");
+            FATAL("failed open sim/sim.dat, %m\n");
         }
 
         fstat(fd, &statbuf);
