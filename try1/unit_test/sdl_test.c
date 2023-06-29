@@ -159,7 +159,7 @@ int main(int argc, char **argv)
 
         sdl_render_text_and_register_event(
             dragx, dragy, FTSZ2,
-            "DRAG", SDL_LIGHT_BLUE, SDL_BLACK, 
+            "DRAG\nME\nTOO", SDL_LIGHT_BLUE, SDL_BLACK, 
             SDL_EVENT_MOUSE_DRAG, SDL_EVENT_TYPE_MOUSE_DRAG);
 
         char wheel_count_str[100];

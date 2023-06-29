@@ -1,9 +1,5 @@
-sdl text box
-new antenna sim
-test band mode
 static and dynamic config files
-cleanup common.h
-rename ut to unit_test
+work on radio.c,  building down from the 3 modes - FFT  PLAY  SCAN
 
 review:
 common.h         ok for now
@@ -18,6 +14,9 @@ sdr.c           needs the real sync/async reads
 === DONE ===
 rename scan.c to sdr.c
 mv notes to todo.txt
+new sim
+new antenna sim
+sdl text box
 
 
 ==== SAVE ===

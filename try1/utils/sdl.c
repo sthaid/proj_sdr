@@ -1339,7 +1339,7 @@ texture_t sdl_create_text_texture(int32_t fg_color, int32_t bg_color, int32_t fo
 #if 0
     surface = TTF_RenderUTF8_Shaded(sdl_font[font_ptsize].font, str, fg_sdl_color, bg_sdl_color);
 #else
-    surface = TTF_RenderUTF8_Blended(sdl_font[font_ptsize].font, str, fg_sdl_color);
+    surface = TTF_RenderUTF8_Blended_Wrapped(sdl_font[font_ptsize].font, str, fg_sdl_color, 0);
 #endif
     if (surface == NULL) {
         ERROR("failed to allocate surface\n");
