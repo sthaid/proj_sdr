@@ -25,7 +25,7 @@
 //
 
 static win_info_t wi;
-static bool       fullscr;
+//static bool       fullscr;
 
 //
 // prototypes
@@ -55,12 +55,7 @@ void display_handler(void)
 
         // xxx
         sdl_render_text(0, 0, FTSZ2, MODE_STR(mode), SDL_WHITE, SDL_BLACK);
-
-        sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
-
-#if 0
-        // display the title line
-        sdl_render_text(0, 0, FTSZ1, "Hello!", SDL_WHITE, SDL_BLACK);
+        //sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
 
         // disaplay the bands that are selected
         int x = 0, i;
@@ -73,7 +68,6 @@ void display_handler(void)
                 x += 800;
             }
         }
-#endif
 
         // register events
 #if 0

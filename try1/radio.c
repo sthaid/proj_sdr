@@ -1,12 +1,84 @@
 #include "common.h"
 
+//  pthread_t tid;
+//  // xxx do all the init here
+//  //pthread_create(&tid, NULL, scan_thread, NULL);
+
+#define MAX_FFT_FREQ_SPAN  1200000  // must be <= SDR_SAMPLE_RATE/2
+#define FFT_ELEMENT_HZ     100
+#define FFT_N              (SDR_SAMPLE_RATE / FFT_ELEMENT_HZ)
+
+_Static_assert(MAX_FFT_FREQ_SPAN <= SDR_SAMPLE_RATE/2);
+
+#define THREAD_STATE_STOPPED         0
+#define THREAD_STATE_RUNNING         1
+#define THREAD_STATE_STOP_REQUESTED  2
+
+// variables
+
+static int threads_running;
+static bool stop_threads_req;
+
+// prototypes
+
+static void start_thread(void *(*proc)(void *cx));
+static void stop_threads(void);
+static void *fft_mode_thread(void *cx);
+static void fft_band(band_t *b);
+
+// -----------------  INIT  --------------------------------------------
+
 void radio_init(void)
 {
-    pthread_t tid;
+    int i;
 
-    // xxx do all the init here
-    //pthread_create(&tid, NULL, scan_thread, NULL);
+    for (i = 0; i < max_band; i++) {
+        band_t *b = band[i];
+        freq_t band_freq_span = b->f_max - b->f_min;
+
+        // this code inits these band_s fields
+        // - num_fft
+        // - fft_freq_span
+        // - max_cabs_fft
+        // this code allocs these buffers
+        // - fft_in
+        // - fft_out
+        // - cabs_fft
+        // - wf.data
+
+        // divide the band into fft intervals
+        if ((band_freq_span % MAX_FFT_FREQ_SPAN) == 0) {
+            b->num_fft = band_freq_span / MAX_FFT_FREQ_SPAN;
+        } else {
+            b->num_fft = band_freq_span / MAX_FFT_FREQ_SPAN + 1;
+        }
+        b->fft_freq_span = band_freq_span / b->num_fft;
+        assert(b->fft_freq_span <= MAX_FFT_FREQ_SPAN);
+
+        // xxx  NAME?
+        b->max_cabs_fft = b->num_fft * (b->fft_freq_span / FFT_ELEMENT_HZ);
+
+        NOTICE("radio_init band %s span=%ld num_fft=%d fft_span=%ld max_cabs_fft=%d\n",
+               b->name, band_freq_span, b->num_fft, b->fft_freq_span, b->max_cabs_fft);
+
+        // xxx
+        b->fft_in   = fft_alloc_complex(FFT_N);
+        b->fft_out  = fft_alloc_complex(FFT_N);
+        b->cabs_fft = calloc(b->max_cabs_fft, sizeof(double));
+        b->wf.data  = calloc(MAX_WATERFALL * b->max_cabs_fft, 1);
+    }
+
+#if 0
+        fft_plot_n = fft_freq_span / FFT_ELEMENT_HZ;
+
+        //NOTICE("band_freq_span = %ld  num_fft = %d  fft_freq_span = %ld\n", band_freq_span, num_fft, fft_freq_span);
+        // determine the number of samples from the fft_out buff that will be xfered to the plot buffer
+        //NOTICE("fft_plot_n = %d\n", fft_plot_n);
+        //NOTICE("max_cabs_fft = %d\n", b->max_cabs_fft);
+#endif
 }
+
+// -----------------  HANDLE EVENTS FROM DISPLAY  ----------------------
 
 // return true if event was handled
 bool radio_event(sdl_event_t *ev)
@@ -16,12 +88,16 @@ bool radio_event(sdl_event_t *ev)
     switch(ev->event_id) {
     case SDL_EVENT_KEY_F(1):
         mode = MODE_FFT;
+        stop_threads();
+        start_thread(fft_mode_thread);
         break;
     case SDL_EVENT_KEY_F(2):
         mode = MODE_SCAN;
+        stop_threads();
         break;
     case SDL_EVENT_KEY_F(3):
         mode = MODE_PLAY;
+        stop_threads();
         break;
     default:
         event_was_handled = false;
@@ -31,6 +107,104 @@ bool radio_event(sdl_event_t *ev)
     return event_was_handled;
 }
 
+static void stop_threads(void)
+{
+    stop_threads_req = true;
+    while (threads_running) {
+        usleep(1000);
+    }
+    stop_threads_req = false;
+}
+
+static void start_thread(void *(*proc)(void *cx))
+{
+    pthread_t tid;
+
+    // start the thread
+    pthread_create(&tid, NULL, proc, NULL);
+    while (threads_running == 0) {
+        usleep(1000);
+    }
+}
+
+// -----------------  PRIVATE  -----------------------------------------
+
+// xxx needs to be detached
+static void *fft_mode_thread(void *cx)
+{
+    __sync_fetch_and_add(&threads_running, 1);
+    pthread_setname_np(pthread_self(), "sdr_fft_mode");
+    NOTICE("fft_mode_thread starting\n");
+
+// xxx assert it isn't already runnign
+
+    while (true) {
+        for (int i = 0; i < max_band; i++) {
+            if (program_terminating || stop_threads_req) {
+                goto terminate;
+            }
+
+            if (band[i]->selected) {
+                fft_band(band[i]);
+            }
+        }
+    }
+
+terminate:
+    NOTICE("fft_mode_thread terminating\n");
+    __sync_fetch_and_sub(&threads_running, 1);
+    return NULL;
+}
+
+static void fft_band(band_t *b)
+{
+    bool          sim = strncmp(b->name, "SIM", 3) == 0;
+    freq_t        ctr_freq;
+    int           k1, k2, i, j, n;
+    unsigned long start, dur_sdr_read_sync=0, dur_fft=0, dur_cabs=0;
+
+    // loop over the intervals
+    ctr_freq = b->f_min + b->fft_freq_span/2;
+    k1 = 0;
+    for (i = 0; i < b->num_fft; i++) {
+        // get a block of rtlsdr data at ctr_freq
+        start = microsec_timer();
+        sdr_read_sync(ctr_freq, b->fft_in, FFT_N, sim);
+        dur_sdr_read_sync += (microsec_timer() - start);
+
+        // run fft
+        start = microsec_timer();
+        fft_fwd_c2c(b->fft_in, b->fft_out, FFT_N);
+        dur_fft += (microsec_timer() - start);
+
+        // save the cabs of fft result
+        start = microsec_timer();
+        n = b->fft_freq_span / FFT_ELEMENT_HZ;
+        k2 = FFT_N - n / 2;
+        for (j = 0; j < n; j++) {
+            b->cabs_fft[k1++] = cabs(b->fft_out[k2++]);  // xxx or log?
+            if (k2 == FFT_N) k2 = 0;
+        }
+        dur_cabs += (microsec_timer() - start);
+
+        // move to next interval in the band
+        ctr_freq += b->fft_freq_span;
+    }
+    assert(k1 == b->max_cabs_fft);
+
+    // save new waterfall entry
+    unsigned char *wf;
+    wf = get_waterfall(b, -1);
+    for (i = 0; i < b->max_cabs_fft; i++) {
+        wf[i] = b->cabs_fft[i] * (256. / 60000);
+    }
+    b->wf.num++;
+
+    // xxx print timing stats
+    DEBUG("dur_sdr_read_sync = %ld us   %ld ms\n", dur_sdr_read_sync, dur_sdr_read_sync/1000);
+    DEBUG("dur_fft           = %ld us   %ld ms\n", dur_fft, dur_fft/1000);
+    DEBUG("dur_cabs          = %ld us   %ld ms\n", dur_cabs, dur_cabs/1000);
+}
 
 #if 0
 // xxx also decode fm stereo
@@ -38,6 +212,7 @@ bool radio_event(sdl_event_t *ev)
 static void *scan_thread(void *cx);
 static void fft_band(band_t *b);
 static void play_band(band_t *b);
+#endif
 
 // -----------------------------------------------------------------
 
@@ -101,6 +276,7 @@ while 1 {
 
 // -----------------------------------------------------------------
 
+#if 0
 static void *scan_thread(void *cx)
 {
     int i;
@@ -147,103 +323,6 @@ terminate:
 // -----------------------------------------------------------------
 
 // xxx clean this up
-// xxx display dot where the play is occurring
-
-static void fft_band(band_t *b)
-{
-    freq_t      band_freq_span;
-    freq_t      fft_freq_span;
-    freq_t      ctr_freq;
-    int         num_fft;
-    int         fft_n;
-    int         fft_plot_n;
-    int         i, j, k1, k2;
-    unsigned long start, dur_sdr_read_sync=0, dur_fft=0, dur_cabs=0;
-
-    bool sim = strncmp(b->name, "SIM", 3) == 0;
-
-    #define MAX_FFT_FREQ_SPAN  1200000  // must be <= SDR_SAMPLE_RATE/2
-    #define FFT_ELEMENT_HZ     100
-
-    assert(MAX_FFT_FREQ_SPAN <= SDR_SAMPLE_RATE/2);
-
-    // divide the band into fft intervals
-    band_freq_span = b->f_max - b->f_min;
-    num_fft = ceil((double)band_freq_span / MAX_FFT_FREQ_SPAN);
-    fft_freq_span = band_freq_span / num_fft;
-    assert(fft_freq_span <= MAX_FFT_FREQ_SPAN);
-    //NOTICE("band_freq_span = %ld  num_fft = %d  fft_freq_span = %ld\n", band_freq_span, num_fft, fft_freq_span);
-
-    // publish
-    b->num_fft = num_fft;
-    b->fft_freq_span = fft_freq_span;
-
-    // determine the number of samples in the fft, so that each entry is 10Hz
-    fft_n = SDR_SAMPLE_RATE / FFT_ELEMENT_HZ;
-    //NOTICE("fft_n = %d\n", fft_n);
-
-    // determine the number of samples from the fft_out buff that will be xfered to the plot buffer
-    fft_plot_n = fft_freq_span / FFT_ELEMENT_HZ;
-    //NOTICE("fft_plot_n = %d\n", fft_plot_n);
-
-    // alloc 
-    if (b->cabs_fft == NULL) {
-        b->max_cabs_fft = num_fft * fft_plot_n;
-        //NOTICE("max_cabs_fft = %d\n", b->max_cabs_fft);
-
-        b->fft_in   = fft_alloc_complex(fft_n);
-        b->fft_out  = fft_alloc_complex(fft_n);
-        b->cabs_fft = calloc(b->max_cabs_fft, sizeof(double));
-
-        b->wf.data = calloc(MAX_WATERFALL * b->max_cabs_fft, 1);
-    }
-
-    // loop over the intervals
-    ctr_freq = b->f_min + fft_freq_span/2;
-    k1 = 0;
-    for (i = 0; i < num_fft; i++) {
-        //NOTICE("i=%d  ctr_freq=%ld\n", i, ctr_freq);
-
-        // get a block of rtlsdr data at ctr_freq
-        start = microsec_timer();
-        sdr_read_sync(ctr_freq, b->fft_in, fft_n, sim);
-        dur_sdr_read_sync += (microsec_timer() - start);
-
-        // run fft
-        start = microsec_timer();
-        fft_fwd_c2c(b->fft_in, b->fft_out, fft_n);
-        dur_fft += (microsec_timer() - start);
-
-        // save the cabs of fft result
-        start = microsec_timer();
-        k2 = fft_n - fft_plot_n / 2;
-        for (j = 0; j < fft_plot_n; j++) {
-            b->cabs_fft[k1++] = cabs(b->fft_out[k2++]);  // xxx or log?
-            if (k2 == fft_n) k2 = 0;
-        }
-        dur_cabs += (microsec_timer() - start);
-
-        // move to next interval in the band
-        ctr_freq += fft_freq_span;
-    }
-    assert(k1 == b->max_cabs_fft);
-
-    // save new waterfall entry
-    unsigned char *wf;
-    wf = get_waterfall(b, -1);
-    for (i = 0; i < b->max_cabs_fft; i++) {
-        // max = 60000
-        wf[i] = b->cabs_fft[i] * (256. / 60000);
-    }
-    b->wf.num++;
-
-    // xxx keep timing stats
-    //NOTICE("dur_sdr_read_sync = %ld ms\n", dur_sdr_read_sync/1000);
-    //NOTICE("dur_fft          = %ld ms\n", dur_fft/1000);
-    //NOTICE("dur_cabs         = %ld ms\n", dur_cabs/1000);
-
-    // xxx save waterfaull
-}
 
 // ---------------------------------------------------------------------
 // xxx todo
