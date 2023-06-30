@@ -1,5 +1,38 @@
 #include "common.h"
 
+void radio_init(void)
+{
+    pthread_t tid;
+
+    // xxx do all the init here
+    //pthread_create(&tid, NULL, scan_thread, NULL);
+}
+
+// return true if event was handled
+bool radio_event(sdl_event_t *ev)
+{
+    bool event_was_handled = true;
+
+    switch(ev->event_id) {
+    case SDL_EVENT_KEY_F(1):
+        mode = MODE_FFT;
+        break;
+    case SDL_EVENT_KEY_F(2):
+        mode = MODE_SCAN;
+        break;
+    case SDL_EVENT_KEY_F(3):
+        mode = MODE_PLAY;
+        break;
+    default:
+        event_was_handled = false;
+        break;
+    }
+
+    return event_was_handled;
+}
+
+
+#if 0
 // xxx also decode fm stereo
 
 static void *scan_thread(void *cx);
@@ -65,14 +98,6 @@ while 1 {
 }
 #endif
 
-void radio_init(void)
-{
-    pthread_t tid;
-
-    // xxx do all the init here
-
-    pthread_create(&tid, NULL, scan_thread, NULL);
-}
 
 // -----------------------------------------------------------------
 
@@ -447,3 +472,4 @@ static void downsample_and_audio_out(double x)
         cnt = 0;
     }
 }
+#endif

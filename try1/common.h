@@ -35,7 +35,8 @@
 #define KHZ 1000
 #define MHZ 1000000
 
-// -----------------  xxxxxxxxxxx  ---------------------------------
+// -----------------  xxx MISC xxx  --------------------------------
+// xxx cleanup this section
 
 typedef unsigned long freq_t;
 
@@ -46,6 +47,17 @@ typedef struct {
     unsigned long tail;
     complex data[MAX_SDR_ASYNC_RB_DATA];
 } sdr_async_rb_t;
+
+EXTERN int mode;
+#define MODE_FFT  0
+#define MODE_SCAN 1
+#define MODE_PLAY 2
+
+#define MODE_STR(m) \
+    ((m) == MODE_FFT  ? "FFT"  : \
+     (m) == MODE_SCAN ? "SCAN" : \
+     (m) == MODE_PLAY ? "PLAY" : \
+                        "????")
 
 // -----------------  STRUCT BAND  ---------------------------------
 
@@ -130,6 +142,7 @@ EXTERN int           help;
 
 // radio.c
 void radio_init(void);
+bool radio_event(sdl_event_t *ev);
 
 // config.c
 void config_init(void);

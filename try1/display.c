@@ -14,9 +14,8 @@
 #define FTCW3 (sdl_font_char_width(FTSZ3))
 #define FTCH3 (sdl_font_char_height(FTSZ3))
 
-#define SDL_EVENT_END_PROGRAM    (SDL_EVENT_USER_DEFINED+0)
-#define SDL_EVENT_FULLSCR        (SDL_EVENT_USER_DEFINED+1)
-#define SDL_EVENT_PLAY_TIME      (SDL_EVENT_USER_DEFINED+2)
+//#define SDL_EVENT_FULLSCR        (SDL_EVENT_USER_DEFINED+1)
+//#define SDL_EVENT_PLAY_TIME      (SDL_EVENT_USER_DEFINED+2)
 
 #define W (wi.w)
 #define H (wi.h)
@@ -54,6 +53,12 @@ void display_handler(void)
         // display init
         sdl_display_init();
 
+        // xxx
+        sdl_render_text(0, 0, FTSZ2, MODE_STR(mode), SDL_WHITE, SDL_BLACK);
+
+        sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
+
+#if 0
         // display the title line
         sdl_render_text(0, 0, FTSZ1, "Hello!", SDL_WHITE, SDL_BLACK);
 
@@ -68,14 +73,11 @@ void display_handler(void)
                 x += 800;
             }
         }
+#endif
 
         // register events
-        sdl_render_text_and_register_event(
-            0, H - FTCH2, FTSZ2,
-            "QUIT", SDL_LIGHT_BLUE, SDL_BLACK,
-            SDL_EVENT_END_PROGRAM, SDL_EVENT_TYPE_MOUSE_LEFT_CLICK);
-
-        sdl_render_text_and_register_event(
+#if 0
+        sdl_render_text_and_register_event(  // xxx use a key?  OR the window ctrl
             W/2-3.5*FTCW2, 0, FTSZ2,
             "FULLSCR", SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_FULLSCR, SDL_EVENT_TYPE_MOUSE_LEFT_CLICK);
@@ -86,6 +88,7 @@ void display_handler(void)
             W - FTCW2*10 , 0, FTSZ2,
             play_time_str, SDL_LIGHT_BLUE, SDL_BLACK,
             SDL_EVENT_PLAY_TIME, SDL_EVENT_TYPE_MOUSE_WHEEL);
+#endif
 
         // present the display
         sdl_display_present();
@@ -114,10 +117,21 @@ static void handle_events(void)
 
         switch (ev->event_id) {
         case SDL_EVENT_QUIT:
-        case SDL_EVENT_END_PROGRAM:
         case SDL_EVENT_KEYMOD_CTRL + 'q':
             program_terminating = true;
             break;
+        case SDL_EVENT_WINDOW: {
+            win_info_t *new_wi = &ev->win_info;
+            if (new_wi->minimized != wi.minimized)
+                NOTICE("window minimized = %d\n", new_wi->minimized);
+            if (new_wi->mouse_in_window != wi.mouse_in_window)
+                NOTICE("window mouse_in_window = %d\n", new_wi->mouse_in_window);
+            if (new_wi->w != wi.w || new_wi->h != wi.h)
+                NOTICE("window WxH = %d x %d\n", new_wi->w, new_wi->h);
+            wi = *new_wi;
+            break; }
+            
+#if 0
         case SDL_EVENT_FULLSCR:
             fullscr = !fullscr;
             sdl_full_screen(fullscr);
@@ -129,8 +143,9 @@ static void handle_events(void)
             if (tmp > 10) tmp = 10;
             play_time = tmp;
             break; }
+#endif
         default:
-            event_was_handled = false;
+            event_was_handled = radio_event(ev);
             break;
         }
 

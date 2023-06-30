@@ -9,6 +9,8 @@
 
 #define TWO_PI (2*M_PI)
 
+#define int_to_str(v) ({static char s[20]; sprintf(s, "%d", v); s;})
+
 // -----------------  LOGGING  --------------------
 
 #define NOTICE(fmt, args...) do { log_msg("NOTICE", fmt, ## args); } while (0)

@@ -515,21 +515,25 @@ sdl_event_t * sdl_poll_event(void)
                              ((Y) < (pos).y + (pos).h))
 
     #define SDL_WINDOWEVENT_STR(x) \
-       ((x) == SDL_WINDOWEVENT_SHOWN        ? "SDL_WINDOWEVENT_SHOWN"        : \
-        (x) == SDL_WINDOWEVENT_HIDDEN       ? "SDL_WINDOWEVENT_HIDDEN"       : \
-        (x) == SDL_WINDOWEVENT_EXPOSED      ? "SDL_WINDOWEVENT_EXPOSED"      : \
-        (x) == SDL_WINDOWEVENT_MOVED        ? "SDL_WINDOWEVENT_MOVED"        : \
-        (x) == SDL_WINDOWEVENT_RESIZED      ? "SDL_WINDOWEVENT_RESIZED"      : \
-        (x) == SDL_WINDOWEVENT_SIZE_CHANGED ? "SDL_WINDOWEVENT_SIZE_CHANGED" : \
-        (x) == SDL_WINDOWEVENT_MINIMIZED    ? "SDL_WINDOWEVENT_MINIMIZED"    : \
-        (x) == SDL_WINDOWEVENT_MAXIMIZED    ? "SDL_WINDOWEVENT_MAXIMIZED"    : \
-        (x) == SDL_WINDOWEVENT_RESTORED     ? "SDL_WINDOWEVENT_RESTORED"     : \
-        (x) == SDL_WINDOWEVENT_ENTER        ? "SDL_WINDOWEVENT_ENTER"        : \
-        (x) == SDL_WINDOWEVENT_LEAVE        ? "SDL_WINDOWEVENT_LEAVE"        : \
-        (x) == SDL_WINDOWEVENT_FOCUS_GAINED ? "SDL_WINDOWEVENT_FOCUS_GAINED" : \
-        (x) == SDL_WINDOWEVENT_FOCUS_LOST   ? "SDL_WINDOWEVENT_FOCUS_LOST"   : \
-        (x) == SDL_WINDOWEVENT_CLOSE        ? "SDL_WINDOWEVENT_CLOSE"        : \
-                                              "????")
+       ((x) == SDL_WINDOWEVENT_SHOWN           ? "SDL_WINDOWEVENT_SHOWN"        : \
+        (x) == SDL_WINDOWEVENT_HIDDEN          ? "SDL_WINDOWEVENT_HIDDEN"       : \
+        (x) == SDL_WINDOWEVENT_EXPOSED         ? "SDL_WINDOWEVENT_EXPOSED"      : \
+        (x) == SDL_WINDOWEVENT_MOVED           ? "SDL_WINDOWEVENT_MOVED"        : \
+        (x) == SDL_WINDOWEVENT_RESIZED         ? "SDL_WINDOWEVENT_RESIZED"      : \
+        (x) == SDL_WINDOWEVENT_SIZE_CHANGED    ? "SDL_WINDOWEVENT_SIZE_CHANGED" : \
+        (x) == SDL_WINDOWEVENT_MINIMIZED       ? "SDL_WINDOWEVENT_MINIMIZED"    : \
+        (x) == SDL_WINDOWEVENT_MAXIMIZED       ? "SDL_WINDOWEVENT_MAXIMIZED"    : \
+        (x) == SDL_WINDOWEVENT_RESTORED        ? "SDL_WINDOWEVENT_RESTORED"     : \
+        (x) == SDL_WINDOWEVENT_ENTER           ? "SDL_WINDOWEVENT_ENTER"        : \
+        (x) == SDL_WINDOWEVENT_LEAVE           ? "SDL_WINDOWEVENT_LEAVE"        : \
+        (x) == SDL_WINDOWEVENT_FOCUS_GAINED    ? "SDL_WINDOWEVENT_FOCUS_GAINED" : \
+        (x) == SDL_WINDOWEVENT_FOCUS_LOST      ? "SDL_WINDOWEVENT_FOCUS_LOST"   : \
+        (x) == SDL_WINDOWEVENT_CLOSE           ? "SDL_WINDOWEVENT_CLOSE"        : \
+        (x) == SDL_WINDOWEVENT_TAKE_FOCUS      ? "SDL_WINDOWEVENT_TAKE_FOCUS" : \
+        (x) == SDL_WINDOWEVENT_HIT_TEST        ? "SDL_WINDOWEVENT_HIT_TEST" : \
+        (x) == SDL_WINDOWEVENT_ICCPROF_CHANGED ? "SDL_WINDOWEVENT_ICCPROF_CHANGED" : \
+        (x) == SDL_WINDOWEVENT_DISPLAY_CHANGED ? "SDL_WINDOWEVENT_DISPLAY_CHANGED" : \
+                                                 int_to_str(x))
 
     SDL_Event ev;
     int32_t i;
@@ -776,7 +780,7 @@ sdl_event_t * sdl_poll_event(void)
             break;
 
        case SDL_WINDOWEVENT: {
-            NOTICE("got event SDL_WINOWEVENT - %s\n", SDL_WINDOWEVENT_STR(ev.window.event));
+            DEBUG("got event SDL_WINOWEVENT - %s\n", SDL_WINDOWEVENT_STR(ev.window.event));
             switch (ev.window.event)  {
             case SDL_WINDOWEVENT_SIZE_CHANGED:
                 sdl_win_info.w = ev.window.data1;
