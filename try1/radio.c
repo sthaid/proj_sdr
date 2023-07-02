@@ -3,7 +3,7 @@
 // xxx 
 // - threads needs to be detached
 
-#define MAX_FFT_FREQ_SPAN  1200000  // must be <= SDR_SAMPLE_RATE/2
+#define MAX_FFT_FREQ_SPAN  1200000  // must be <= SDR_SAMPLE_RATE/2   xxx is this correct?
 #define FFT_ELEMENT_HZ     100
 #define FFT_N              (SDR_SAMPLE_RATE / FFT_ELEMENT_HZ)
 
@@ -279,10 +279,11 @@ static void *play_mode_thread(void *cx)
     freq_t          offset_freq    = 0;
     sdr_async_rb_t *rb;
     bool            sim = true; //xxx
-    complex         data, data_lpf;
+    complex         data, data_freq_shift, data_lpf;
     double          data_demod, data_demod_volscale;
     double          t = 0;
     double          offset_w = 0;
+    int n = 0;
 
     bool started = false;
 
@@ -356,16 +357,49 @@ static void *play_mode_thread(void *cx)
 
         // offset tuning
         if (offset_freq) {
-            data = data * cexp(-I * offset_w * t);  // xxx can this be more efficient?
+            data_freq_shift = data * cexp(-I * offset_w * t);  // xxx can this be more efficient?
+        } else {
+            data_freq_shift = data;
         }
 
         // process the rtlsdr data item
-        data_lpf = lpf(data, 4000);
+        data_lpf = lpf(data_freq_shift, 4000);
         data_demod = cabs(data_lpf);
         data_demod_volscale = data_demod * VOLUME_SCALE;
         downsample_and_audio_out(data_demod_volscale);
 
         // fft xxx
+        band_t *b = play_band;  // xxx mutex
+        b->fft_in[n++] = data;
+        if (n == FFT_N) {
+            //NOTICE("fft\n");
+            fft_fwd_c2c(b->fft_in, b->fft_out, FFT_N);
+            n = 0;
+
+            
+            int k1 = (b->fft_freq_min - b->f_min) / FFT_ELEMENT_HZ;
+            if (k1 < 0) {
+                NOTICE("k1 = %d\n", k1);
+                k1 = 0;
+            }
+
+
+            int k2 = FFT_N - FFT_N/4;
+            memset(b->cabs_fft, 0, b->max_cabs_fft*sizeof(double));
+
+            for (int i = 0; i < FFT_N/2; i++) {
+                b->cabs_fft[k1++] = cabs(b->fft_out[k2++]);  // xxx or log?
+                if (k2 == FFT_N) k2 = 0;
+            }
+
+            // save new waterfall entry
+            unsigned char *wf;
+            wf = get_waterfall(b, -1);
+            for (int i = 0; i < b->max_cabs_fft; i++) {
+                wf[i] = b->cabs_fft[i] ?  1 + b->cabs_fft[i] * (256. / 60000) : 0;
+            }
+            b->wf.num++;
+        }
 
         // done with this rtlsdr data item
         rb->head++;

@@ -64,10 +64,12 @@ void display_handler(void)
         for (i = 0; i < max_band; i++) {
             band_t *b = band[i];
 
+            int xxx = W / 2;
+
             if (b->selected) {
-                rect_t loc = {x, 50, 700, 400};
+                rect_t loc = {x, 50, xxx-100, 400};
                 display_band(b, &loc);
-                x += 800;
+                x += xxx;
             }
         }
 
@@ -180,18 +182,26 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
 
     // xxx make this more efficient ...
 
+#if 0
     for (i = 0; i < b->max_cabs_fft; i++) {
         if (b->cabs_fft[i] > max) max = b->cabs_fft[i];
     }
+#else
+    max = 20000;
+#endif
     scaling = loc->h / max;
     //NOTICE("display: max = %f  scaling = %f\n", max, scaling);
+    sdl_render_printf(loc->x+100, loc->y, FTSZ2, SDL_WHITE, SDL_BLACK, "max=%f", max);
 
+    int n=0;
     for (i = 0; i < b->max_cabs_fft; i++) {
-        points[i].x = loc->x + i * loc->w / b->max_cabs_fft;
-        points[i].y = (loc->y+loc->h) - b->cabs_fft[i] * scaling;
+        if (b->cabs_fft[i] == 0) continue;
+        points[n].x = loc->x + i * loc->w / b->max_cabs_fft;
+        points[n].y = (loc->y+loc->h) - b->cabs_fft[i] * scaling;
+        n++;
     }
     
-    sdl_render_lines(points, b->max_cabs_fft, SDL_WHITE);
+    sdl_render_lines(points, n, SDL_WHITE);
 
 
     // FFT LOCS
@@ -334,10 +344,12 @@ static void cvt_wf_to_pixels(band_t *b, int row, int width)
             }
         }
 
-        wvlen = 440 + wf_ent_max * 225 / 256;
-
-        sdl_wavelen_to_rgb(wvlen, &red, &green, &blue);  // xxx optimize this routine with table lookup
-
-        *pixels32++ = PIXEL(red, green, blue);
+        if (wf_ent_max > 0) {
+            wvlen = 440 + wf_ent_max * 225 / 256;
+            sdl_wavelen_to_rgb(wvlen, &red, &green, &blue);  // xxx optimize this routine with table lookup
+            *pixels32++ = PIXEL(red, green, blue);
+        } else {
+            *pixels32++ = PIXEL(0, 0, 0);
+        }
     }
 }
