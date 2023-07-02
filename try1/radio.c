@@ -28,7 +28,12 @@ static bool stop_threads_req;
 
 // prototypes
 
-static void update_display_title_line(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
+static band_t *get_active_band(void);
+static void set_active_band(band_t *b) ATTRIB_UNUSED;
+static void set_active_band_to_next(void) ATTRIB_UNUSED;
+static void set_active_band_to_previous(void) ATTRIB_UNUSED;
+static void set_band_selected(band_t *b) ATTRIB_UNUSED;
+static void clear_band_selected(band_t *b) ATTRIB_UNUSED;
 
 static void start_thread(void *(*proc)(void *cx), char *name);
 static void stop_threads(void);
@@ -53,6 +58,7 @@ void radio_init(void)
 
     for (i = 0; i < max_band; i++) {
         band_t *b = band[i];
+#if 0
         freq_t band_freq_span = b->f_max - b->f_min;
 
         // this code inits these band_s fields
@@ -78,6 +84,9 @@ void radio_init(void)
 
         NOTICE("radio_init band %s span=%ld num_fft=%d fft_span=%ld max_cabs_fft=%d\n",
                b->name, band_freq_span, b->num_fft, b->fft_freq_span, b->max_cabs_fft);
+#endif
+
+        b->max_cabs_fft = b->f_span / FFT_ELEMENT_HZ;
 
         // xxx
         b->fft_in   = fft_alloc_complex(FFT_N);
@@ -85,26 +94,8 @@ void radio_init(void)
         b->cabs_fft = calloc(b->max_cabs_fft, sizeof(double));
         b->wf.data  = calloc(MAX_WATERFALL * b->max_cabs_fft, 1);
     }
-}
 
-static void update_display_title_line(char *fmt, ...)
-{
-    // xxx move to display.c?
-    #define MAX_LEN 100
-
-    static char strs[2][MAX_LEN];
-    static int idx;
-    char *s;
-    va_list ap;
-
-    s = strs[idx];
-    idx = (idx + 1) % 2;
-    
-    va_start(ap, fmt);
-    vsnprintf(s, MAX_LEN, fmt, ap);
-    va_end(ap);
-
-    display_title_line = s;
+    set_active_band(band[0]);
 }
 
 // -----------------  HANDLE EVENTS FROM DISPLAY  ----------------------
@@ -114,6 +105,7 @@ bool radio_event(sdl_event_t *ev)
 {
     bool event_was_handled = true;
     freq_t tmp_freq;
+    band_t *b;
 
     switch(ev->event_id) {
     case SDL_EVENT_KEY_F(1):
@@ -126,21 +118,41 @@ bool radio_event(sdl_event_t *ev)
         stop_threads();
         break;
     case SDL_EVENT_KEY_F(3):
+        if ((b = get_active_band()) == NULL) {
+            break;
+        }
         mode = MODE_PLAY;
-        play_band = band[0];
-        play_freq = 540000;
+        b->f_play = 540000;
         stop_threads();
         start_thread(play_mode_thread, "sdr_play_mode");
         break;
+    case SDL_EVENT_KEY_TAB:
+        set_active_band_to_next();
+        break;
+    case SDL_EVENT_KEYMOD_CTRL | SDL_EVENT_KEY_TAB:
+        set_active_band_to_previous();
+        break;
     case SDL_EVENT_KEY_LEFT_ARROW:
-        tmp_freq = play_freq - 10000;
-        if (tmp_freq < play_band->f_min) tmp_freq = play_band->f_min;
-        play_freq = tmp_freq;
+        if (mode != MODE_PLAY) {
+            break;
+        }
+        if ((b = get_active_band()) == NULL) {
+            break;
+        }
+        tmp_freq = b->f_play - 10000;
+        if (tmp_freq < b->f_min) tmp_freq = b->f_min;
+        b->f_play = tmp_freq;
         break;
     case SDL_EVENT_KEY_RIGHT_ARROW:
-        tmp_freq = play_freq + 10000;
-        if (tmp_freq >= play_band->f_max) tmp_freq = play_band->f_max;
-        play_freq = tmp_freq;
+        if (mode != MODE_PLAY) {
+            break;
+        }
+        if ((b = get_active_band()) == NULL) {
+            break;
+        }
+        tmp_freq = b->f_play + 10000;
+        if (tmp_freq >= b->f_max) tmp_freq = b->f_max;
+        b->f_play = tmp_freq;
         break;
     default:
         event_was_handled = false;
@@ -149,6 +161,78 @@ bool radio_event(sdl_event_t *ev)
 
     return event_was_handled;
 }
+
+// -----------------  XXXXXXXXXXXXXXXXXXXXXXXXXX  ----------------------
+
+static band_t *active_band;
+
+static band_t *get_active_band(void)
+{
+    return active_band;
+}
+
+static void set_active_band(band_t *b)
+{
+    if (active_band) {
+        NOTICE("Clearing on %d\n", active_band->idx);
+        active_band->active = false;
+        active_band = NULL;
+    }
+
+    NOTICE("Settting on %d\n", b->idx);
+    b->active = true;
+    b->selected = true;
+    active_band = b;
+}
+
+static void set_active_band_to_next(void)
+{
+    int i, idx;
+
+    idx = active_band ? active_band->idx : -1;
+    for (i = 0; i < max_band; i++) {
+        if (++idx == max_band) idx = 0;
+        if (band[idx]->selected) {
+            set_active_band(band[idx]);
+            return;
+        }
+    }
+
+    set_active_band(band[0]);
+}
+
+static void set_active_band_to_previous(void)
+{
+    int i, idx;
+
+    idx = active_band ? active_band->idx : max_band;
+    for (i = 0; i < max_band; i++) {
+        if (--idx == -1) idx = max_band - 1;
+        if (band[idx]->selected) {
+            set_active_band(band[idx]);
+            return;
+        }
+    }
+
+    set_active_band(band[0]);
+}
+
+static void set_band_selected(band_t *b)
+{
+    b->selected = true;
+}
+
+static void clear_band_selected(band_t *b)
+{
+    b->selected = false;
+
+    if (b->active) {
+        b->active = false;
+        active_band = NULL;
+    }
+}
+
+// -----------------  THREAD CONTROL  ----------------------------------
 
 static void stop_threads(void)
 {
@@ -221,14 +305,25 @@ static void *fft_mode_thread(void *cx)
 static void fft_band(band_t *b)
 {
     bool          sim = strncmp(b->name, "SIM", 3) == 0;
-    freq_t        ctr_freq;
-    int           k1, k2, i, j, n;
+    freq_t        ctr_freq, fft_freq_span;
+    int           k1, k2, i, j, n, num_fft;
     unsigned long start, dur_sdr_read_sync=0, dur_fft=0, dur_cabs=0;
 
+    // divide the band into fft intervals
+    // xxx test this
+    num_fft = (b->f_span + MAX_FFT_FREQ_SPAN - 1) / MAX_FFT_FREQ_SPAN;
+    fft_freq_span = b->f_span / num_fft;
+
+    assert(fft_freq_span <= MAX_FFT_FREQ_SPAN);
+    assert(fft_freq_span / FFT_ELEMENT_HZ <= b->max_cabs_fft);
+
     // loop over the intervals
-    ctr_freq = b->f_min + b->fft_freq_span/2;
+    ctr_freq = b->f_min + fft_freq_span/2;
     k1 = 0;
-    for (i = 0; i < b->num_fft; i++) {
+    for (i = 0; i < num_fft; i++) {
+        b->f_fft_inprog_min = ctr_freq - fft_freq_span / 2;
+        b->f_fft_inprog_max = ctr_freq + fft_freq_span / 2;
+
         // get a block of rtlsdr data at ctr_freq
         start = microsec_timer();
         sdr_set_ctr_freq(ctr_freq, sim);
@@ -242,7 +337,7 @@ static void fft_band(band_t *b)
 
         // save the cabs of fft result
         start = microsec_timer();
-        n = b->fft_freq_span / FFT_ELEMENT_HZ;
+        n = fft_freq_span / FFT_ELEMENT_HZ;
         k2 = FFT_N - n / 2;
         for (j = 0; j < n; j++) {
             b->cabs_fft[k1++] = cabs(b->fft_out[k2++]);  // xxx or log?
@@ -251,15 +346,19 @@ static void fft_band(band_t *b)
         dur_cabs += (microsec_timer() - start);
 
         // move to next interval in the band
-        ctr_freq += b->fft_freq_span;
+        ctr_freq += fft_freq_span;
     }
     assert(k1 == b->max_cabs_fft);
+
+    // xxx 
+    b->f_fft_inprog_min = 0;
+    b->f_fft_inprog_max = 0;
 
     // save new waterfall entry
     unsigned char *wf;
     wf = get_waterfall(b, -1);
     for (i = 0; i < b->max_cabs_fft; i++) {
-        wf[i] = b->cabs_fft[i] * (256. / 60000);
+        wf[i] = b->cabs_fft[i] ?  1 + b->cabs_fft[i] * (256. / 60000) : 0;
     }
     b->wf.num++;
 
@@ -285,6 +384,9 @@ static void *play_mode_thread(void *cx)
     double          offset_w = 0;
     int n = 0;
     int fft_pause = 0;
+    band_t *b = NULL;  // active_band
+    band_t *last_actv_band = NULL;
+    freq_t play_freq;
 
     bool started = false;
 
@@ -296,12 +398,7 @@ static void *play_mode_thread(void *cx)
 
     while (true) {
         if (program_terminating || stop_threads_req) {
-//xxx move to end
-            if (started) {
-                sdr_cancel_async(sim);
-            }
-            free(rb);
-            return NULL;
+            goto terminate;
         }
 
         // if play_freq has changed then
@@ -311,11 +408,21 @@ static void *play_mode_thread(void *cx)
         //     start rtlsdr async reader, and/or change rtlsdr ctr_freq
         //   endif
         // endif
-        if (play_freq != last_play_freq) {
-            band_t *b = play_band;  // xxx mutex
 
-// xxx make subroutines
-            if ((b->f_max - b->f_min) <= MAX_FFT_FREQ_SPAN) {
+        b = get_active_band();
+        if (b == NULL) {
+            usleep(1000);
+            continue;
+        }
+
+        play_freq = b->f_play;
+        //if (play_freq == 0) {
+            //play_freq = b->f_play = b->f_min;
+        //}
+
+        if (b != last_actv_band || play_freq != last_play_freq) {
+            // xxx make subroutines
+            if ((b->f_span) <= MAX_FFT_FREQ_SPAN) {
                 ctr_freq = (b->f_max + b->f_min) / 2;
             } else if (play_freq - MAX_FFT_FREQ_SPAN/2 < b->f_min) {
                 ctr_freq = b->f_min + MAX_FFT_FREQ_SPAN/2;
@@ -327,12 +434,13 @@ static void *play_mode_thread(void *cx)
             offset_freq = play_freq - ctr_freq;
             offset_w = TWO_PI * offset_freq;
 
-            b->fft_freq_min = ctr_freq - MAX_FFT_FREQ_SPAN / 2;
-            b->fft_freq_ctr = ctr_freq;
-            b->fft_freq_max = ctr_freq + MAX_FFT_FREQ_SPAN / 2;
+            b->f_fft_inprog_min = ctr_freq - MAX_FFT_FREQ_SPAN / 2;
+            b->f_fft_inprog_max = ctr_freq + MAX_FFT_FREQ_SPAN / 2;
+            if (b->f_fft_inprog_min < b->f_min) b->f_fft_inprog_min = b->f_min;
+            if (b->f_fft_inprog_max >= b->f_max) b->f_fft_inprog_max = b->f_max;
 
-            update_display_title_line("MODE = %s  PLAY = %ld  CTR = %ld  OFFSET = %ld", 
-                                      MODE_STR(mode), play_freq, ctr_freq, offset_freq);
+            update_display_title_line("%s  MODE = %s  PLAY = %ld  CTR = %ld  OFFSET = %ld", 
+                                      b->name, MODE_STR(mode), play_freq, ctr_freq, offset_freq);
 
             if (ctr_freq != last_ctr_freq) {
                 NOTICE("setting ctr freq %ld\n", ctr_freq);
@@ -347,10 +455,11 @@ static void *play_mode_thread(void *cx)
                 n = 0;
                 fft_pause = 300000;
 
-                last_ctr_freq = ctr_freq;
             }
 
+            last_ctr_freq = ctr_freq;
             last_play_freq = play_freq;
+            last_actv_band = b;
         }
 
         // if no rtlsdr data avail then continue
@@ -381,22 +490,25 @@ static void *play_mode_thread(void *cx)
         }
 
         // fft xxx
-        band_t *b = play_band;  // xxx mutex
         b->fft_in[n++] = data;
         if (n == FFT_N) {
             //NOTICE("fft\n");
             fft_fwd_c2c(b->fft_in, b->fft_out, FFT_N);
             n = 0;
 
-            
-            int k1 = (b->fft_freq_min - b->f_min) / FFT_ELEMENT_HZ;
+            int k1 = (b->f_fft_inprog_min - b->f_min) / FFT_ELEMENT_HZ;
             if (k1 < 0) {
                 NOTICE("k1 = %d\n", k1);
                 k1 = 0;
             }
 
+            //xxxx
+            freq_t fft_freq_span = b->f_fft_inprog_max - b->f_fft_inprog_min;
+            int nnn = fft_freq_span / FFT_ELEMENT_HZ;
+            int k2 = FFT_N - nnn / 2;
 
-            int k2 = FFT_N - FFT_N/4;
+            //int k2 = FFT_N - FFT_N/4;
+
             memset(b->cabs_fft, 0, b->max_cabs_fft*sizeof(double));
 
             for (int i = 0; i < FFT_N/2; i++) {
@@ -419,6 +531,13 @@ skip:
         t += DELTA_T;
     }
 
+terminate:
+    b->f_fft_inprog_min = 0;
+    b->f_fft_inprog_max = 0;
+    if (started) {
+        sdr_cancel_async(sim);
+    }
+    free(rb);
     return NULL;
 }
 
@@ -667,13 +786,13 @@ static void find(band_t *b, int avg_freq_span, double threshold)
 
             if (ma < threshold) {
                 idx_end = i;
-                bw = (idx_end - idx_start) *  (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
+                bw = (idx_end - idx_start) *  b->f_span / (b->max_cabs_fft - 1);
                 if (bw == 0) {
-                    ERROR("bw %d %ld %d\n", (idx_end - idx_start), (b->f_max - b->f_min), b->max_cabs_fft);
+                    ERROR("bw %d %ld %d\n", (idx_end - idx_start), b->f_span, b->max_cabs_fft);
                 }
 
                 idx_of_max -= n/2;
-                f = b->f_min + idx_of_max * (b->f_max - b->f_min) / (b->max_cabs_fft - 1);
+                f = b->f_min + idx_of_max * b->f_span / (b->max_cabs_fft - 1);
 
                 // xxx snap the freq
 

@@ -116,7 +116,7 @@ static void init_antenna(void)
     init_station_wav_file(   AM,  560000,   1, "wav_files/proud_mary.wav");
     //init_station_wav_file(   USB, 620000,   4, "wav_files/blue_sky.wav");
     //init_station_wav_file(   LSB, 640000,   4, "wav_files/blue_sky.wav");
-    init_station_wav_file(   FM,  1000000, 15, "wav_files/not_fade_away.wav");
+    init_station_wav_file(   FM,  1000000, 5, "wav_files/not_fade_away.wav");
 }
 
 static double get_station_signal(int id, double t)

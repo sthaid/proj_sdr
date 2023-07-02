@@ -26,6 +26,7 @@
 
 static win_info_t wi;
 //static bool       fullscr;
+static char *display_title_line;
 
 //
 // prototypes
@@ -155,6 +156,27 @@ static void handle_events(void)
     }
 }
 
+void update_display_title_line(char *fmt, ...)
+{
+    // xxx move to display.c?
+    #define MAX_LEN 100
+
+    static char strs[2][MAX_LEN];
+    static int idx;
+    char *s;
+    va_list ap;
+
+    s = strs[idx];
+    idx = (idx + 1) % 2;
+
+    va_start(ap, fmt);
+    vsnprintf(s, MAX_LEN, fmt, ap);
+    va_end(ap);
+
+    display_title_line = s;
+}
+
+
 // -----------------  DISPLAY BAND  -------------------------------
 
 static void cvt_wf_to_pixels(band_t *b, int row, int width);
@@ -176,7 +198,7 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
     }
 
     //NOTICE("--------- PLOT --------\n");
-    sdl_render_rect(loc, 2, SDL_GREEN);
+    sdl_render_rect(loc, 2, b->active ? SDL_RED : SDL_GREEN);
 
     sdl_render_printf(loc->x, loc->y, FTSZ2, SDL_WHITE, SDL_BLACK, "%s", b->name);
 
@@ -191,7 +213,7 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
 #endif
     scaling = loc->h / max;
     //NOTICE("display: max = %f  scaling = %f\n", max, scaling);
-    sdl_render_printf(loc->x+100, loc->y, FTSZ2, SDL_WHITE, SDL_BLACK, "max=%f", max);
+    //sdl_render_printf(loc->x+100, loc->y, FTSZ2, SDL_WHITE, SDL_BLACK, "max=%f", max);
 
     int n=0;
     for (i = 0; i < b->max_cabs_fft; i++) {
@@ -202,7 +224,6 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
     }
     
     sdl_render_lines(points, n, SDL_WHITE);
-
 
     // FFT LOCS
 
@@ -217,27 +238,6 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
         sdl_render_point(x, y, SDL_YELLOW, 3);
 
         f += b->fft_freq_span;
-    }
-#else
-    { int x, y;
-    y = loc->y + loc->h;
-    x = F2X(b->fft_freq_min);
-    sdl_render_point(x, y, SDL_YELLOW, 3);
-
-    y = loc->y + loc->h;
-    x = F2X(b->fft_freq_max);
-    sdl_render_point(x, y, SDL_YELLOW, 3);
-
-    y = loc->y + loc->h;
-    x = F2X(b->fft_freq_ctr);
-    sdl_render_point(x, y, SDL_YELLOW, 3);
-
-    if (b == play_band) {
-        y = loc->y + loc->h;
-        x = F2X(play_freq);
-        sdl_render_point(x, y, SDL_RED, 5);
-    }
-        
     }
 #endif
 
@@ -278,9 +278,19 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
     }
 
     sdl_update_texture(b->wf.texture, b->wf.pixels8, pitch);
-
     sdl_render_texture(loc->x, loc->y+loc->h+5, b->wf.texture);
 
+    // xxx fft range
+    if (mode == MODE_PLAY && b->f_fft_inprog_min) { 
+        int x, y;
+        y = loc->y + loc->h;
+        x = F2X(b->f_fft_inprog_min);
+        sdl_render_point(x, y, SDL_YELLOW, 9);
+
+        y = loc->y + loc->h;
+        x = F2X(b->f_fft_inprog_max);
+        sdl_render_point(x, y, SDL_YELLOW, 9);
+    }
 
     // LOCATION OF FOUND STATIONS
     for (i = 0; i < b->max_scan_station; i++) {
@@ -310,7 +320,7 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
         //x = loc->x + (double)(b->f_play - b->f_min) / (b->f_max - b->f_min) * loc->w;
         //x = loc->x + (b->f_play - b->f_min) * loc->w / (b->f_max - b->f_min);
         x = F2X(b->f_play);
-        sdl_render_point(x, y, SDL_RED, 7);
+        sdl_render_point(x, y, SDL_RED, b->active ? 7 : 5);
     }
 }
 

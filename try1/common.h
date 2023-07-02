@@ -58,10 +58,13 @@ typedef struct {
      (m) == MODE_PLAY ? "PLAY" : \
                         "????")
 
+//EXTERN char  *display_title_line;
+//EXTERN freq_t play_freq;
+//EXTERN struct band_s *play_band;
+//EXTERN int  play_time; //xxx del
+
 EXTERN int    mode;
-EXTERN char  *display_title_line;
-EXTERN freq_t play_freq;
-EXTERN struct band_s *play_band;
+EXTERN bool program_terminating;
 
 // -----------------  STRUCT BAND  ---------------------------------
 
@@ -75,6 +78,7 @@ typedef struct band_s {
     char *name;
     freq_t f_min;
     freq_t f_max;
+    freq_t f_span;
     freq_t f_step;
     int max_station;
     struct station_s {
@@ -83,25 +87,25 @@ typedef struct band_s {
         // xxx demod
     } station[MAX_STATION];
 
-    // dynamic config
-    freq_t f;
-    int demod;
-    int squelch;
-    int selected;
-    int active;
+    // state
+    int  idx;
+    bool selected;
+    bool active;
+//  bool play_inprog;
+//  bool fft_inprog;
+    freq_t f_fft_inprog_min;  // xxx may not need these 2
+    freq_t f_fft_inprog_max;
+    freq_t f_play;
 
-    // xxx clean up what follows
-    int      num_fft;
-    freq_t   fft_freq_span;
-    double  *cabs_fft;
-    int      max_cabs_fft;
+    // fft buffers
     complex *fft_in;
     complex *fft_out;
 
-    freq_t fft_freq_min;
-    freq_t fft_freq_max;
-    freq_t fft_freq_ctr;
+    // fft result for entire band
+    int      max_cabs_fft;
+    double  *cabs_fft;
 
+    // waterfall 
     struct wf_s {
         unsigned char *data;
         int            num;
@@ -111,7 +115,11 @@ typedef struct band_s {
         texture_t      texture;
     } wf;
 
-    freq_t f_play;
+    // FFT mode
+    //int    num_fft;
+    //freq_t fft_freq_span;
+
+    // SCAN mode
     int max_scan_station;
     struct scan_station_s {
         freq_t f;
@@ -134,9 +142,6 @@ EXTERN int     max_band;
 
 // -----------------  VARIABLES  -----------------------------------
 
-EXTERN bool program_terminating;
-EXTERN int  play_time; //xxx del
-
 #if 0
 // xxx not used yet
 EXTERN int           zoom;
@@ -158,6 +163,7 @@ void config_init(void);
 // display.c
 void display_init(void);
 void display_handler(void);
+void update_display_title_line(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 // audio.c
 void audio_init(void);

@@ -722,7 +722,10 @@ sdl_event_t * sdl_poll_event(void)
             // Home, Insert, RightArrow, ctrl-a, etc.
 
             // map key to event_id used by this code
-            if (key == SDL_EVENT_KEY_ESC || key == SDL_EVENT_KEY_DELETE) {
+            if (key == SDL_EVENT_KEY_ESC || 
+                key == SDL_EVENT_KEY_DELETE || 
+                key == SDL_EVENT_KEY_TAB) 
+            {
                 event_id = key;
             } else if (key >= 'a' && key < 'z' && (ctrl)) {
                 event_id = key;

@@ -41,7 +41,7 @@ void config_init(void)
             }
 
             b = calloc(sizeof(band_t), 1);
-            band[max_band++] = b;
+            band[max_band] = b;
 
             cnt = sscanf(s+5, "%ms %lf %lf",
                          &b->name, 
@@ -51,9 +51,14 @@ void config_init(void)
             }
             b->f_min  = nearbyint(f_min * MHZ);
             b->f_max  = nearbyint(f_max * MHZ);
-
+            b->f_span = b->f_max - b->f_min;
+            b->idx = max_band;
             // xxx temp
             if (strncmp(b->name, "SIM", 3) == 0) b->selected = true;
+
+            b->f_play = b->f_min;
+
+            max_band++;
         } else if (strncmp(s, "STATION ", 8) == 0) {
             if (b == NULL) {
                 BAD_CONFIG_FILE_LINE;
