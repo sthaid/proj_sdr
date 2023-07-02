@@ -269,7 +269,10 @@ static void *play_mode_thread(void *cx)
 
     while (true) {
         if (program_terminating || stop_threads_req) {
-            sdr_cancel_async(sim);
+//xxx move to end
+            if (started) {
+                sdr_cancel_async(sim);
+            }
             free(rb);
             return NULL;
         }

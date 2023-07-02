@@ -87,6 +87,8 @@ static struct {
     int  ctr_freq;
 } info;
 
+static bool sdr_read_is_active;
+
 //
 // prototypes
 //
@@ -301,8 +303,15 @@ void sdr_set_ctr_freq(freq_t f, bool sim)
 
 void sdr_read_sync(complex *data, int n, bool sim)
 {
+    if (sdr_read_is_active) {
+        FATAL("sdr read is active\n");
+        return;
+    }
+
     if (sim) {
+        sdr_read_is_active = true;
         sim_sdr_read_sync(data, n);
+        sdr_read_is_active = false;
         return;
     }
 
@@ -311,30 +320,40 @@ void sdr_read_sync(complex *data, int n, bool sim)
     //rtlsdr_read_sync(dev, buff, buff_len, &n_read);
 }
 
-
 // -----------------  SDR ASYNC READ  ----------------------------------
 
 void sdr_read_async(sdr_async_rb_t *rb, bool sim)
 {
-    // xxx error if not stopped
+    if (sdr_read_is_active) {
+        FATAL("sdr read is active\n");
+        return;
+    }
+
+    memset(rb, 0, sizeof(sdr_async_rb_t));
 
     if (sim) {
         sim_sdr_read_async(rb);
+        sdr_read_is_active = true;
         return;
     }
 
     FATAL("not coded\n");
-    // xxx  read_async
 }
 
 void sdr_cancel_async(bool sim)
 {
-    if (sim) {
-        sim_sdr_cancel_async();
+    if (!sdr_read_is_active) {
+        FATAL("sdr read is not active\n");
         return;
     }
 
-    // xxx  read_async
+    if (sim) {
+        sim_sdr_cancel_async();
+        sdr_read_is_active = false;
+        return;
+    }
+
+    FATAL("not coded\n");
 }
 
 // ---------------------------------------------------------------------
@@ -376,7 +395,7 @@ static void sim_sdr_read_async(sdr_async_rb_t *rb)
         return;
     }
 
-    rb->head = rb->tail = 0; //xxx move this ?
+    sim_async.cancel = false;
     sim_async.rb = rb;
 
     pthread_create(&sim_async.tid, NULL, sim_async_read_thread, NULL);
