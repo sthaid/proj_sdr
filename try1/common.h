@@ -38,7 +38,7 @@
 // -----------------  xxx MISC xxx  --------------------------------
 // xxx cleanup this section
 
-typedef unsigned long freq_t;
+typedef long freq_t;
 
 #define MAX_SDR_ASYNC_RB_DATA  (16*32*512/2 * 2)  // 131072 * 2 = 262144
 
@@ -48,7 +48,6 @@ typedef struct {
     complex data[MAX_SDR_ASYNC_RB_DATA];
 } sdr_async_rb_t;
 
-EXTERN int mode;
 #define MODE_FFT  0
 #define MODE_SCAN 1
 #define MODE_PLAY 2
@@ -58,6 +57,10 @@ EXTERN int mode;
      (m) == MODE_SCAN ? "SCAN" : \
      (m) == MODE_PLAY ? "PLAY" : \
                         "????")
+
+EXTERN int    mode;
+EXTERN char   display_title_line[100];
+EXTERN freq_t play_freq;
 
 // -----------------  STRUCT BAND  ---------------------------------
 

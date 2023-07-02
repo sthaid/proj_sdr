@@ -54,7 +54,7 @@ void display_handler(void)
         sdl_display_init();
 
         // xxx
-        sdl_render_text(0, 0, FTSZ2, MODE_STR(mode), SDL_WHITE, SDL_BLACK);
+        sdl_render_text(0, 0, FTSZ2, display_title_line, SDL_WHITE, SDL_BLACK);
         //sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
 
         // disaplay the bands that are selected

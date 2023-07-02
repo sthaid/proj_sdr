@@ -385,6 +385,8 @@ static void *sim_async_read_thread(void *cx)
     while (true) {
         // get a block of simulated antenna data
         get_simulated_antenna_data(sim_async.ctr_freq, data, MAX_DATA);
+// xxx allow ctr_freq to change
+// xxx feed the simulated data at the sdr sample rate
 
         // wait for room in the ring buffer
         // xxx maybe just wait for any room

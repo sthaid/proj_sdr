@@ -35,7 +35,7 @@ void pa_init(void)
         FATAL("Pa_Initialize failed, %s\n", Pa_GetErrorText(parc));
     }
 
-    pa_print_device_info_all();  // xxx could be an option
+    //pa_print_device_info_all();  // xxx could be an option
 
     atexit(exit_hndlr);
 }
