@@ -28,6 +28,8 @@ static bool stop_threads_req;
 
 // prototypes
 
+static void update_display_title_line(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
+
 static void start_thread(void *(*proc)(void *cx), char *name);
 static void stop_threads(void);
 static void *thread_wrapper(void *cx_arg);
@@ -85,12 +87,33 @@ void radio_init(void)
     }
 }
 
+static void update_display_title_line(char *fmt, ...)
+{
+    // xxx move to display.c?
+    #define MAX_LEN 100
+
+    static char strs[2][MAX_LEN];
+    static int idx;
+    char *s;
+    va_list ap;
+
+    s = strs[idx];
+    idx = (idx + 1) % 2;
+    
+    va_start(ap, fmt);
+    vsnprintf(s, MAX_LEN, fmt, ap);
+    va_end(ap);
+
+    display_title_line = s;
+}
+
 // -----------------  HANDLE EVENTS FROM DISPLAY  ----------------------
 
 // return true if event was handled
 bool radio_event(sdl_event_t *ev)
 {
     bool event_was_handled = true;
+    freq_t tmp_freq;
 
     switch(ev->event_id) {
     case SDL_EVENT_KEY_F(1):
@@ -104,14 +127,20 @@ bool radio_event(sdl_event_t *ev)
         break;
     case SDL_EVENT_KEY_F(3):
         mode = MODE_PLAY;
+        play_band = band[0];
+        play_freq = 540000;
         stop_threads();
         start_thread(play_mode_thread, "sdr_play_mode");
         break;
     case SDL_EVENT_KEY_LEFT_ARROW:
-        play_freq -= 10000;
+        tmp_freq = play_freq - 10000;
+        if (tmp_freq < play_band->f_min) tmp_freq = play_band->f_min;
+        play_freq = tmp_freq;
         break;
     case SDL_EVENT_KEY_RIGHT_ARROW:
-        play_freq += 10000;
+        tmp_freq = play_freq + 10000;
+        if (tmp_freq >= play_band->f_max) tmp_freq = play_band->f_max;
+        play_freq = tmp_freq;
         break;
     default:
         event_was_handled = false;
@@ -172,9 +201,7 @@ static void *thread_wrapper(void *cx_arg)
 
 static void *fft_mode_thread(void *cx)
 {
-    snprintf(display_title_line, sizeof(display_title_line),
-             "MODE = %s",
-             MODE_STR(mode));
+    update_display_title_line("MODE = %s", MODE_STR(mode));
 
     while (true) {
         for (int i = 0; i < max_band; i++) {
@@ -256,7 +283,6 @@ static void *play_mode_thread(void *cx)
     double          data_demod, data_demod_volscale;
     double          t = 0;
     double          offset_w = 0;
-    //band_t *b = NULL; //xxx
 
     bool started = false;
 
@@ -264,7 +290,6 @@ static void *play_mode_thread(void *cx)
 
     #define VOLUME_SCALE 10
 
-    play_freq = 560000;
     rb = malloc(sizeof(sdr_async_rb_t));
 
     while (true) {
@@ -285,29 +310,39 @@ static void *play_mode_thread(void *cx)
         //   endif
         // endif
         if (play_freq != last_play_freq) {
-#if 0
-            ctr_freq = 540000;
+            band_t *b = play_band;  // xxx mutex
+
+            if ((b->f_max - b->f_min) <= MAX_FFT_FREQ_SPAN) {
+                ctr_freq = (b->f_max + b->f_min) / 2;
+            } else if (play_freq - MAX_FFT_FREQ_SPAN/2 < b->f_min) {
+                ctr_freq = b->f_min + MAX_FFT_FREQ_SPAN/2;
+            } else if (play_freq + MAX_FFT_FREQ_SPAN/2 >= b->f_max) {
+                ctr_freq = b->f_max - MAX_FFT_FREQ_SPAN/2;
+            } else {
+                ctr_freq = play_freq;
+            }
             offset_freq = play_freq - ctr_freq;
             offset_w = TWO_PI * offset_freq;
-#else
-            ctr_freq = play_freq;
-            offset_freq = 0;
-            offset_w = 0;
-#endif
-            last_play_freq = play_freq;
 
-            snprintf(display_title_line, sizeof(display_title_line),
-                     "MODE = %s  PLAY = %ld  CTR = %ld  OFFSET = %ld", 
-                     MODE_STR(mode), play_freq, ctr_freq, offset_freq);
+            b->fft_freq_min = ctr_freq - MAX_FFT_FREQ_SPAN / 2;
+            b->fft_freq_ctr = ctr_freq;
+            b->fft_freq_max = ctr_freq + MAX_FFT_FREQ_SPAN / 2;
+
+            update_display_title_line("MODE = %s  PLAY = %ld  CTR = %ld  OFFSET = %ld", 
+                                      MODE_STR(mode), play_freq, ctr_freq, offset_freq);
 
             if (ctr_freq != last_ctr_freq) {
+                NOTICE("setting ctr freq %ld\n", ctr_freq);
                 sdr_set_ctr_freq(ctr_freq, sim);
                 if (!started) {
+                    NOTICE("starting\n");
                     sdr_read_async(rb, sim);
                     started = true;
                 }
                 last_ctr_freq = ctr_freq;
             }
+
+            last_play_freq = play_freq;
         }
 
         // if no rtlsdr data avail then continue
@@ -321,7 +356,7 @@ static void *play_mode_thread(void *cx)
 
         // offset tuning
         if (offset_freq) {
-            data = data * cexp(I * offset_w * t);  // xxx can this be more efficient?
+            data = data * cexp(-I * offset_w * t);  // xxx can this be more efficient?
         }
 
         // process the rtlsdr data item

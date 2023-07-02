@@ -237,7 +237,8 @@ void sdr_hardware_test(void)
 {
     unsigned char *buff, val;
     int rc, n_read, buff_len_desired, buff_len_padded, err_count=0;
-    const int secs = 3;
+    const int secs = 1;
+    unsigned long start, duration;
 
     NOTICE("---------- SDR HARDWARE TEST ----------\n");
 
@@ -254,14 +255,17 @@ void sdr_hardware_test(void)
         return;
     }
 
-    buff_len_desired = secs * info.sample_rate;
+    buff_len_desired = secs * (2 * info.sample_rate);
     buff_len_padded  = buff_len_desired + 50000;
     buff = malloc(buff_len_padded);
     memset(buff, 0, buff_len_padded);
     
     NOTICE("reading test data ...\n");
+    start = microsec_timer();
     rtlsdr_read_sync(dev, buff, buff_len_padded, &n_read);
-    NOTICE("done reading test data\n");
+    duration = microsec_timer() - start;
+    NOTICE("done reading test data:  duration = %f s, n_read = %d, rate = %f MB/s\n",
+           duration / 1000000., n_read, (double)n_read / duration);
 
     if (n_read < buff_len_desired) {
         ERROR("n_read=%d is too small, expected=%d\n", n_read, buff_len_desired);

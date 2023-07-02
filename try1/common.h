@@ -59,8 +59,9 @@ typedef struct {
                         "????")
 
 EXTERN int    mode;
-EXTERN char   display_title_line[100];
+EXTERN char  *display_title_line;
 EXTERN freq_t play_freq;
+EXTERN struct band_s *play_band;
 
 // -----------------  STRUCT BAND  ---------------------------------
 
@@ -96,6 +97,10 @@ typedef struct band_s {
     int      max_cabs_fft;
     complex *fft_in;
     complex *fft_out;
+
+    freq_t fft_freq_min;
+    freq_t fft_freq_max;
+    freq_t fft_freq_ctr;
 
     struct wf_s {
         unsigned char *data;

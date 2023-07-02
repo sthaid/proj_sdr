@@ -54,7 +54,9 @@ void display_handler(void)
         sdl_display_init();
 
         // xxx
-        sdl_render_text(0, 0, FTSZ2, display_title_line, SDL_WHITE, SDL_BLACK);
+        if (display_title_line) {
+            sdl_render_text(0, 0, FTSZ2, display_title_line, SDL_WHITE, SDL_BLACK);
+        }
         //sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
 
         // disaplay the bands that are selected
@@ -194,6 +196,7 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
 
     // FFT LOCS
 
+#if 0
     freq_t f = b->f_min + b->fft_freq_span/2;
     for (i = 0; i < b->num_fft; i++) {
         int x, y;
@@ -205,6 +208,28 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
 
         f += b->fft_freq_span;
     }
+#else
+    { int x, y;
+    y = loc->y + loc->h;
+    x = F2X(b->fft_freq_min);
+    sdl_render_point(x, y, SDL_YELLOW, 3);
+
+    y = loc->y + loc->h;
+    x = F2X(b->fft_freq_max);
+    sdl_render_point(x, y, SDL_YELLOW, 3);
+
+    y = loc->y + loc->h;
+    x = F2X(b->fft_freq_ctr);
+    sdl_render_point(x, y, SDL_YELLOW, 3);
+
+    if (b == play_band) {
+        y = loc->y + loc->h;
+        x = F2X(play_freq);
+        sdl_render_point(x, y, SDL_RED, 5);
+    }
+        
+    }
+#endif
 
     // WATERFALL
 
