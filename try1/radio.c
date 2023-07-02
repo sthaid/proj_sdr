@@ -284,6 +284,7 @@ static void *play_mode_thread(void *cx)
     double          t = 0;
     double          offset_w = 0;
     int n = 0;
+    int fft_pause = 0;
 
     bool started = false;
 
@@ -313,6 +314,7 @@ static void *play_mode_thread(void *cx)
         if (play_freq != last_play_freq) {
             band_t *b = play_band;  // xxx mutex
 
+// xxx make subroutines
             if ((b->f_max - b->f_min) <= MAX_FFT_FREQ_SPAN) {
                 ctr_freq = (b->f_max + b->f_min) / 2;
             } else if (play_freq - MAX_FFT_FREQ_SPAN/2 < b->f_min) {
@@ -340,6 +342,11 @@ static void *play_mode_thread(void *cx)
                     sdr_read_async(rb, sim);
                     started = true;
                 }
+
+                // pause fft here  OR band has changed
+                n = 0;
+                fft_pause = 300000;
+
                 last_ctr_freq = ctr_freq;
             }
 
@@ -367,6 +374,11 @@ static void *play_mode_thread(void *cx)
         data_demod = cabs(data_lpf);
         data_demod_volscale = data_demod * VOLUME_SCALE;
         downsample_and_audio_out(data_demod_volscale);
+
+        if (fft_pause) {
+            fft_pause--;
+            goto skip;
+        }
 
         // fft xxx
         band_t *b = play_band;  // xxx mutex
@@ -400,6 +412,7 @@ static void *play_mode_thread(void *cx)
             }
             b->wf.num++;
         }
+skip:
 
         // done with this rtlsdr data item
         rb->head++;

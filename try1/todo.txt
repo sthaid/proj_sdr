@@ -1,5 +1,12 @@
-static and dynamic config files
+cleanup
+
+rename sdr.config to config.sdr
+
 work on radio.c,  building down from the 3 modes - FFT  PLAY  SCAN
+
+
+
+static and dynamic config files
 
 review:
 common.h         ok for now
