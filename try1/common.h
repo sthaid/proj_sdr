@@ -162,7 +162,8 @@ void audio_out(double yo);
 void sdr_init(int dev_idx, int sample_rate);
 void sdr_list_devices(void);
 void sdr_hardware_test(void);
-void sdr_read_sync(freq_t ctr_freq, complex *buff, int n, bool sim);
-void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb, bool sim);
-void sdr_cancel_async(void);
+void sdr_set_ctr_freq(freq_t f, bool sim);
+void sdr_read_sync(complex *buff, int n, bool sim);
+void sdr_read_async(sdr_async_rb_t *rb, bool sim);
+void sdr_cancel_async(bool sim);
 

@@ -204,7 +204,8 @@ static void fft_band(band_t *b)
     for (i = 0; i < b->num_fft; i++) {
         // get a block of rtlsdr data at ctr_freq
         start = microsec_timer();
-        sdr_read_sync(ctr_freq, b->fft_in, FFT_N, sim);
+        sdr_set_ctr_freq(ctr_freq, sim);
+        sdr_read_sync(b->fft_in, FFT_N, sim);
         dur_sdr_read_sync += (microsec_timer() - start);
 
         // run fft
@@ -257,6 +258,8 @@ static void *play_mode_thread(void *cx)
     double          offset_w = 0;
     //band_t *b = NULL; //xxx
 
+    bool started = false;
+
     #define DELTA_T (1. / SDR_SAMPLE_RATE);
 
     #define VOLUME_SCALE 10
@@ -266,7 +269,7 @@ static void *play_mode_thread(void *cx)
 
     while (true) {
         if (program_terminating || stop_threads_req) {
-            sdr_cancel_async();
+            sdr_cancel_async(sim);
             free(rb);
             return NULL;
         }
@@ -275,21 +278,33 @@ static void *play_mode_thread(void *cx)
         //   determine new ctr_freq, and offset_freq
         //   update display_title_line
         //   if ctr_freq has changed
-        //     start rtl async reader, or change rtl ctr_freq
+        //     start rtlsdr async reader, and/or change rtlsdr ctr_freq
         //   endif
         // endif
         if (play_freq != last_play_freq) {
+#if 0
             ctr_freq = 540000;
             offset_freq = play_freq - ctr_freq;
             offset_w = TWO_PI * offset_freq;
+#else
+            ctr_freq = play_freq;
+            offset_freq = 0;
+            offset_w = 0;
+#endif
+            last_play_freq = play_freq;
+
             snprintf(display_title_line, sizeof(display_title_line),
                      "MODE = %s  PLAY = %ld  CTR = %ld  OFFSET = %ld", 
                      MODE_STR(mode), play_freq, ctr_freq, offset_freq);
+
             if (ctr_freq != last_ctr_freq) {
-                sdr_read_async(ctr_freq, rb, sim); // xxx or change freq
+                sdr_set_ctr_freq(ctr_freq, sim);
+                if (!started) {
+                    sdr_read_async(rb, sim);
+                    started = true;
+                }
                 last_ctr_freq = ctr_freq;
             }
-            last_play_freq = play_freq;
         }
 
         // if no rtlsdr data avail then continue

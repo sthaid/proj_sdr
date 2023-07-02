@@ -92,7 +92,11 @@ static struct {
 //
 
 static void sdr_print_dev_info(void);
-static void get_simulated_antenna_data(freq_t ctr_freq, complex *data, int n);
+
+static void sim_sdr_set_ctr_freq(freq_t f);
+static void sim_sdr_read_sync(complex *data, int n);
+static void sim_sdr_read_async(sdr_async_rb_t *rb);
+static void sim_sdr_cancel_async(void);
 
 #if 0 //xxx
 static void(*cb)(unsigned char *iq, size_t len);
@@ -281,16 +285,24 @@ void sdr_hardware_test(void)
     free(buff);
 }
 
-// -----------------  SDR SYNC READ  -----------------------------------
+// -----------------  SDR XXXXXXXXXX  ----------------------------------
 
-int sim=1; //xxx temp
-
-static void sim_sdr_read_sync(freq_t ctr_freq, complex *data, int n);
-
-void sdr_read_sync(freq_t ctr_freq, complex *data, int n, bool sim)
+void sdr_set_ctr_freq(freq_t f, bool sim)
 {
     if (sim) {
-        sim_sdr_read_sync(ctr_freq, data, n);
+        sim_sdr_set_ctr_freq(f);
+        return;
+    }
+
+    FATAL("not coded");
+}
+
+// -----------------  SDR SYNC READ  -----------------------------------
+
+void sdr_read_sync(complex *data, int n, bool sim)
+{
+    if (sim) {
+        sim_sdr_read_sync(data, n);
         return;
     }
 
@@ -299,23 +311,15 @@ void sdr_read_sync(freq_t ctr_freq, complex *data, int n, bool sim)
     //rtlsdr_read_sync(dev, buff, buff_len, &n_read);
 }
 
-// - - - - sim sync read support - - - - 
-
-static void sim_sdr_read_sync(freq_t ctr_freq, complex *data, int n)
-{
-    get_simulated_antenna_data(ctr_freq, data, n);
-    usleep(1000000 * (n * DELTA_T));
-}
 
 // -----------------  SDR ASYNC READ  ----------------------------------
 
-static void sim_sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb);
-static void sim_sdr_cancel_async(void);
-
-void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb, bool sim)
+void sdr_read_async(sdr_async_rb_t *rb, bool sim)
 {
+    // xxx error if not stopped
+
     if (sim) {
-        sim_sdr_read_async(ctr_freq, rb);
+        sim_sdr_read_async(rb);
         return;
     }
 
@@ -323,7 +327,7 @@ void sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb, bool sim)
     // xxx  read_async
 }
 
-void sdr_cancel_async(void)
+void sdr_cancel_async(bool sim)
 {
     if (sim) {
         sim_sdr_cancel_async();
@@ -333,26 +337,46 @@ void sdr_cancel_async(void)
     // xxx  read_async
 }
 
-// - - - - sim async read support - - - - 
+// ---------------------------------------------------------------------
+// -----------------  SIMULATION  --------------------------------------
+// ---------------------------------------------------------------------
 
-struct {
+static struct {
     pthread_t       tid;
     bool            cancel;
     sdr_async_rb_t *rb;
-    freq_t          ctr_freq;
 } sim_async;
 
-static void *sim_async_read_thread(void *cx);
+static freq_t sim_ctr_freq;
 
-static void sim_sdr_read_async(freq_t ctr_freq, sdr_async_rb_t *rb)
+static void *sim_async_read_thread(void *cx);
+static void sim_get_antenna_data(complex *data, int n);
+
+// - - - - sim set ctr freq - - - - 
+
+static void sim_sdr_set_ctr_freq(freq_t f)
+{
+    sim_ctr_freq = f;
+}
+
+// - - - - sim sync read - - - - 
+
+static void sim_sdr_read_sync(complex *data, int n)
+{
+    sim_get_antenna_data(data, n);
+    usleep(1000000 * (n * DELTA_T));
+}
+
+// - - - - sim async read - - - - 
+
+static void sim_sdr_read_async(sdr_async_rb_t *rb)
 {
     if (sim_async.tid != 0) {
         ERROR("sdr sim async read is already active\n");
         return;
     }
 
-    rb->head = rb->tail = 0; //xxx move this
-    sim_async.ctr_freq = ctr_freq;
+    rb->head = rb->tail = 0; //xxx move this ?
     sim_async.rb = rb;
 
     pthread_create(&sim_async.tid, NULL, sim_async_read_thread, NULL);
@@ -367,7 +391,6 @@ static void sim_sdr_cancel_async(void)
 
     sim_async.cancel = false;
     sim_async.rb = NULL;
-    sim_async.ctr_freq = 0;
     sim_async.tid = 0;
 }
 
@@ -380,13 +403,13 @@ static void *sim_async_read_thread(void *cx)
 
     pthread_setname_np(pthread_self(), "sdr_async_read");
 
-    NOTICE("async read thread starting, f=%ld\n", sim_async.ctr_freq);
+    NOTICE("async read thread starting\n");
+
+    // xxx feed the simulated data at the sdr sample rate
 
     while (true) {
         // get a block of simulated antenna data
-        get_simulated_antenna_data(sim_async.ctr_freq, data, MAX_DATA);
-// xxx allow ctr_freq to change
-// xxx feed the simulated data at the sdr sample rate
+        sim_get_antenna_data(data, MAX_DATA);
 
         // wait for room in the ring buffer
         // xxx maybe just wait for any room
@@ -418,14 +441,14 @@ static void *sim_async_read_thread(void *cx)
     }
 
 terminate:
-    NOTICE("async read thread terminating, f=%ld\n", sim_async.ctr_freq);
+    NOTICE("async read thread terminating\n");
 
     return NULL;
 }
 
-// -----------------  GET SIMULATED ANTENNA DATA  ----------------------
+// - - - - sim get antenna data - - - - 
 
-static void get_simulated_antenna_data(freq_t ctr_freq, complex *data, int n)
+static void sim_get_antenna_data(complex *data, int n)
 {
     static bool first_call = true;
     static double *antenna;
@@ -462,8 +485,8 @@ static void get_simulated_antenna_data(freq_t ctr_freq, complex *data, int n)
         t          = 0;
     }
 
-    // shift the frequency to ctr_freq, and copy to caller's buffer
-    double w = TWO_PI * ctr_freq;
+    // shift the frequency to sim_ctr_freq, and copy to caller's buffer
+    double w = TWO_PI * sim_ctr_freq;
     for (int i = 0; i < n; i++) {
         data[i] = antenna[idx++] * cexp(-I * w * t);
         if (idx == max) idx = 0;
@@ -471,6 +494,11 @@ static void get_simulated_antenna_data(freq_t ctr_freq, complex *data, int n)
     }
 }
 
+// --------------------------------------
+// --------------------------------------
+// --------------------------------------
+// --------------------------------------
+// --------------------------------------
 #if 0
     // enable direct sampling
     int direct_sampling;
