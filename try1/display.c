@@ -286,18 +286,16 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
         y = loc->y + loc->h;
 
         if (x2-x1 > 2) {
-            sdl_render_line(x1, y-2, x2, y-2, SDL_PINK);
-            sdl_render_line(x1, y-1, x2, y-1, SDL_PINK);
-            sdl_render_line(x1, y, x2, y, SDL_PINK);
-            sdl_render_line(x1, y+1, x2, y+1, SDL_PINK);
-            sdl_render_line(x1, y+2, x2, y+2, SDL_PINK);
+            for (int i = -3; i <= 3; i++) {
+                sdl_render_line(x1, y-i, x2, y-i, SDL_PURPLE);
+            }
         } else {
-            sdl_render_point((x1+x2)/2, y, SDL_PINK, 3);
+            sdl_render_point((x1+x2)/2, y, SDL_PURPLE, 5);
         }
     }
 
     // WHICH STATION IS PLAYING
-    if (mode == MODE_PLAY && b->active && b->f_play != 0) {
+    if ((mode == MODE_PLAY || mode == MODE_SCAN) && b->active && b->f_play != 0) {
         int x, y;
 
         y = loc->y + loc->h;

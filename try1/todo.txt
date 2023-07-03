@@ -2,10 +2,14 @@ title line
 demod selection
 - fm demod
 clean up display.c
-clean up radio.c
 start using sdr o the fm band
 display band W adjustment
 select bands and save to config
+
+--------------
+
+clean up radio.c
+
 
 xxxxxxxxxxxx
 

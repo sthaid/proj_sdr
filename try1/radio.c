@@ -763,6 +763,7 @@ static void find_stations(band_t *b)
     qsort(b->scan_station, b->max_scan_station, sizeof(struct scan_station_s), compare);
 
     if (0) {
+        int j;
         NOTICE("find_station results: cnt=%d\n", b->max_scan_station);
         for (j = 0; j < b->max_scan_station; j++) {
             struct scan_station_s *ss = &b->scan_station[j];
