@@ -8,6 +8,9 @@ static double        ao_buff[MAX_AO_BUFF];
 static unsigned long ao_head;
 static unsigned long ao_tail;
 
+static bool program_terminating;
+
+static void exit_hndlr(void);
 static void *pa_play_thread(void*cx);
 static int pa_play_cb(void *data, void *cx_arg);
 static void print_max_audio_values(double ao);
@@ -22,6 +25,15 @@ void audio_init(void)
     // xxx program option to display devices
     pa_init();
     pthread_create(&tid, NULL, pa_play_thread, NULL);
+
+    atexit(exit_hndlr);
+}
+
+static void exit_hndlr(void)
+{
+    NOTICE("%s exit_hndlr\n", __FILE__);
+
+    program_terminating = true;
 }
 
 // -----------------  AUDIO OUTPUT  ---------------------------------

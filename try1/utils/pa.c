@@ -42,6 +42,8 @@ void pa_init(void)
 
 static void exit_hndlr(void)
 {
+    NOTICE("%s exit_hndlr\n", __FILE__);
+
     Pa_Terminate();
 }
 

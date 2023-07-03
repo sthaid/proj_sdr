@@ -94,6 +94,7 @@ static bool sdr_read_is_active;
 // prototypes
 //
 
+static void exit_hndlr(void);
 static void sdr_print_dev_info(void);
 
 static void sim_sdr_set_ctr_freq(freq_t f);
@@ -155,6 +156,18 @@ void sdr_init(int dev_idx, int sample_rate)
 
     // print info
     sdr_print_dev_info();
+
+    // register exit_hndlr
+    atexit(exit_hndlr);
+}
+
+static void exit_hndlr(void)
+{
+    NOTICE("%s exit_hndlr\n", __FILE__);
+
+    if (dev) {
+        rtlsdr_close(dev);
+    }
 }
 
 static void sdr_print_dev_info(void)
@@ -428,7 +441,7 @@ static void *sim_async_read_thread(void *cx)
         // wait for room in the ring buffer
         // xxx maybe just wait for any room
         while (true) {
-            if (sim_async.cancel || program_terminating) {
+            if (sim_async.cancel) {
                 goto terminate;
             }
 
@@ -449,7 +462,7 @@ static void *sim_async_read_thread(void *cx)
         rb->tail = rb_tail;
 
         // check for cancel request
-        if (sim_async.cancel || program_terminating) {
+        if (sim_async.cancel) {
             goto terminate;
         }
     }

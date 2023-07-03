@@ -132,8 +132,6 @@ EXTERN bool    scan_pause;
 EXTERN int     scan_go_next;
 EXTERN int     scan_go_prior;
 
-EXTERN bool    program_terminating;
-
 //
 // inline procedures
 //

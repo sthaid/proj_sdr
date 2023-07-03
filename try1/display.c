@@ -14,9 +14,6 @@
 #define FTCW3 (sdl_font_char_width(FTSZ3))
 #define FTCH3 (sdl_font_char_height(FTSZ3))
 
-//#define SDL_EVENT_FULLSCR        (SDL_EVENT_USER_DEFINED+1)
-//#define SDL_EVENT_PLAY_TIME      (SDL_EVENT_USER_DEFINED+2)
-
 #define W (wi.w)
 #define H (wi.h)
 
@@ -25,8 +22,8 @@
 //
 
 static win_info_t wi;
-//static bool       fullscr;
 static char *display_debug_line;
+static bool program_terminating;
 
 //
 // prototypes
@@ -55,7 +52,7 @@ void display_handler(void)
         sdl_display_init();
 
         // xxx
-        //sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
+        // sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
 
         // disaplay the bands that are selected
         int x = 50, i;
@@ -132,10 +129,6 @@ static void handle_events(void)
             break; }
             
 #if 0
-        case SDL_EVENT_FULLSCR:
-            fullscr = !fullscr;
-            sdl_full_screen(fullscr);
-            break;
         case SDL_EVENT_PLAY_TIME: {
             // xxx redo this
             int tmp = play_time + ev->mouse_wheel.delta_y;
@@ -159,9 +152,9 @@ static void handle_events(void)
 
 void display_print_debug_line(char *fmt, ...)
 {
-    // xxx move to display.c?
     #define MAX_LEN 100
 
+    // xxx more strs and interlocked
     static char strs[2][MAX_LEN];
     static int idx;
     char *s;
@@ -181,7 +174,6 @@ void display_clear_debug_line(void)
 {
     display_debug_line = NULL;
 }
-
 
 // -----------------  DISPLAY BAND  -------------------------------
 

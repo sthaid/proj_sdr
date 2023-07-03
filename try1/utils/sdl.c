@@ -112,7 +112,7 @@ static uint32_t         sdl_color_to_rgba[MAX_SDL_COLOR_TO_RGBA] = {
 // prototypes
 //
 
-static void exit_handler(void);
+static void exit_hndlr(void);
 static void font_init(int32_t ptsize);
 static void set_color(int32_t color); 
 
@@ -187,7 +187,7 @@ int32_t sdl_init(int32_t w, int32_t h, bool fullscreen, bool resizeable, bool sw
     }
 
     // register exit handler
-    atexit(exit_handler);
+    atexit(exit_hndlr);
 
     // return sdl_win_info to caller
     *wi = sdl_win_info;
@@ -244,9 +244,11 @@ void sdl_get_max_texture_dim(int32_t * max_texture_dim)
                            sdl_renderer_info.max_texture_height);
 }
 
-static void exit_handler(void)
+static void exit_hndlr(void)
 {
     int32_t i;
+
+    NOTICE("%s exit_hndlr\n", __FILE__);
     
     for (i = 0; i < MAX_FONT_PTSIZE; i++) {
         if (sdl_font[i].font != NULL) {

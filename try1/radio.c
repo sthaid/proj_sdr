@@ -6,6 +6,32 @@
 // - can MAX_FFT_FREQ_SPAN be larger, say up to 2400000
 // - at exit wait for threads
 
+// xxx todo
+// - display range of stations in the band being played
+// - snap the freq ?
+// - adjust play time
+// - ctrl chars
+//     skip to next
+//     pause
+//     continue
+
+#if 0
+ctrls:
+- FFT RECV SCAN   3 buttons to set state  AND f1,f2,f3
+- when fft
+    . +/- to adjust interval
+- when scanning
+    . +/- to adjust play time
+    . tab and ctrl-tab to go next,prev station
+    . 'space' to pause/unpause
+- when recv
+    . freq ctrl
+      - arrows
+      - click on the fft
+    . 'z' toggles zoom
+#endif
+
+
 //
 // defines
 //
@@ -41,6 +67,8 @@ static bool stop_threads_req;
 // prototypes
 //
 
+static void exit_hndlr(void);
+ 
 static band_t *get_active_band(void);
 static void set_active_band(band_t *b) ATTRIB_UNUSED;
 static void set_active_band_to_next(void) ATTRIB_UNUSED;
@@ -97,6 +125,15 @@ void radio_init(void)
     scan_intvl = 3;
     mode = MODE_FFT;
     start_thread(fft_mode_thread, "sdr_fft_mode");
+
+    atexit(exit_hndlr);
+}
+
+static void exit_hndlr(void)
+{
+    NOTICE("%s exit_hndlr\n", __FILE__);
+
+    stop_threads();
 }
 
 // -----------------  HANDLE EVENTS FROM DISPLAY  ----------------------
@@ -301,7 +338,7 @@ static void *fft_mode_thread(void *cx)
 {
     while (true) {
         for (int i = 0; i < max_band; i++) {
-            if (program_terminating || stop_threads_req) {
+            if (stop_threads_req) {
                 return NULL;
             }
 
@@ -334,7 +371,7 @@ static void *scan_mode_thread(void *cx)
         for (i = 0; i < max_band; i++) {
             band_t *b = band[i];
 
-            if (program_terminating || stop_threads_req) {
+            if (stop_threads_req) {
                 return NULL;
             }
 
@@ -378,7 +415,7 @@ static void *scan_mode_thread(void *cx)
         for (i = 0; i < max_band; i++) {
             band_t *b = band[idx];
             for (j = 0; j < b->max_scan_station; j++) {
-                if (program_terminating || stop_threads_req) {  // use atexit to stop the threds, don't need prog_terminating
+                if (stop_threads_req) {
                     return NULL;
                 }
 
@@ -481,7 +518,7 @@ static void player(void)
     rb = malloc(sizeof(sdr_async_rb_t));
 
     while (true) {
-        if (program_terminating || stop_threads_req) {
+        if (stop_threads_req) {
             goto terminate;
         }
 
@@ -672,41 +709,6 @@ static void downsample_and_audio_out(double x)
 
 // -----------------  xxxxxxxxxxxxxxxx  ----------------------------
 
-
-#if 0
-static void play_band(band_t *b)
-{
-    int i;
-
-    NOTICE("PLAY BAND %s  b->sim=%d\n", b->name, b->sim);
-
-    b->max_scan_station = 0;
-    find(b, 50000,  500);  // xxx use squelch
-    find(b,  1000,  500);
-
-    if (b->max_scan_station == 0) {
-        NOTICE("no stations found in band %s\n", b->name);
-        return;
-    }
-
-    qsort(b->scan_station, b->max_scan_station, sizeof(struct scan_station_s), compare);
-
-    NOTICE("FIND RESULT cnt=%d\n", b->max_scan_station);
-    for (i = 0; i < b->max_scan_station; i++) {
-        struct scan_station_s *ss = &b->scan_station[i];
-        NOTICE("f=%ld  bw=%ld\n", ss->f, ss->bw);
-    }
-
-    set_active_band(b);
-
-    for (i = 0; i < b->max_scan_station; i++) {
-        struct scan_station_s *ss = &b->scan_station[i];
-        b->f_play = ss->f;
-        player();
-    }
-}
-#endif
-
 static void find(band_t *b, int avg_freq_span, double threshold)
 {
     void   *ma_cx = NULL;
@@ -809,123 +811,7 @@ static int compare(const void *a_arg, const void *b_arg)
 
 // -----------------------------------------------------------------
 // -----------------------------------------------------------------
-// -----------------------------------------------------------------
-// -----------------------------------------------------------------
 #if 0
-// xxx also decode fm stereo
 
-static void *scan_thread(void *cx);
-static void fft_band(band_t *b);
-static void play_band(band_t *b);
 #endif
 
-#if 0
-ctrls:
-- FFT RECV SCAN   3 buttons to set state  AND f1,f2,f3
-- when fft
-    . +/- to adjust interval
-- when scanning
-    . +/- to adjust play time
-    . tab and ctrl-tab to go next,prev station
-    . 'space' to pause/unpause
-- when recv
-    . freq ctrl
-      - arrows
-      - click on the fft
-    . 'z' toggles zoom
-
-displays:
-- FFT RECV SCAN
-- IN FFT mode
-  - the desired and actual fft interval
-- IN scan mode 
-  - the play intvl, and paused or playing state
-  - highlight the band being played,  and the station in the band
-  - the frequency and demod
-- IN Recv mode
-  - the desired and actual fft interval
-  - the frequency and demod
-
----------------------
-
-thread ...
-when entering a state:
-- clear the published fft
-
-ideas
-- the top waterfall data is also what is displayed in the fft graph
-
-while 1 {
-    if state == SCAN || FFT
-        wait for time to do the fft
-        fft all bands that are selected
-        add waterfall for all other bands,  so they all push down togethor
-        find stations in all selected bands
-        if scan
-            play next station until all bands are done
-               while playing, update the fft, but do not need to include it in the waterfall
-        endif
-    else if state == RECV
-        get data, and play it
-        if time for the fft
-            do the fft,  and it will be displayed
-            add waterfall for all other bands,  so they all push down togethor
-
-            might want seperate fft thread
-    endif
-}
-#endif
-
-#if 0
-// xxx todo
-// - display range of stations in the band being played
-// - snap the freq ?
-// - adjust play time
-// - ctrl chars
-//     skip to next
-//     pause
-//     continue
-
-static void *scan_thread(void *cx)
-{
-    int i;
-    //int cnt=0;
-
-    pthread_setname_np(pthread_self(), "sdr_scan");
-
-    while (true) {
-        //NOTICE("SCAN %d\n", ++cnt);
-
-        for (i = 0; i < max_band; i++) {
-            if (program_terminating) {
-                goto terminate;
-            }
-
-            band_t *b = band[i];
-            if (!b->selected) {
-                continue;
-            }
-
-            fft_band(b);
-        }
-
-        for (i = 0; i < max_band; i++) {
-            if (program_terminating) {
-                goto terminate;
-            }
-
-            band_t *b = band[i];
-            if (!b->selected) {
-                continue;
-            }
-
-            play_band(b);
-        }
-    }
-
-terminate:
-    return NULL;
-}
-
-
-#endif
