@@ -2,7 +2,8 @@
 
 #define FILENAME "sdr.config"
 
-static void config_dump(void);
+static void exit_hndlr(void);
+static void config_dump(void) ATTRIB_UNUSED;
 
 // -------------------------------------------------------------
 
@@ -80,8 +81,23 @@ void config_init(void)
     // close file
     fclose(fp);
 
-    // print the config
-    config_dump();
+    // must have at least one band
+    if (max_band == 0) {
+        FATAL("no bands defined\n");
+    }
+
+    // register exit_hndlr
+    atexit(exit_hndlr);
+
+    // xxx print the config
+    //config_dump();
+}
+
+static void exit_hndlr(void)
+{
+    NOTICE("%s exit_hndlr\n", __FILE__);
+
+    // xxx tbd
 }
 
 static void config_dump(void)

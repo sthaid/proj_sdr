@@ -40,14 +40,14 @@
 #define AUDIO_SAMPLE_RATE 22000
 
 #define MODE_FFT  1
-#define MODE_SCAN 2
-#define MODE_PLAY 3
+#define MODE_PLAY 2
+#define MODE_SCAN 3
 #define MODE_STOP 4
 
 #define MODE_STR(m) \
     ((m) == MODE_FFT  ? "FFT"  : \
-     (m) == MODE_SCAN ? "SCAN" : \
      (m) == MODE_PLAY ? "PLAY" : \
+     (m) == MODE_SCAN ? "SCAN" : \
      (m) == MODE_STOP ? "STOP" : \
                         "????")
 

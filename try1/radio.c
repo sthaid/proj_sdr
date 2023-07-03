@@ -93,8 +93,7 @@ static void demod_and_audio_out(complex data_freq_shift);
 static complex lpf(complex x, double f_cut);
 static void downsample_and_audio_out(double x);
 
-//static void play_band(band_t *b);
-
+static void find_stations(band_t *b);
 static void find(band_t *b, int avg_freq_span, double threshold);
 static int add(band_t *b, freq_t f, freq_t bw);
 static int compare(const void *a_arg, const void *b_arg);
@@ -118,7 +117,6 @@ void radio_init(void)
 
     set_active_band(band[0]);
 
-//xxx
     scan_pause = false;
     scan_go_next = false;
     scan_go_prior = false;
@@ -152,13 +150,13 @@ bool radio_event(sdl_event_t *ev)
         break;
     case SDL_EVENT_KEY_F(2):
         stop_threads();
-        mode = MODE_SCAN;
-        start_thread(scan_mode_thread, "sdr_scan_mode");
+        mode = MODE_PLAY;
+        start_thread(play_mode_thread, "sdr_play_mode");
         break;
     case SDL_EVENT_KEY_F(3):
         stop_threads();
-        mode = MODE_PLAY;
-        start_thread(play_mode_thread, "sdr_play_mode");
+        mode = MODE_SCAN;
+        start_thread(scan_mode_thread, "sdr_scan_mode");
         break;
     case SDL_EVENT_KEY_F(4):
         stop_threads();
@@ -173,25 +171,31 @@ bool radio_event(sdl_event_t *ev)
         break;
 
     case SDL_EVENT_KEY_LEFT_ARROW:
-//xxx scan next/prior
-        if ((mode != MODE_PLAY) || ((b = get_active_band()) == NULL)) {
-            break;
+        if ((b = get_active_band()) == NULL) break;
+        if (mode == MODE_PLAY) {
+            tmp_freq = b->f_play - 10000; //xxx step
+            if (tmp_freq < b->f_min) tmp_freq = b->f_min;
+            b->f_play = tmp_freq;
+        } else if (mode == MODE_SCAN) {
+            scan_go_prior = true;
+            scan_pause = false;
         }
-        tmp_freq = b->f_play - 10000;
-        if (tmp_freq < b->f_min) tmp_freq = b->f_min;
-        b->f_play = tmp_freq;
         break;
     case SDL_EVENT_KEY_RIGHT_ARROW:
-        if ((mode != MODE_PLAY) || ((b = get_active_band()) == NULL)) {
-            break;
+        if ((b = get_active_band()) == NULL) break;
+        if (mode == MODE_PLAY) {
+            tmp_freq = b->f_play + 10000;
+            if (tmp_freq < b->f_min) tmp_freq = b->f_min;
+            b->f_play = tmp_freq;
+        } else if (mode == MODE_SCAN) {
+            scan_go_next = true;
+            scan_pause = false;
         }
-        tmp_freq = b->f_play + 10000;
-        if (tmp_freq >= b->f_max) tmp_freq = b->f_max;
-        b->f_play = tmp_freq;
         break;
-
     case ' ':
-        scan_pause = !scan_pause;
+        if (mode == MODE_SCAN) {
+            scan_pause = true;
+        }
         break;
 
     default:
@@ -215,12 +219,10 @@ static band_t *get_active_band(void)
 static void set_active_band(band_t *b)
 {
     if (active_band) {
-        NOTICE("Clearing on %d\n", active_band->idx);
         active_band->active = false;
         active_band = NULL;
     }
 
-    NOTICE("Settting on %d\n", b->idx);
     b->active = true;
     b->selected = true;
     active_band = b;
@@ -359,17 +361,25 @@ static void *play_mode_thread(void *cx)
 
 static void *scan_mode_thread(void *cx)
 {
-    int i, j, idx;
-    band_t *first;
+    int           bidx, sidx;
+    band_t       *first;
+    bool          go_next;
+    unsigned long t;
 
-    for (i = 0; i < max_band; i++) {
-        band[i]->max_scan_station = 0;
+    // clear max_scan_stations that may be remaining from earlier scans
+    for (bidx = 0; bidx < max_band; bidx++) {
+        band[bidx]->max_scan_station = 0;
     }
 
+    // loop
+    // - for all selected bands, perform fft and find band stations
+    // - play all the found stations
     while (true) {
+        // perform fft and find stations, on all selected bands
         NOTICE("ffting\n");
-        for (i = 0; i < max_band; i++) {
-            band_t *b = band[i];
+        first = NULL;
+        for (bidx = 0; bidx < max_band; bidx++) {
+            band_t *b = band[bidx];
 
             if (stop_threads_req) {
                 return NULL;
@@ -378,55 +388,92 @@ static void *scan_mode_thread(void *cx)
             if (b->selected) {
                 fft_entire_band(b);
 
-                // xxx routine
-                b->max_scan_station = 0;
-                find(b, 50000,  500);  // xxx use squelch
-                find(b,  1000,  500);
-                qsort(b->scan_station, b->max_scan_station, sizeof(struct scan_station_s), compare);
+                find_stations(b);
 
-                NOTICE("FIND RESULT cnt=%d\n", b->max_scan_station);
-                for (j = 0; j < b->max_scan_station; j++) {
-                    struct scan_station_s *ss = &b->scan_station[j];
-                    NOTICE("f=%ld  bw=%ld\n", ss->f, ss->bw);
+                if (b->max_scan_station > 0 && !first) {
+                    first = b;
                 }
             }
         }
 
-        first = NULL;
-        for (i = 0; i < max_band; i++) {
-            if (band[i]->max_scan_station > 0) {
-                first = band[i];
-                break;
-            }
-        }
+        // if no stations found then do fft again
         if (first == NULL) {
-            NOTICE("error no stations found\n");
+            NOTICE("no stations found\n");
             continue;
         }
-        NOTICE("first idx=%d name=%s max_scan_stations=%d\n",
-               first->idx, first->name, first->max_scan_station);
 
-        first->f_play = first->scan_station[0].f;
+        // start the play_mod_thread
         set_active_band(first);
-
+        first->f_play = first->scan_station[0].f;
         start_thread(play_mode_thread, "sdr_play_mode");
 
-        idx = first->idx;
-        for (i = 0; i < max_band; i++) {
-            band_t *b = band[idx];
-            for (j = 0; j < b->max_scan_station; j++) {
+        // loop until all found stations have been played
+        bidx = first->idx;
+        sidx = 0;
+        while (true) {
+            // play station identified by bidx,sidx
+            band[bidx]->f_play = band[bidx]->scan_station[sidx].f;
+            __sync_synchronize();
+            set_active_band(band[bidx]);
+
+            // wait for play interval to expire, or go_next/go_prior control
+            t = 0;
+            while (true) {
                 if (stop_threads_req) {
                     return NULL;
                 }
-
-                b->f_play = b->scan_station[j].f;
-                __sync_synchronize();
-                set_active_band(b);
-                sleep(5);
+                if (scan_pause) {
+                    usleep(10000);
+                    continue;
+                }
+                if (scan_go_next) {
+                    go_next = true;
+                    scan_go_next = false;
+                    break;
+                }
+                if (scan_go_prior) {
+                    go_next = false;
+                    scan_go_prior = false;
+                    break;
+                }
+                usleep(10000);
+                t += 10000;
+                if (t > scan_intvl * 1000000L) {
+                    go_next = true;
+                    break;
+                }
             }
-            idx = (idx + 1) % max_band;
+
+            // adjust bidx,sidx to be the next/prior station
+            if (go_next) {
+                while (true) {
+                    sidx++; 
+                    if (sidx < band[bidx]->max_scan_station) {
+                        break;
+                    } else {
+                        if (++bidx == max_band) bidx = 0;
+                        sidx = -1;
+                    }
+                }
+            } else {
+                while (true) {
+                    sidx--; 
+                    if (sidx >= 0) {
+                        break;
+                    } else {
+                        if (--bidx == -1) bidx = max_band-1;
+                        sidx = band[bidx]->max_scan_station;
+                    }
+                }
+            }
+
+            // if back to first then break
+            if (bidx == first->idx && sidx == 0) {
+                break;
+            }
         }
 
+        // stop the play_mode_thread
         stop_other_threads();
     }
 
@@ -523,7 +570,6 @@ static void player(void)
         }
 
         // get active_band and play_freq
-        // xxx should always have active_band
         b = get_active_band();
         if (b == NULL) {
             usleep(1000);
@@ -709,6 +755,22 @@ static void downsample_and_audio_out(double x)
 
 // -----------------  xxxxxxxxxxxxxxxx  ----------------------------
 
+static void find_stations(band_t *b)
+{
+    b->max_scan_station = 0;
+    find(b, 50000,  500);  // xxx use squelch
+    find(b,  1000,  500);
+    qsort(b->scan_station, b->max_scan_station, sizeof(struct scan_station_s), compare);
+
+#if 0
+    NOTICE("FIND RESULT cnt=%d\n", b->max_scan_station);
+    for (j = 0; j < b->max_scan_station; j++) {
+        struct scan_station_s *ss = &b->scan_station[j];
+        NOTICE("f=%ld  bw=%ld\n", ss->f, ss->bw);
+    }
+#endif
+}
+
 static void find(band_t *b, int avg_freq_span, double threshold)
 {
     void   *ma_cx = NULL;
@@ -776,6 +838,8 @@ static int add(band_t *b, freq_t f, freq_t bw)
 {
     struct scan_station_s *ss = &b->scan_station[b->max_scan_station];
     int j;
+
+    NOTICE("ADDING %ld\n", f);
 
     if (b->max_scan_station >= MAX_SCAN_STATION) {
         ERROR("ADD FULL\n");
