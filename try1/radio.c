@@ -1,19 +1,25 @@
 #include "common.h"
 
 // xxx 
-// - threads needs to be detached
+// - todo list
+
+//
+// defines
+//
 
 #define MAX_FFT_FREQ_SPAN  1200000  // must be <= SDR_SAMPLE_RATE/2   xxx is this correct?
 #define FFT_ELEMENT_HZ     100
 #define FFT_N              (SDR_SAMPLE_RATE / FFT_ELEMENT_HZ)
 
-_Static_assert(MAX_FFT_FREQ_SPAN <= SDR_SAMPLE_RATE/2);
-
 #define THREAD_STATE_STOPPED         0
 #define THREAD_STATE_RUNNING         1
 #define THREAD_STATE_STOP_REQUESTED  2
 
+_Static_assert(MAX_FFT_FREQ_SPAN <= SDR_SAMPLE_RATE/2);
+
+//
 // typedefs
+//
 
 typedef struct {
     void *(*proc)(void*);
@@ -21,12 +27,16 @@ typedef struct {
     char name[20];
 } thread_cx_t;
 
+//
 // variables
+//
 
 static int threads_running;
 static bool stop_threads_req;
 
+//
 // prototypes
+//
 
 static band_t *get_active_band(void);
 static void set_active_band(band_t *b) ATTRIB_UNUSED;
@@ -54,37 +64,10 @@ void radio_init(void)
     int i;
 
     // xxx not working, instead inject event?
-    mode = MODE_PLAY; // xxx which mode should it start in
+    //mode = MODE_PLAY; // xxx which mode should it start in
 
     for (i = 0; i < max_band; i++) {
         band_t *b = band[i];
-#if 0
-        freq_t band_freq_span = b->f_max - b->f_min;
-
-        // this code inits these band_s fields
-        // - num_fft
-        // - fft_freq_span
-        // - max_cabs_fft
-        // this code allocs these buffers
-        // - fft_in
-        // - fft_out
-        // - cabs_fft
-        // - wf.data
-
-        // divide the band into fft intervals
-        if ((band_freq_span % MAX_FFT_FREQ_SPAN) == 0) {
-            b->num_fft = band_freq_span / MAX_FFT_FREQ_SPAN;
-        } else {
-            b->num_fft = band_freq_span / MAX_FFT_FREQ_SPAN + 1;
-        }
-        b->fft_freq_span = band_freq_span / b->num_fft;
-        assert(b->fft_freq_span <= MAX_FFT_FREQ_SPAN);
-
-        b->max_cabs_fft = b->num_fft * (b->fft_freq_span / FFT_ELEMENT_HZ);
-
-        NOTICE("radio_init band %s span=%ld num_fft=%d fft_span=%ld max_cabs_fft=%d\n",
-               b->name, band_freq_span, b->num_fft, b->fft_freq_span, b->max_cabs_fft);
-#endif
 
         b->max_cabs_fft = b->f_span / FFT_ELEMENT_HZ;
 
@@ -100,7 +83,6 @@ void radio_init(void)
 
 // -----------------  HANDLE EVENTS FROM DISPLAY  ----------------------
 
-// return true if event was handled
 bool radio_event(sdl_event_t *ev)
 {
     bool event_was_handled = true;
@@ -159,6 +141,7 @@ bool radio_event(sdl_event_t *ev)
         break;
     }
 
+    // return true if event was handled
     return event_was_handled;
 }
 
@@ -251,10 +234,9 @@ static void start_thread(void *(*proc)(void *cx), char *name)
 
     cx = malloc(sizeof(thread_cx_t));
     cx->proc = proc;
-    cx->cx   = NULL;
+    cx->cx = NULL;
     snprintf(cx->name, sizeof(cx->name), "%s", name);
 
-    // xxx needs to be detached
     pthread_create(&tid, NULL, thread_wrapper, cx);
 
     tmp = threads_running;
@@ -270,7 +252,9 @@ static void *thread_wrapper(void *cx_arg)
     NOTICE("starting thread %s\n", cx->name);
     __sync_fetch_and_add(&threads_running, 1);
 
+    pthread_detach(pthread_self());
     pthread_setname_np(pthread_self(), cx->name);
+
     cx->proc(cx->cx);
 
     __sync_fetch_and_sub(&threads_running, 1);
@@ -370,6 +354,7 @@ static void fft_band(band_t *b)
 
 // -----------------  PLAY MODE  ---------------------------------------
 
+// XXX xxx cleanup 
 static void *play_mode_thread(void *cx)
 {
     freq_t          last_play_freq = -1;
@@ -647,10 +632,16 @@ while 1 {
 }
 #endif
 
-
-// -----------------------------------------------------------------
-
 #if 0
+// xxx todo
+// - display range of stations in the band being played
+// - snap the freq ?
+// - adjust play time
+// - ctrl chars
+//     skip to next
+//     pause
+//     continue
+
 static void *scan_thread(void *cx)
 {
     int i;
@@ -674,7 +665,6 @@ static void *scan_thread(void *cx)
             fft_band(b);
         }
 
-#if 1
         for (i = 0; i < max_band; i++) {
             if (program_terminating) {
                 goto terminate;
@@ -687,33 +677,12 @@ static void *scan_thread(void *cx)
 
             play_band(b);
         }
-#endif
     }
 
 terminate:
     return NULL;
 }
 
-// -----------------------------------------------------------------
-
-// xxx clean this up
-
-// ---------------------------------------------------------------------
-// xxx todo
-// - display range of stations in the band being played
-// - snap the freq ?
-// - adjust play time
-// - ctrl chars
-//     skip to next
-//     pause
-//     continue
-
-static void find(band_t *b, int n, double limit);
-static int compare(const void *a_arg, const void *b_arg);
-static int add(band_t *b, freq_t f, freq_t bw);
-static void play(freq_t f, int secs, bool sim);
-static complex lpf(complex x, double f_cut);
-static void downsample_and_audio_out(double x);
 
 static void play_band(band_t *b)
 {
@@ -844,85 +813,4 @@ static int compare(const void *a_arg, const void *b_arg)
     return a->f < b->f ? -1 : a->f == b->f ? 0 : 1;
 }
 
-// ---------------------------------------------------------------------
-
-static void play(freq_t f, int secs, bool sim)//xxx secs not used
-{
-    #define VOLUME_SCALE 10
-
-    sdr_async_rb_t *rb;
-    complex         data, data_lpf;
-    double          data_demod, data_demod_volscale;
-    //int             max = secs * SDR_SAMPLE_RATE;
-
-    if (play_time == 0) {
-        return;
-    }
-
-    rb = malloc(sizeof(sdr_async_rb_t));
-    sdr_read_async(f, rb, sim);
-
-    while (true) {
-        // wait for a data item to be available
-        while (rb->head == rb->tail) {
-            usleep(1000);
-            if (program_terminating) {
-                return;
-            }
-        }
-
-        // process the data item
-        data = rb->data[rb->head % MAX_SDR_ASYNC_RB_DATA];
-        data_lpf = lpf(data, 4000);
-        data_demod = cabs(data_lpf);
-        data_demod_volscale = data_demod * VOLUME_SCALE;
-        downsample_and_audio_out(data_demod_volscale);
-
-        // done with this rb data item
-        rb->head++;
-
-        // if 5 secs have been processed then we are done playing
-        if (rb->head >= play_time * SDR_SAMPLE_RATE) {
-            break;
-        }
-    }
-
-    sdr_cancel_async();
-    free(rb);
-}
-
-#define LPF_ORDER  20 //xxx ?
-static complex lpf(complex x, double f_cut)
-{
-    static double curr_f_cut;
-    static BWLowPass *bwi, *bwq;
-
-    if (f_cut != curr_f_cut) {
-        curr_f_cut = f_cut;
-        if (bwi) free_bw_low_pass(bwi);
-        if (bwq) free_bw_low_pass(bwq);
-        bwi = create_bw_low_pass_filter(LPF_ORDER, SDR_SAMPLE_RATE, f_cut);
-        bwq = create_bw_low_pass_filter(LPF_ORDER, SDR_SAMPLE_RATE, f_cut);
-    }
-
-    return bw_low_pass(bwi, creal(x)) + bw_low_pass(bwq, cimag(x)) * I;
-}
-
-static void downsample_and_audio_out(double x)
-{
-    static int cnt;
-    static void *ma_cx;
-    double ma;
-
-    double volume = 0.5;
-
-    #define NUM_DS ((int)((double)SDR_SAMPLE_RATE / AUDIO_SAMPLE_RATE))
-
-    ma = moving_avg(x, NUM_DS, &ma_cx);
-
-    if (cnt++ == NUM_DS) {
-        audio_out(ma * volume);
-        cnt = 0;
-    }
-}
 #endif

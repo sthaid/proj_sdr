@@ -1,3 +1,19 @@
+radio.c
+- scan mode 
+- clean up play.c
+  - need a routine to work with scan mode ?
+
+
+haid@home2:~/proj/proj_sdr/try1$ ls *.c
+-rw-rw-r-- 1 haid haid 2.2K Jun 28 07:30 audio.c    k
+-rw-rw-r-- 1 haid haid 3.3K Jul  2 16:46 config.c
+-rw-rw-r-- 1 haid haid 9.7K Jul  2 17:15 display.c
+-rw-rw-r-- 1 haid haid 1.4K Jun 28 09:00 main.c     k
+-rw-rw-r-- 1 haid haid  24K Jul  2 17:12 radio.c
+-rw-rw-r-- 1 haid haid  16K Jul  2 10:35 sdr.c      k
+
+
+
 cleanup
 
 rename sdr.config to config.sdr

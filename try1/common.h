@@ -1,6 +1,6 @@
-//xxx are all these needed
 #define _GNU_SOURCE
 
+//xxx are all these needed
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -23,30 +23,21 @@
 #include <fft.h>
 #include <filter.h>
 
+//
+// defines
+//
+
 #ifdef MAIN
   #define EXTERN
 #else
   #define EXTERN extern
 #endif
 
-#define SDR_SAMPLE_RATE   2400000   // 2.4 MS/sec
-#define AUDIO_SAMPLE_RATE 22000
-
 #define KHZ 1000
 #define MHZ 1000000
 
-// -----------------  xxx MISC xxx  --------------------------------
-// xxx cleanup this section
-
-typedef long freq_t;
-
-#define MAX_SDR_ASYNC_RB_DATA  (16*32*512/2 * 2)  // 131072 * 2 = 262144
-
-typedef struct {
-    unsigned long head;
-    unsigned long tail;
-    complex data[MAX_SDR_ASYNC_RB_DATA];
-} sdr_async_rb_t;
+#define SDR_SAMPLE_RATE   2400000   // 2.4 MS/sec
+#define AUDIO_SAMPLE_RATE 22000
 
 #define MODE_FFT  0
 #define MODE_SCAN 1
@@ -58,20 +49,24 @@ typedef struct {
      (m) == MODE_PLAY ? "PLAY" : \
                         "????")
 
-//EXTERN char  *display_title_line;
-//EXTERN freq_t play_freq;
-//EXTERN struct band_s *play_band;
-//EXTERN int  play_time; //xxx del
-
-EXTERN int    mode;
-EXTERN bool program_terminating;
-
-// -----------------  STRUCT BAND  ---------------------------------
-
 #define MAX_BAND         20
 #define MAX_STATION      20
 #define MAX_SCAN_STATION 100
 #define MAX_WATERFALL    500
+
+#define MAX_SDR_ASYNC_RB_DATA  (16*32*512/2 * 2)  // 131072 * 2 = 262144
+
+//
+// typedefs
+//
+
+typedef long freq_t;
+
+typedef struct {
+    unsigned long head;
+    unsigned long tail;
+    complex data[MAX_SDR_ASYNC_RB_DATA];
+} sdr_async_rb_t;
 
 typedef struct band_s {
     // static config
@@ -115,11 +110,7 @@ typedef struct band_s {
         texture_t      texture;
     } wf;
 
-    // FFT mode
-    //int    num_fft;
-    //freq_t fft_freq_span;
-
-    // SCAN mode
+    // scan for stations
     int max_scan_station;
     struct scan_station_s {
         freq_t f;
@@ -127,7 +118,21 @@ typedef struct band_s {
     } scan_station[MAX_SCAN_STATION];
 } band_t;
 
-// use -1 is for a new entry
+//
+// variables
+//
+
+EXTERN int     max_band;
+EXTERN band_t *band[MAX_BAND];
+
+EXTERN int     mode;
+EXTERN bool    program_terminating;
+
+//
+// inline procedures
+//
+
+// set row=-1 is for a new entry
 static inline unsigned char * get_waterfall(band_t *b, int row)
 {
     int tmp = (b->wf.num - 1 - row);
@@ -137,21 +142,9 @@ static inline unsigned char * get_waterfall(band_t *b, int row)
     return b->wf.data + ((tmp % MAX_WATERFALL) * b->max_cabs_fft);
 }
 
-EXTERN band_t *band[MAX_BAND];
-EXTERN int     max_band;
-
-// -----------------  VARIABLES  -----------------------------------
-
-#if 0
-// xxx not used yet
-EXTERN int           zoom;
-EXTERN int           volume;
-EXTERN int           mute;
-EXTERN int           scan_intvl;
-EXTERN int           help;
-#endif
-
-// -----------------  PROTOTYPES  ----------------------------------
+//
+// prototypes
+//
 
 // radio.c
 void radio_init(void);

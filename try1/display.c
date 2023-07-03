@@ -61,7 +61,7 @@ void display_handler(void)
         //sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
 
         // disaplay the bands that are selected
-        int x = 0, i;
+        int x = 50, i;
         for (i = 0; i < max_band; i++) {
             band_t *b = band[i];
 

@@ -23,7 +23,7 @@
 // defines
 //
 
-#define F_DS (28*MHZ) // xxx check this
+#define F_DS 28800000   // 28.8 MHz
 
 #define TUNER_TYPE_STR(x) \
     ((x) == RTLSDR_TUNER_UNKNOWN ? "UNKNOWN" : \
@@ -78,6 +78,7 @@ static struct {
     int  num_tuner_gains;
     unsigned int rtl2832_xtal_freq;
     unsigned int tuner_xtal_freq;
+
     // configurable fields
     int  sample_rate;
     bool rtl2832_agc_enabled;
@@ -99,16 +100,6 @@ static void sim_sdr_set_ctr_freq(freq_t f);
 static void sim_sdr_read_sync(complex *data, int n);
 static void sim_sdr_read_async(sdr_async_rb_t *rb);
 static void sim_sdr_cancel_async(void);
-
-#if 0 //xxx
-static void(*cb)(unsigned char *iq, size_t len);
-static bool direct_sampling_enabled;
-
-static void print_info(rtlsdr_dev_t *dev);
-static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int **gains_arg);
-static void *async_reader_thread(void *cx);
-static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg);
-#endif
 
 // -----------------  INIT AND LIST_DEVICES  ---------------------------
 
@@ -291,7 +282,7 @@ void sdr_hardware_test(void)
     free(buff);
 }
 
-// -----------------  SDR XXXXXXXXXX  ----------------------------------
+// -----------------  SDR SET CENTER FREQ  -----------------------------
 
 void sdr_set_ctr_freq(freq_t f, bool sim)
 {
@@ -522,6 +513,16 @@ static void sim_get_antenna_data(complex *data, int n)
 // --------------------------------------
 // --------------------------------------
 // --------------------------------------
+#if 0 //xxx
+static void(*cb)(unsigned char *iq, size_t len);
+static bool direct_sampling_enabled;
+
+static void print_info(rtlsdr_dev_t *dev);
+static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int **gains_arg);
+static void *async_reader_thread(void *cx);
+static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg);
+#endif
+
 #if 0
     // enable direct sampling
     int direct_sampling;
