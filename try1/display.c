@@ -26,7 +26,7 @@
 
 static win_info_t wi;
 //static bool       fullscr;
-static char *display_title_line;
+static char *display_debug_line;
 
 //
 // prototypes
@@ -55,9 +55,6 @@ void display_handler(void)
         sdl_display_init();
 
         // xxx
-        if (display_title_line) {
-            sdl_render_text(0, 0, FTSZ2, display_title_line, SDL_WHITE, SDL_BLACK);
-        }
         //sdl_render_text(W/2, H/2, FTSZ2, "CTR", SDL_WHITE, SDL_BLACK);
 
         // disaplay the bands that are selected
@@ -72,6 +69,10 @@ void display_handler(void)
                 display_band(b, &loc);
                 x += xxx;
             }
+        }
+
+        if (display_debug_line) {
+            sdl_render_text(0, H-FTCH1, FTSZ1, display_debug_line, SDL_WHITE, SDL_BLACK);
         }
 
         // register events
@@ -156,7 +157,7 @@ static void handle_events(void)
     }
 }
 
-void update_display_title_line(char *fmt, ...)
+void display_print_debug_line(char *fmt, ...)
 {
     // xxx move to display.c?
     #define MAX_LEN 100
@@ -173,7 +174,12 @@ void update_display_title_line(char *fmt, ...)
     vsnprintf(s, MAX_LEN, fmt, ap);
     va_end(ap);
 
-    display_title_line = s;
+    display_debug_line = s;
+}
+
+void display_clear_debug_line(void)
+{
+    display_debug_line = NULL;
 }
 
 
@@ -281,14 +287,14 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
     sdl_render_texture(loc->x, loc->y+loc->h+5, b->wf.texture);
 
     // xxx fft range
-    if (mode == MODE_PLAY && b->f_fft_inprog_min) { 
+    if (b->f_play_fft_min) { 
         int x, y;
         y = loc->y + loc->h;
-        x = F2X(b->f_fft_inprog_min);
+        x = F2X(b->f_play_fft_min);
         sdl_render_point(x, y, SDL_YELLOW, 9);
 
         y = loc->y + loc->h;
-        x = F2X(b->f_fft_inprog_max);
+        x = F2X(b->f_play_fft_max);
         sdl_render_point(x, y, SDL_YELLOW, 9);
     }
 

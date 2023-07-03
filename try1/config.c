@@ -49,14 +49,15 @@ void config_init(void)
             if (cnt != 3) {
                 BAD_CONFIG_FILE_LINE;
             }
+
+            b->idx    = max_band;
             b->f_min  = nearbyint(f_min * MHZ);
             b->f_max  = nearbyint(f_max * MHZ);
             b->f_span = b->f_max - b->f_min;
-            b->idx = max_band;
-            // xxx temp
-            if (strncmp(b->name, "SIM", 3) == 0) b->selected = true;
+            b->f_play = (b->f_max + b->f_min) / 2;
+            b->sim    = (strncmp(b->name, "SIM", 3) == 0);
 
-            b->f_play = b->f_min;
+            if (strncmp(b->name, "SIM", 3) == 0) b->selected = true; // xxx temp
 
             max_band++;
         } else if (strncmp(s, "STATION ", 8) == 0) {

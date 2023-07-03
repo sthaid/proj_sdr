@@ -17,10 +17,25 @@
 #define WARN(fmt, args...)   do { log_msg("WARN", fmt, ## args); } while (0)
 #define ERROR(fmt, args...)  do { log_msg("ERROR", fmt, ## args); } while (0)
 #define DEBUG(fmt, args...)  do { if (0) log_msg("FATAL", fmt, ## args); } while (0)
-
-#define FATAL(fmt, args...)  do { log_msg("FATAL", fmt, ## args); log_msg("FATAL", "%s %d\n", __FILE__, __LINE__); exit(1); } while (0)
+#define FATAL(fmt, args...)  do { log_msg("FATAL", fmt, ## args); \
+                                  log_msg("FATAL", "%s %d\n", __FILE__, __LINE__); \
+                                  exit(1); } while (0)
 
 #define BLANKLINE do { log_msg("", "\n"); } while (0)
+
+#define ASSERT_MSG(cond, fmt, args...) \
+    do { \
+        if (cond) break; \
+        char msg[100]; \
+        snprintf(msg, sizeof(msg), fmt, ## args); \
+        FATAL("ASSERTION FAILED: %s: %s\n", #cond, msg); \
+    } while (0)
+
+#define ASSERT(cond) \
+    do { \
+        if (cond) break; \
+        FATAL("ASSERTION FAILED: %s\n", #cond); \
+    } while (0)
 
 void log_msg(char *lvl, char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 

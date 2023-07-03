@@ -71,6 +71,7 @@ typedef struct {
 typedef struct band_s {
     // static config
     char *name;
+    bool sim;
     freq_t f_min;
     freq_t f_max;
     freq_t f_span;
@@ -86,11 +87,9 @@ typedef struct band_s {
     int  idx;
     bool selected;
     bool active;
-//  bool play_inprog;
-//  bool fft_inprog;
-    freq_t f_fft_inprog_min;  // xxx may not need these 2
-    freq_t f_fft_inprog_max;
     freq_t f_play;
+    freq_t f_play_fft_min;
+    freq_t f_play_fft_max;
 
     // fft buffers
     complex *fft_in;
@@ -156,7 +155,8 @@ void config_init(void);
 // display.c
 void display_init(void);
 void display_handler(void);
-void update_display_title_line(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
+void display_print_debug_line(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
+void display_clear_debug_line(void);
 
 // audio.c
 void audio_init(void);
