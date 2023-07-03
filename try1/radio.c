@@ -1,12 +1,13 @@
 #include "common.h"
 
+#if 0
 // xxx todo list
 // - should log() be used
 // - what LPF_ORDER TO use
 // - can MAX_FFT_FREQ_SPAN be larger, say up to 2400000
 // - at exit wait for threads
 
-// xxx todo
+// more todo ?
 // - display range of stations in the band being played
 // - snap the freq ?
 // - adjust play time
@@ -15,7 +16,6 @@
 //     pause
 //     continue
 
-#if 0
 ctrls:
 - FFT RECV SCAN   3 buttons to set state  AND f1,f2,f3
 - when fft
@@ -30,7 +30,6 @@ ctrls:
       - click on the fft
     . 'z' toggles zoom
 #endif
-
 
 //
 // defines
@@ -60,8 +59,9 @@ typedef struct {
 // variables
 //
 
-static int threads_running;
-static bool stop_threads_req;
+static int     threads_running;
+static bool    stop_threads_req;
+static band_t *active_band;
 
 //
 // prototypes
@@ -86,9 +86,9 @@ static void *play_mode_thread(void *cx);
 static void *scan_mode_thread(void *cx);
 
 static void fft_entire_band(band_t *b);
-static void player(void);
-
 static void add_to_waterfall(band_t *b);
+
+static void player(void);
 static void demod_and_audio_out(complex data_freq_shift);
 static complex lpf(complex x, double f_cut);
 static void downsample_and_audio_out(double x);
@@ -184,7 +184,7 @@ bool radio_event(sdl_event_t *ev)
     case SDL_EVENT_KEY_RIGHT_ARROW:
         if ((b = get_active_band()) == NULL) break;
         if (mode == MODE_PLAY) {
-            tmp_freq = b->f_play + 10000;
+            tmp_freq = b->f_play + 10000;  // xxx step
             if (tmp_freq < b->f_min) tmp_freq = b->f_min;
             b->f_play = tmp_freq;
         } else if (mode == MODE_SCAN) {
@@ -208,8 +208,6 @@ bool radio_event(sdl_event_t *ev)
 }
 
 // -----------------  ACTIVE AND SELECTED BAND SUPPORT  ----------------
-
-static band_t *active_band;
 
 static band_t *get_active_band(void)
 {
@@ -296,7 +294,7 @@ static void start_thread(void *(*proc)(void *cx), char *name)
     }
 }
 
-static void stop_threads(void) // xxx name
+static void stop_threads(void)
 {
     stop_threads_req = true;
     while (threads_running) {
@@ -480,7 +478,7 @@ static void *scan_mode_thread(void *cx)
     return NULL;
 }
 
-// -----------------  FFT AND PLAY ROUTINES  ---------------------------
+// -----------------  FFT ENTIRE BAND  ---------------------------------
 
 static void fft_entire_band(band_t *b)
 {
@@ -546,6 +544,21 @@ static void fft_entire_band(band_t *b)
 
     display_clear_debug_line();
 }
+
+static void add_to_waterfall(band_t *b)
+{
+    unsigned char *wf;
+    int i;
+
+    wf = get_waterfall(b, -1);
+    for (i = 0; i < b->max_cabs_fft; i++) {
+        wf[i] = b->cabs_fft[i] ?  1 + b->cabs_fft[i] * (256. / 60000) : 0;
+    }
+
+    b->wf.num++;
+}
+
+// -----------------  PLAYER - PLAY AUDIO & FFT CONCURRENTLY  ----------
 
 static void player(void)
 {
@@ -691,19 +704,6 @@ terminate:
     free(rb);
 }
 
-static void add_to_waterfall(band_t *b)
-{
-    unsigned char *wf;
-    int i;
-
-    wf = get_waterfall(b, -1);
-    for (i = 0; i < b->max_cabs_fft; i++) {
-        wf[i] = b->cabs_fft[i] ?  1 + b->cabs_fft[i] * (256. / 60000) : 0;
-    }
-
-    b->wf.num++;
-}
-
 static void demod_and_audio_out(complex data_freq_shift)
 {
     #define VOLUME_SCALE 10
@@ -753,7 +753,7 @@ static void downsample_and_audio_out(double x)
     }
 }
 
-// -----------------  xxxxxxxxxxxxxxxx  ----------------------------
+// -----------------  FIND STATIONS BY SCANNING FFT  -------------------------
 
 static void find_stations(band_t *b)
 {
@@ -762,13 +762,13 @@ static void find_stations(band_t *b)
     find(b,  1000,  500);
     qsort(b->scan_station, b->max_scan_station, sizeof(struct scan_station_s), compare);
 
-#if 0
-    NOTICE("FIND RESULT cnt=%d\n", b->max_scan_station);
-    for (j = 0; j < b->max_scan_station; j++) {
-        struct scan_station_s *ss = &b->scan_station[j];
-        NOTICE("f=%ld  bw=%ld\n", ss->f, ss->bw);
+    if (0) {
+        NOTICE("find_station results: cnt=%d\n", b->max_scan_station);
+        for (j = 0; j < b->max_scan_station; j++) {
+            struct scan_station_s *ss = &b->scan_station[j];
+            NOTICE("  f=%ld  bw=%ld\n", ss->f, ss->bw);
+        }
     }
-#endif
 }
 
 static void find(band_t *b, int avg_freq_span, double threshold)
@@ -779,14 +779,8 @@ static void find(band_t *b, int avg_freq_span, double threshold)
     int    i, idx_of_max=0, idx_start=0, idx_end, n;
     freq_t f, bw;
 
-//  if (strcmp(b->name, "TEST") != 0) {
-//      return;
-//  }
-
     n = avg_freq_span / FFT_ELEMENT_HZ;
     n |= 1;
-
-    NOTICE("FIND CALLED AVG_FREQ_SPAN=%d  THRESHOLD=%f  --  N=%d\n", avg_freq_span, threshold, n);
 
     for (i = 0; i < b->max_cabs_fft; i++) {
         v = b->cabs_fft[i];
@@ -815,13 +809,9 @@ static void find(band_t *b, int avg_freq_span, double threshold)
 
                 idx_of_max -= n/2;
                 f = b->f_min + idx_of_max * b->f_span / (b->max_cabs_fft - 1);
-
                 // xxx snap the freq
 
-                //NOTICE("FOUND %s f=%ld  max=%d  bw=%ld\n", b->name, f, (int)max, bw);
-
                 add(b, f, bw);
-
                 found = false;
             }
         }
@@ -839,17 +829,14 @@ static int add(band_t *b, freq_t f, freq_t bw)
     struct scan_station_s *ss = &b->scan_station[b->max_scan_station];
     int j;
 
-    NOTICE("ADDING %ld\n", f);
-
     if (b->max_scan_station >= MAX_SCAN_STATION) {
-        ERROR("ADD FULL\n");
+        ERROR("%s band, scan_station tbl is full\n", b->name);
         return -1;
     }
 
     for (j = 0; j < b->max_scan_station; j++) {
         struct scan_station_s *ss = &b->scan_station[j];
         if ((f >= ss->f - ss->bw/2) && (f <= ss->f + ss->bw/2)) {
-            //NOTICE("DUP f=%ld\n", f);
             return -2;
         }
     }
@@ -867,15 +854,4 @@ static int compare(const void *a_arg, const void *b_arg)
 
     return a->f < b->f ? -1 : a->f == b->f ? 0 : 1;
 }
-
-
-
-
-
-
-// -----------------------------------------------------------------
-// -----------------------------------------------------------------
-#if 0
-
-#endif
 
