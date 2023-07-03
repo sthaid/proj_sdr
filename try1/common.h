@@ -39,14 +39,16 @@
 #define SDR_SAMPLE_RATE   2400000   // 2.4 MS/sec
 #define AUDIO_SAMPLE_RATE 22000
 
-#define MODE_FFT  0
-#define MODE_SCAN 1
-#define MODE_PLAY 2
+#define MODE_FFT  1
+#define MODE_SCAN 2
+#define MODE_PLAY 3
+#define MODE_STOP 4
 
 #define MODE_STR(m) \
     ((m) == MODE_FFT  ? "FFT"  : \
      (m) == MODE_SCAN ? "SCAN" : \
      (m) == MODE_PLAY ? "PLAY" : \
+     (m) == MODE_STOP ? "STOP" : \
                         "????")
 
 #define MAX_BAND         20
@@ -125,6 +127,11 @@ EXTERN int     max_band;
 EXTERN band_t *band[MAX_BAND];
 
 EXTERN int     mode;
+EXTERN int     scan_intvl;
+EXTERN bool    scan_pause;
+EXTERN int     scan_go_next;
+EXTERN int     scan_go_prior;
+
 EXTERN bool    program_terminating;
 
 //
