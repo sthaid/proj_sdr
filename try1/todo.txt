@@ -1,8 +1,16 @@
+title line
+demod selection
+- fm demod
+clean up display.c
+clean up radio.c
+start using sdr o the fm band
+display band W adjustment
+select bands and save to config
+
+xxxxxxxxxxxx
+
 radio.c
 - scan mode 
-- clean up play.c
-  - need a routine to work with scan mode ?
-
 
 haid@home2:~/proj/proj_sdr/try1$ ls *.c
 -rw-rw-r-- 1 haid haid 2.2K Jun 28 07:30 audio.c    k

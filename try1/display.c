@@ -198,7 +198,7 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
     //NOTICE("--------- PLOT --------\n");
     sdl_render_rect(loc, 2, b->active ? SDL_RED : SDL_GREEN);
 
-    sdl_render_printf(loc->x, loc->y, FTSZ2, SDL_WHITE, SDL_BLACK, "%s", b->name);
+    sdl_render_printf(loc->x, loc->y, FTSZ1, SDL_WHITE, SDL_BLACK, "%s", b->name);
 
     // xxx make this more efficient ...
 
@@ -224,20 +224,6 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
     sdl_render_lines(points, n, SDL_WHITE);
 
     // FFT LOCS
-
-#if 0
-    freq_t f = b->f_min + b->fft_freq_span/2;
-    for (i = 0; i < b->num_fft; i++) {
-        int x, y;
-
-        y = loc->y + loc->h;
-        //x = loc->x + (double)(f - b->f_min) / (b->f_max - b->f_min) * loc->w;
-        x = F2X(f);
-        sdl_render_point(x, y, SDL_YELLOW, 3);
-
-        f += b->fft_freq_span;
-    }
-#endif
 
     // WATERFALL
 
@@ -283,11 +269,11 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
         int x, y;
         y = loc->y + loc->h;
         x = F2X(b->f_play_fft_min);
-        sdl_render_point(x, y, SDL_YELLOW, 9);
+        sdl_render_point(x, y, SDL_YELLOW, 5);
 
         y = loc->y + loc->h;
         x = F2X(b->f_play_fft_max);
-        sdl_render_point(x, y, SDL_YELLOW, 9);
+        sdl_render_point(x, y, SDL_YELLOW, 5);
     }
 
     // LOCATION OF FOUND STATIONS
@@ -300,25 +286,23 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
         y = loc->y + loc->h;
 
         if (x2-x1 > 2) {
-            sdl_render_line(x1, y-2, x2, y-2, SDL_ORANGE);
-            sdl_render_line(x1, y-1, x2, y-1, SDL_ORANGE);
-            sdl_render_line(x1, y, x2, y, SDL_ORANGE);
-            sdl_render_line(x1, y+1, x2, y+1, SDL_ORANGE);
-            sdl_render_line(x1, y+2, x2, y+2, SDL_ORANGE);
+            sdl_render_line(x1, y-2, x2, y-2, SDL_PINK);
+            sdl_render_line(x1, y-1, x2, y-1, SDL_PINK);
+            sdl_render_line(x1, y, x2, y, SDL_PINK);
+            sdl_render_line(x1, y+1, x2, y+1, SDL_PINK);
+            sdl_render_line(x1, y+2, x2, y+2, SDL_PINK);
         } else {
-            sdl_render_point((x1+x2)/2, y, SDL_ORANGE, 3);
+            sdl_render_point((x1+x2)/2, y, SDL_PINK, 3);
         }
     }
 
     // WHICH STATION IS PLAYING
-    if (b->f_play != 0) {
+    if (mode == MODE_PLAY && b->active && b->f_play != 0) {
         int x, y;
 
         y = loc->y + loc->h;
-        //x = loc->x + (double)(b->f_play - b->f_min) / (b->f_max - b->f_min) * loc->w;
-        //x = loc->x + (b->f_play - b->f_min) * loc->w / (b->f_max - b->f_min);
         x = F2X(b->f_play);
-        sdl_render_point(x, y, SDL_RED, b->active ? 7 : 5);
+        sdl_render_point(x, y, SDL_RED, 5);
     }
 }
 
