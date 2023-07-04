@@ -71,9 +71,9 @@ static bool    stop_threads_req;
 static void exit_hndlr(void);
  
 static band_t *get_active_band(void);
-static void set_active_band(band_t *b) ATTRIB_UNUSED;
-static void set_active_band_to_next(void) ATTRIB_UNUSED;
-static void set_active_band_to_previous(void) ATTRIB_UNUSED;
+static band_t *get_active_band_next(void);
+static band_t *get_active_band_previous(void);
+static void set_active_band(band_t *b, freq_t f);
 static void set_band_selected(band_t *b) ATTRIB_UNUSED;
 static void clear_band_selected(band_t *b) ATTRIB_UNUSED;
 
@@ -116,7 +116,7 @@ void radio_init(void)
         b->wf.data  = calloc(MAX_WATERFALL * b->max_cabs_fft, 1);
     }
 
-    set_active_band(band[0]);
+    set_active_band(band[0], 0);
 
     scan_pause = false;
     scan_go_next = false;
@@ -166,21 +166,29 @@ bool radio_event(sdl_event_t *ev)
 
     case SDL_EVENT_KEY_TAB:
         if (mode == MODE_PLAY) {
-            set_active_band_to_next();
+            b = get_active_band_next();
+            set_active_band(b, 0);
         }
         break;
     case SDL_EVENT_KEYMOD_CTRL | SDL_EVENT_KEY_TAB:
         if (mode == MODE_PLAY) {
-            set_active_band_to_previous();
+            b = get_active_band_previous();
+            set_active_band(b, 0);
         }
         break;
 
     case SDL_EVENT_KEY_LEFT_ARROW:
         if ((b = get_active_band()) == NULL) break;
         if (mode == MODE_PLAY) {
-            tmp_freq = b->f_play - 10000; //xxx step
-            if (tmp_freq < b->f_min) tmp_freq = b->f_min;
-            b->f_play = tmp_freq;
+            tmp_freq = b->f_play;
+            if (tmp_freq == b->f_min) {
+                if ((b = get_active_band_previous()) == NULL) break;
+                set_active_band(b, b->f_max);
+            } else {
+                tmp_freq -= 10000;  // xxx step
+                if (tmp_freq < b->f_min) tmp_freq = b->f_min;
+                b->f_play = tmp_freq;
+            }
         } else if (mode == MODE_SCAN) {
             scan_go_prior = true;
         }
@@ -188,9 +196,15 @@ bool radio_event(sdl_event_t *ev)
     case SDL_EVENT_KEY_RIGHT_ARROW:
         if ((b = get_active_band()) == NULL) break;
         if (mode == MODE_PLAY) {
-            tmp_freq = b->f_play + 10000;  // xxx step
-            if (tmp_freq < b->f_min) tmp_freq = b->f_min;
-            b->f_play = tmp_freq;
+            tmp_freq = b->f_play;
+            if (tmp_freq == b->f_max) {
+                if ((b = get_active_band_next()) == NULL) break;
+                set_active_band(b, b->f_min);
+            } else {
+                tmp_freq += 10000;  // xxx step
+                if (tmp_freq > b->f_max) tmp_freq = b->f_max;
+                b->f_play = tmp_freq;
+            }
         } else if (mode == MODE_SCAN) {
             scan_go_next = true;
         }
@@ -217,19 +231,7 @@ static band_t *get_active_band(void)
     return active_band;
 }
 
-static void set_active_band(band_t *b)
-{
-    if (active_band) {
-        active_band->active = false;
-        active_band = NULL;
-    }
-
-    b->active = true;
-    b->selected = true;
-    active_band = b;
-}
-
-static void set_active_band_to_next(void)
+static band_t *get_active_band_next(void)
 {
     int i, idx;
 
@@ -237,15 +239,13 @@ static void set_active_band_to_next(void)
     for (i = 0; i < max_band; i++) {
         if (++idx == max_band) idx = 0;
         if (band[idx]->selected) {
-            set_active_band(band[idx]);
-            return;
+            return band[idx];
         }
     }
-
-    set_active_band(band[0]);
+    return NULL;
 }
 
-static void set_active_band_to_previous(void)
+static band_t *get_active_band_previous(void)
 {
     int i, idx;
 
@@ -253,12 +253,30 @@ static void set_active_band_to_previous(void)
     for (i = 0; i < max_band; i++) {
         if (--idx == -1) idx = max_band - 1;
         if (band[idx]->selected) {
-            set_active_band(band[idx]);
-            return;
+            return band[idx];
         }
     }
+    return NULL;
+}
 
-    set_active_band(band[0]);
+static void set_active_band(band_t *b, freq_t f)
+{
+    if (active_band && active_band != b) {
+        active_band->active = false;
+        active_band = NULL;
+    }
+
+    __sync_synchronize();
+
+    if (f != 0) {
+        b->f_play = f;
+    }
+    b->active = true;
+    b->selected = true;
+
+    __sync_synchronize();
+
+    active_band = b;
 }
 
 static void set_band_selected(band_t *b)
@@ -404,8 +422,7 @@ static void *scan_mode_thread(void *cx)
         }
 
         // start the play_mod_thread
-        set_active_band(first);
-        first->f_play = first->scan_station[0].f;
+        set_active_band(first, first->scan_station[0].f);
         start_thread(play_mode_thread, "sdr_play_mode");
 
         // loop until all found stations have been played
@@ -413,9 +430,7 @@ static void *scan_mode_thread(void *cx)
         sidx = 0;
         while (true) {
             // play station identified by bidx,sidx
-            band[bidx]->f_play = band[bidx]->scan_station[sidx].f;
-            __sync_synchronize();
-            set_active_band(band[bidx]);
+            set_active_band(band[bidx], band[bidx]->scan_station[sidx].f);
 
             // wait for play interval to expire, or go_next/go_prior control
             t = 0;

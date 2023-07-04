@@ -67,7 +67,7 @@ void display_handler(void)
             }
         }
         if (mode == MODE_PLAY || mode == MODE_SCAN) {
-            if ((ab = active_band)) {
+            if ((ab = active_band)) { // xxx call radio routine?
                 p += sprintf(p, "  %0.6f  DEMOD:%s", (double)ab->f_play/MHZ, DEMOD_STR(demod));
             }
         }
