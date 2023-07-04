@@ -57,6 +57,7 @@
      (m) == MODE_STOPPED ? "STOPPED" : \
                            "????")
 
+#define DEMOD_NO_CHANGE 0
 #define DEMOD_AM   1
 #define DEMOD_FM   2
 #define DEMOD_USB  3
