@@ -155,6 +155,7 @@ static int handle_events(void)
                 b->width *= 1.1;
             } else if (ev->mouse_wheel.delta_y < 0) {
                 b->width /= 1.1;
+            }
             
             NOTICE("BAND %d  width is now %f\n", b->idx, b->width);
             break; }
