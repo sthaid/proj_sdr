@@ -39,24 +39,35 @@
 #define SDR_SAMPLE_RATE   2400000   // 2.4 MS/sec
 #define AUDIO_SAMPLE_RATE 22000
 
-#define MODE_FFT  1
-#define MODE_PLAY 2
-#define MODE_SCAN 3
-#define MODE_STOP 4
+#define MAX_BAND          20
+#define MAX_STATION       20
+#define MAX_SCAN_STATION  100
+#define MAX_WATERFALL     500
+#define MAX_SDR_ASYNC_RB  (16*32*512/2 * 2)  // 131072 * 2 = 262144
+
+#define MODE_FFT     1
+#define MODE_PLAY    2
+#define MODE_SCAN    3
+#define MODE_STOPPED 4
 
 #define MODE_STR(m) \
-    ((m) == MODE_FFT  ? "FFT"  : \
-     (m) == MODE_PLAY ? "PLAY" : \
-     (m) == MODE_SCAN ? "SCAN" : \
-     (m) == MODE_STOP ? "STOP" : \
-                        "????")
+    ((m) == MODE_FFT     ? "FFT"     : \
+     (m) == MODE_PLAY    ? "PLAY"    : \
+     (m) == MODE_SCAN    ? "SCAN"    : \
+     (m) == MODE_STOPPED ? "STOPPED" : \
+                           "????")
 
-#define MAX_BAND         20
-#define MAX_STATION      20
-#define MAX_SCAN_STATION 100
-#define MAX_WATERFALL    500
+#define DEMOD_AM   1
+#define DEMOD_FM   2
+#define DEMOD_USB  3
+#define DEMOD_LSB  4
 
-#define MAX_SDR_ASYNC_RB_DATA  (16*32*512/2 * 2)  // 131072 * 2 = 262144
+#define DEMOD_STR(m) \
+    ((m) == DEMOD_AM   ? "AM"  : \
+     (m) == DEMOD_FM   ? "FM"  : \
+     (m) == DEMOD_USB  ? "USB" : \
+     (m) == DEMOD_LSB  ? "LSB" : \
+                         "???")
 
 //
 // typedefs
@@ -67,7 +78,7 @@ typedef long freq_t;
 typedef struct {
     unsigned long head;
     unsigned long tail;
-    complex data[MAX_SDR_ASYNC_RB_DATA];
+    complex data[MAX_SDR_ASYNC_RB];
 } sdr_async_rb_t;
 
 typedef struct band_s {
@@ -125,8 +136,11 @@ typedef struct band_s {
 
 EXTERN int     max_band;
 EXTERN band_t *band[MAX_BAND];
+EXTERN band_t *active_band;
 
 EXTERN int     mode;
+EXTERN int     demod;
+
 EXTERN int     scan_intvl;
 EXTERN bool    scan_pause;
 EXTERN int     scan_go_next;
@@ -160,8 +174,8 @@ void config_init(void);
 // display.c
 void display_init(void);
 void display_handler(void);
-void display_print_debug_line(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
-void display_clear_debug_line(void);
+void print_debug_line(char *fmt, ...) __attribute__ ((format (printf, 1, 2)));
+void clear_debug_line(void);
 
 // audio.c
 void audio_init(void);

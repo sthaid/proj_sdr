@@ -1,5 +1,7 @@
 #include "common.h"
 
+// xxx del the scan stations in play mode
+
 #if 0
 // xxx todo list
 // - should log() be used
@@ -61,7 +63,6 @@ typedef struct {
 
 static int     threads_running;
 static bool    stop_threads_req;
-static band_t *active_band;
 
 //
 // prototypes
@@ -160,14 +161,18 @@ bool radio_event(sdl_event_t *ev)
         break;
     case SDL_EVENT_KEY_F(4):
         stop_threads();
-        mode = MODE_STOP;
+        mode = MODE_STOPPED;
         break;
 
     case SDL_EVENT_KEY_TAB:
-        set_active_band_to_next();
+        if (mode == MODE_PLAY) {
+            set_active_band_to_next();
+        }
         break;
     case SDL_EVENT_KEYMOD_CTRL | SDL_EVENT_KEY_TAB:
-        set_active_band_to_previous();
+        if (mode == MODE_PLAY) {
+            set_active_band_to_previous();
+        }
         break;
 
     case SDL_EVENT_KEY_LEFT_ARROW:
@@ -489,10 +494,10 @@ static void fft_entire_band(band_t *b)
     // divide the band into fft intervals
     num_fft = (b->f_span + MAX_FFT_FREQ_SPAN - 1) / MAX_FFT_FREQ_SPAN;
     fft_freq_span = b->f_span / num_fft;
-    display_print_debug_line("%s: num_fft=%d fft_freq_span=%ld max_cabs_fft=%d max_needed=%ld", 
-                              b->name, num_fft, fft_freq_span,
-                              b->max_cabs_fft,
-                              (fft_freq_span / FFT_ELEMENT_HZ) * num_fft);
+    print_debug_line("%s: num_fft=%d fft_freq_span=%ld max_cabs_fft=%d max_needed=%ld", 
+                      b->name, num_fft, fft_freq_span,
+                      b->max_cabs_fft,
+                      (fft_freq_span / FFT_ELEMENT_HZ) * num_fft);
 
     ASSERT_MSG(fft_freq_span <= MAX_FFT_FREQ_SPAN, 
                "idx=%d fft_freq_span=%ld", 
@@ -542,7 +547,7 @@ static void fft_entire_band(band_t *b)
     DEBUG("dur_fft           = %ld us   %ld ms\n", dur_fft, dur_fft/1000);
     DEBUG("dur_cabs          = %ld us   %ld ms\n", dur_cabs, dur_cabs/1000);
 
-    display_clear_debug_line();
+    clear_debug_line();
 }
 
 static void add_to_waterfall(band_t *b)
@@ -614,8 +619,8 @@ static void player(void)
             if (b->f_play_fft_min < b->f_min) b->f_play_fft_min = b->f_min;
             if (b->f_play_fft_max >= b->f_max) b->f_play_fft_max = b->f_max;
 
-            display_print_debug_line("%s  FREQ - PLAY = %ld  CTR = %ld  OFFSET = %.0f", 
-                                     b->name, play_freq, ctr_freq, offset_w/TWO_PI);
+            print_debug_line("%s  FREQ - PLAY = %ld  CTR = %ld  OFFSET = %.0f", 
+                             b->name, play_freq, ctr_freq, offset_w/TWO_PI);
 
             if (ctr_freq != last_ctr_freq) {
                 sdr_set_ctr_freq(ctr_freq, b->sim);
@@ -639,7 +644,7 @@ static void player(void)
 
         // get rtlsdr data item from the ring buffer
         complex data, data_freq_shift;
-        data = rb->data[rb->head % MAX_SDR_ASYNC_RB_DATA];
+        data = rb->data[rb->head % MAX_SDR_ASYNC_RB];
 
         // shift frequency
         if (offset_w) {
@@ -695,7 +700,7 @@ static void player(void)
     }
 
 terminate:
-    display_clear_debug_line();
+    clear_debug_line();
     b->f_play_fft_min = 0;
     b->f_play_fft_max = 0;
     if (sdr_started) {

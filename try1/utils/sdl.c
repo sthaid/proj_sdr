@@ -95,17 +95,18 @@ static int32_t          sdl_event_max;
 static sdl_event_t      sdl_push_ev;
 
 static uint32_t         sdl_color_to_rgba[MAX_SDL_COLOR_TO_RGBA] = {
+                            PIXEL_BLACK, 
+                            PIXEL_WHITE, 
                             PIXEL_PURPLE, 
                             PIXEL_BLUE, 
                             PIXEL_LIGHT_BLUE, 
                             PIXEL_GREEN, 
+                            PIXEL_LIGHT_GREEN, 
                             PIXEL_YELLOW, 
                             PIXEL_ORANGE, 
                             PIXEL_PINK, 
                             PIXEL_RED, 
                             PIXEL_GRAY, 
-                            PIXEL_WHITE, 
-                            PIXEL_BLACK, 
                                         };
 
 //

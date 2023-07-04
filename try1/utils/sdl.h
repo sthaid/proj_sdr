@@ -9,32 +9,34 @@
 //
 
 // colors
-#define SDL_PURPLE     0 
-#define SDL_BLUE       1
-#define SDL_LIGHT_BLUE 2
-#define SDL_GREEN      3
-#define SDL_YELLOW     4
-#define SDL_ORANGE     5
-#define SDL_PINK       6
-#define SDL_RED        7
-#define SDL_GRAY       8
-#define SDL_WHITE      9
-#define SDL_BLACK      10
+#define SDL_BLACK       0
+#define SDL_WHITE       1
+#define SDL_PURPLE      2 
+#define SDL_BLUE        3
+#define SDL_LIGHT_BLUE  4
+#define SDL_GREEN       5
+#define SDL_LIGHT_GREEN 6
+#define SDL_YELLOW      7
+#define SDL_ORANGE      8
+#define SDL_PINK        9
+#define SDL_RED         10
+#define SDL_GRAY        11
 
 // pixels
 #define BYTES_PER_PIXEL  4
-#define PIXEL(r,g,b)     (((r) << 0) | ((g) << 8) | ((b) << 16) | (255 << 24))
-#define PIXEL_PURPLE     PIXEL(127,0,255)
-#define PIXEL_BLUE       PIXEL(0,0,255)
-#define PIXEL_LIGHT_BLUE PIXEL(0,255,255)
-#define PIXEL_GREEN      PIXEL(0,255,0)
-#define PIXEL_YELLOW     PIXEL(255,255,0)
-#define PIXEL_ORANGE     PIXEL(255,128,0)
-#define PIXEL_PINK       PIXEL(255,105,180)
-#define PIXEL_RED        PIXEL(255,0,0)
-#define PIXEL_GRAY       PIXEL(224,224,224)
-#define PIXEL_WHITE      PIXEL(255,255,255)
-#define PIXEL_BLACK      PIXEL(0,0,0)
+#define PIXEL(r,g,b)       (((r) << 0) | ((g) << 8) | ((b) << 16) | (255 << 24))
+#define PIXEL_BLACK        PIXEL(0,0,0)
+#define PIXEL_WHITE        PIXEL(255,255,255)
+#define PIXEL_PURPLE       PIXEL(127,0,255)
+#define PIXEL_BLUE         PIXEL(0,0,255)
+#define PIXEL_LIGHT_BLUE   PIXEL(0,255,255)
+#define PIXEL_GREEN        PIXEL(0,255,0)
+#define PIXEL_LIGHT_GREEN  PIXEL(144,238,144)
+#define PIXEL_YELLOW       PIXEL(255,255,0)
+#define PIXEL_ORANGE       PIXEL(255,128,0)
+#define PIXEL_PINK         PIXEL(255,105,180)
+#define PIXEL_RED          PIXEL(255,0,0)
+#define PIXEL_GRAY         PIXEL(224,224,224)
 
 #define PIXEL_TO_RGB(p,r,g,b) \
     do { \

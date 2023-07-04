@@ -445,7 +445,7 @@ static void *sim_async_read_thread(void *cx)
                 goto terminate;
             }
 
-            int rb_avail = MAX_SDR_ASYNC_RB_DATA - (rb->tail - rb->head);
+            int rb_avail = MAX_SDR_ASYNC_RB - (rb->tail - rb->head);
             if (rb_avail >= MAX_DATA) {
                 break;
             }
@@ -456,7 +456,7 @@ static void *sim_async_read_thread(void *cx)
         // copy the data to the tail of ring buffer
         unsigned long rb_tail = rb->tail;
         for (int i = 0; i < MAX_DATA; i++) {
-            rb->data[rb_tail % MAX_SDR_ASYNC_RB_DATA] = data[i];
+            rb->data[rb_tail % MAX_SDR_ASYNC_RB] = data[i];
             rb_tail++;
         }
         rb->tail = rb_tail;

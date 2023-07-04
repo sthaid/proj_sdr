@@ -1,7 +1,14 @@
-title line
+band title line should show freqs
+adjust size allotment
+demod fm
+async read in sdr.c, simulate the rate
+
+xxxxxxxxx
+
+clean up display.c
+- title line
 demod selection
 - fm demod
-clean up display.c
 start using sdr o the fm band
 display band W adjustment
 select bands and save to config
@@ -45,6 +52,11 @@ main.c          ok for now
 radio.c
 sdr.c           needs the real sync/async reads
 
+==== INFO ====
+
+Lower sideband (LSB)--The common single-sideband operating mode on the 40, 80 and 160-meter amateur bands.
+Upper sideband (USB)--The common single-sideband operating mode on the 20, 17, 15, 12 and 10-meter HF amateur bands, and all the VHF and UHF bands.
+    [Source for both above: http://www.arrl.org/ham-radio-glossary]
 
 === DONE ===
 rename scan.c to sdr.c
