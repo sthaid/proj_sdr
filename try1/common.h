@@ -100,7 +100,7 @@ typedef struct band_s {
     int  idx;
     bool selected;
     bool active;
-    int width;
+    double width;
     freq_t f_play;
     freq_t f_play_fft_min;
     freq_t f_play_fft_max;

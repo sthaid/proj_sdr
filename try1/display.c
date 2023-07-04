@@ -51,7 +51,7 @@ void display_init(void)
 void display_handler(void)
 {
     char    title[100], *p;
-    int     i, len, ret, x, y, w, h, total_width, cumulative_width;
+    int     i, len, ret;
     band_t *ab;
 
     while (true) {
@@ -78,20 +78,21 @@ void display_handler(void)
 
         // disaplay the bands that are selected; and 
         // compute the width of each band display area
-        total_width = 0;
+        double total_width = 0;
         for (i = 0; i < max_band; i++) {
             band_t *b = band[i];
             if (b->selected) total_width += b->width;
         }
         if (total_width) {
-            cumulative_width = 0;
+            double cumulative_width = 0;
             for (i = 0; i < max_band; i++) {
                 band_t *b = band[i];
                 if (!b->selected) continue;
 
-                x = nearbyint(((double)cumulative_width / total_width) * (W+40));
+                int x, y, w, h;
+                x = nearbyint((cumulative_width / total_width) * (W+40));
                 y = 1.5*FTCH2;
-                w = nearbyint(((double)b->width / total_width) * (W+40)) - 40;
+                w = nearbyint((b->width / total_width) * (W+40)) - 40;
                 h = H-y;
 
                 rect_t loc = {x, y, w, h};
@@ -150,17 +151,17 @@ static int handle_events(void)
             break; }
         case SDL_EVENT_ADJUST ... SDL_EVENT_ADJUST + MAX_BAND - 1: {
             band_t *b = band[ev->event_id - SDL_EVENT_ADJUST];
-            if (ev->mouse_wheel.delta_y > 0 && b->width < 16) {
-                b->width *= 2;
-            } else if (ev->mouse_wheel.delta_y < 0 && b->width > 1) {
-                b->width /= 2;
-            }
-            NOTICE("BAND %d  width is now %d\n", b->idx, b->width);
+            if (ev->mouse_wheel.delta_y > 0) {
+                b->width *= 1.1;
+            } else if (ev->mouse_wheel.delta_y < 0) {
+                b->width /= 1.1;
+            
+            NOTICE("BAND %d  width is now %f\n", b->idx, b->width);
             break; }
         case SDL_EVENT_KEYMOD_CTRL + 'r':
             for (i = 0; i < max_band; i++) {
                 band_t *b = band[i];
-                b->width = 4;  //xxx needs defines
+                b->width = 1;  //xxx needs defines
             }
             break;
         default:
