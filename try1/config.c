@@ -57,6 +57,7 @@ void config_init(void)
             b->f_span = b->f_max - b->f_min;
             b->f_play = (b->f_max + b->f_min) / 2;
             b->sim    = (strncmp(b->name, "SIM", 3) == 0);
+            b->width  = 4;
 
             if (strncmp(b->name, "SIM", 3) == 0) b->selected = true; // xxx temp
 
