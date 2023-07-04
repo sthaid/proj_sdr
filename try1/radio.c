@@ -183,7 +183,6 @@ bool radio_event(sdl_event_t *ev)
             b->f_play = tmp_freq;
         } else if (mode == MODE_SCAN) {
             scan_go_prior = true;
-            scan_pause = false;
         }
         break;
     case SDL_EVENT_KEY_RIGHT_ARROW:
@@ -194,12 +193,11 @@ bool radio_event(sdl_event_t *ev)
             b->f_play = tmp_freq;
         } else if (mode == MODE_SCAN) {
             scan_go_next = true;
-            scan_pause = false;
         }
         break;
     case ' ':
         if (mode == MODE_SCAN) {
-            scan_pause = true;
+            scan_pause = !scan_pause;
         }
         break;
 
@@ -425,10 +423,6 @@ static void *scan_mode_thread(void *cx)
                 if (stop_threads_req) {
                     return NULL;
                 }
-                if (scan_pause) {
-                    usleep(10000);
-                    continue;
-                }
                 if (scan_go_next) {
                     go_next = true;
                     scan_go_next = false;
@@ -438,6 +432,10 @@ static void *scan_mode_thread(void *cx)
                     go_next = false;
                     scan_go_prior = false;
                     break;
+                }
+                if (scan_pause) {// xxx reset scan flags when entering or leaving scan mode
+                    usleep(10000);
+                    continue;
                 }
                 usleep(10000);
                 t += 10000;

@@ -59,9 +59,16 @@ void display_handler(void)
         // display title line
         p = title;
         p += sprintf(p, "%s", MODE_STR(mode));
+        if (mode == MODE_SCAN) {
+            if (scan_pause) {
+                p += sprintf(p, ":PAUSED");
+            } else {
+                p += sprintf(p, ":INTVL=%d", scan_intvl);
+            }
+        }
         if (mode == MODE_PLAY || mode == MODE_SCAN) {
             if ((ab = active_band)) {
-                p += sprintf(p, " %6s  %10.6f  Demod:%s", ab->name, (double)ab->f_play/MHZ, DEMOD_STR(demod));
+                p += sprintf(p, "  %0.6f  DEMOD:%s", (double)ab->f_play/MHZ, DEMOD_STR(demod));
             }
         }
         len = (p - title) * FTCW2;
@@ -183,9 +190,10 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
     int    points_size_needed;
     double scaling;
     bool   highlight_fft;
+    char   str[100];
 
     static point_t *points;
-    static int      points_size_alloced;
+    static int      len, points_size_alloced;
 
     #define F2X(_f) (loc_fft.x + ((_f) - b->f_min) * loc_fft.w/ (b->f_max - b->f_min))
 
@@ -206,12 +214,25 @@ static void display_band(band_t *b, rect_t *loc)  // xxx name
     loc_fft   = (rect_t){ loc->x, loc_title.y + loc_title.h, loc->w, H_FFT };
     loc_wf    = (rect_t){ loc->x, loc_fft.y + loc_fft.h + 5, loc->w, H_WF };
 
-    // display the title
-    sdl_render_printf(loc_title.x, loc_title.y, FTSZ1, SDL_WHITE, SDL_BLACK, "%s", b->name);
+    // display the header
+    sprintf(str, "%s", b->name);
+    len = strlen(str) * FTCW1;
+    sdl_render_text(loc_title.x + (loc_title.w - len) / 2, loc_title.y, 
+                    FTSZ1, str, SDL_WHITE, SDL_BLACK);
+
+    sprintf(str, "%0.3f", (double)b->f_min/MHZ);
+    sdl_render_text(loc_title.x, loc_title.y, 
+                    FTSZ1, str, SDL_WHITE, SDL_BLACK);
+
+    sprintf(str, "%0.3f", (double)b->f_max/MHZ);
+    len = strlen(str) * FTCW1;
+    sdl_render_text(loc_title.x + loc_title.w - len, loc_title.y, 
+                    FTSZ1, str, SDL_WHITE, SDL_BLACK);
 
     // display the fft box
     highlight_fft = (mode == MODE_FFT) ||
-                    (mode == MODE_PLAY && b->active);
+                    (mode == MODE_PLAY && b->active) ||
+                    (mode == MODE_SCAN && b->active);
     sdl_render_rect(&loc_fft, highlight_fft ? 3 : 1, highlight_fft ? SDL_GREEN : SDL_LIGHT_GREEN);
 
     // display fft graph
@@ -262,6 +283,7 @@ static void display_waterfall(band_t *b, rect_t *loc)
 
     if (loc->w != b->wf.last_displayed_width || b->wf.pixels8 == NULL) {
         // waterfall display width has changed ...
+        NOTICE("WDITH CHANGED\n");
 
         // free and reallocate pixels and texture
         free(b->wf.pixels8);

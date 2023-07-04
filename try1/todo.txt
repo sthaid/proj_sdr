@@ -1,7 +1,8 @@
-band title line should show freqs
-adjust size allotment
+when play mode, allow arrow keys to mov between bands
+adjust band display size allotment
 demod fm
 async read in sdr.c, simulate the rate
+display the scan state
 
 xxxxxxxxx
 
