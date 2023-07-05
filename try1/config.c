@@ -12,6 +12,7 @@ void config_init(void)
     FILE          *fp;
     int            cnt, line_num=0;
     char           s[200];
+    char          *demod_str;
     struct band_s *b=NULL;
     double         f_min, f_max, f;
 
@@ -44,10 +45,11 @@ void config_init(void)
             b = calloc(sizeof(band_t), 1);
             band[max_band] = b;
 
-            cnt = sscanf(s+5, "%ms %lf %lf",
+            cnt = sscanf(s+5, "%ms %lf %lf %ms",
                          &b->name, 
-                         &f_min, &f_max);
-            if (cnt != 3) {
+                         &f_min, &f_max,
+                         &demod_str);
+            if (cnt != 4) {
                 BAD_CONFIG_FILE_LINE;
             }
 
@@ -58,6 +60,15 @@ void config_init(void)
             b->f_play = (b->f_max + b->f_min) / 2;
             b->sim    = (strncmp(b->name, "SIM", 3) == 0);
             b->width  = 1;
+
+            if (strcmp(demod_str, "AM") == 0) {
+                b->demod = DEMOD_AM;
+            } else if (strcmp(demod_str, "FM") == 0) {
+                b->demod = DEMOD_FM;
+            } else {
+                // xxx add other demods, maybe use a table
+                BAD_CONFIG_FILE_LINE;
+            }
 
             if (strncmp(b->name, "SIM", 3) == 0) b->selected = true; // xxx temp
 
@@ -91,6 +102,7 @@ void config_init(void)
     atexit(exit_hndlr);
 
     // xxx print the config
+    // xxx maybe add a debug mode to getopt to enable this among other debug level
     //config_dump();
 }
 
@@ -111,6 +123,7 @@ static void config_dump(void)
     for (i = 0; i < max_band; i++) {
         b = band[i];
 
+        // xxx print all fields
         NOTICE("BAND %s %f %f\n",
                b->name, 
                (double)b->f_min / MHZ,

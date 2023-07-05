@@ -62,15 +62,11 @@ void display_handler(void)
         p = title;
         p += sprintf(p, "%s", MODE_STR(mode));
         if (mode == MODE_SCAN) {
-            if (scan_pause) {
-                p += sprintf(p, ":PAUSED");
-            } else {
-                p += sprintf(p, ":INTVL=%d", scan_intvl);
-            }
+            p += sprintf(p, ":%s", scan_state_str);
         }
         if (mode == MODE_PLAY || mode == MODE_SCAN) {
             if ((ab = active_band)) { // xxx call radio routine?
-                p += sprintf(p, "  %0.6f  DEMOD:%s", (double)ab->f_play/MHZ, DEMOD_STR(demod));
+                p += sprintf(p, "  %0.6f  DEMOD:%s", (double)ab->f_play/MHZ, DEMOD_STR(ab->demod));
             }
         }
         len = (p - title) * FTCW2;

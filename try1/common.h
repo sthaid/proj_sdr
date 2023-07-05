@@ -94,7 +94,6 @@ typedef struct band_s {
     struct station_s {
         freq_t f;
         char *name;
-        // xxx demod
     } station[MAX_STATION];
 
     // state
@@ -105,12 +104,13 @@ typedef struct band_s {
     freq_t f_play;
     freq_t f_play_fft_min;
     freq_t f_play_fft_max;
+    int demod;
 
     // fft buffers
     complex *fft_in;
     complex *fft_out;
 
-    // fft result for entire band
+    // fft result, for entire band
     int      max_cabs_fft;
     double  *cabs_fft;
 
@@ -129,6 +129,7 @@ typedef struct band_s {
     struct scan_station_s {
         freq_t f;
         freq_t bw;
+        int    demod;
     } scan_station[MAX_SCAN_STATION];
 } band_t;
 
@@ -140,13 +141,9 @@ EXTERN int     max_band;
 EXTERN band_t *band[MAX_BAND];
 EXTERN band_t *active_band;
 
-EXTERN int     mode;
-EXTERN int     demod;
+EXTERN char   *scan_state_str;
 
-EXTERN int     scan_intvl;
-EXTERN bool    scan_pause;
-EXTERN int     scan_go_next;
-EXTERN int     scan_go_prior;
+EXTERN int     mode;
 
 //
 // inline procedures
