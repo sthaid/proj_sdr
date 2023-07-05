@@ -1,71 +1,31 @@
-when play mode, allow arrow keys to mov between bands
-adjust band display size allotment
-demod fm
 async read in sdr.c, simulate the rate
-display the scan state
+in audio.c
+- if rb is full discard
+- if rb is near empty (<50)  add 50
+- adjust the downsampling to favor discarding
 
 xxxxxxxxx
 
-clean up display.c
-- title line
+clean up display.c and radio.c
+
 demod selection
-- fm demod
-start using sdr o the fm band
-display band W adjustment
+- lsb and usb demod
+
+start using sdr on the fm band
 select bands and save to config
 
---------------
+xxxxxxxxxxxx xxxxxxxxxxxx xxxxxxxxxxxx xxxxxxxxxxxx
+xxxxxxxxxxxx xxxxxxxxxxxx xxxxxxxxxxxx xxxxxxxxxxxx
+xxxxxxxxxxxx xxxxxxxxxxxx xxxxxxxxxxxx xxxxxxxxxxxx
+xxxxxxxxxxxx xxxxxxxxxxxx xxxxxxxxxxxx xxxxxxxxxxxx
 
-clean up radio.c
-
-
-xxxxxxxxxxxx
-
-radio.c
-- scan mode 
-
-haid@home2:~/proj/proj_sdr/try1$ ls *.c
--rw-rw-r-- 1 haid haid 2.2K Jun 28 07:30 audio.c    k
--rw-rw-r-- 1 haid haid 3.3K Jul  2 16:46 config.c
--rw-rw-r-- 1 haid haid 9.7K Jul  2 17:15 display.c
--rw-rw-r-- 1 haid haid 1.4K Jun 28 09:00 main.c     k
--rw-rw-r-- 1 haid haid  24K Jul  2 17:12 radio.c
--rw-rw-r-- 1 haid haid  16K Jul  2 10:35 sdr.c      k
-
-
-
-cleanup
-
-rename sdr.config to config.sdr
-
-work on radio.c,  building down from the 3 modes - FFT  PLAY  SCAN
-
-
-
-static and dynamic config files
-
-review:
-common.h         ok for now
-audio.c          ok for now
-config.c         ok for now
-display.c       more work needed
-main.c          ok for now
-radio.c
-sdr.c           needs the real sync/async reads
+rename sdr.config to config.sdr OR .sdr_xxx
 
 ==== INFO ====
 
 Lower sideband (LSB)--The common single-sideband operating mode on the 40, 80 and 160-meter amateur bands.
 Upper sideband (USB)--The common single-sideband operating mode on the 20, 17, 15, 12 and 10-meter HF amateur bands, and all the VHF and UHF bands.
     [Source for both above: http://www.arrl.org/ham-radio-glossary]
-
-=== DONE ===
-rename scan.c to sdr.c
-mv notes to todo.txt
-new sim
-new antenna sim
-sdl text box
-
 
 ==== SAVE ===
 old sdr.config
