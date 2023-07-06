@@ -60,8 +60,8 @@
 #define DEMOD_NO_CHANGE 0
 #define DEMOD_AM   1
 #define DEMOD_FM   2
-#define DEMOD_USB  3
-#define DEMOD_LSB  4
+#define DEMOD_LSB  3
+#define DEMOD_USB  4
 
 #define DEMOD_STR(m) \
     ((m) == DEMOD_AM   ? "AM"  : \

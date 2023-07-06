@@ -2,6 +2,18 @@
 
 #define FILENAME "sdr.config"
 
+#define MAX_DEMODS (sizeof(demods) / sizeof(demods[0]))
+
+static struct {
+    char *name;
+    int demod;
+} demods[] = {
+    { "AM", DEMOD_AM },
+    { "FM", DEMOD_FM },
+    { "LSB", DEMOD_LSB },
+    { "USB", DEMOD_USB },
+        };
+
 static void exit_hndlr(void);
 static void config_dump(void) ATTRIB_UNUSED;
 
@@ -10,7 +22,7 @@ static void config_dump(void) ATTRIB_UNUSED;
 void config_init(void)
 {
     FILE          *fp;
-    int            cnt, line_num=0;
+    int            i, cnt, line_num=0;
     char           s[200];
     char          *demod_str;
     struct band_s *b=NULL;
@@ -61,12 +73,13 @@ void config_init(void)
             b->sim    = (strncmp(b->name, "SIM", 3) == 0);
             b->width  = 1;
 
-            if (strcmp(demod_str, "AM") == 0) {
-                b->demod = DEMOD_AM;
-            } else if (strcmp(demod_str, "FM") == 0) {
-                b->demod = DEMOD_FM;
-            } else {
-                // xxx add other demods, maybe use a table
+            for (i = 0; i < MAX_DEMODS; i++) {
+                if (strcmp(demods[i].name, demod_str) == 0) {
+                    b->demod = demods[i].demod;
+                    break;
+                }
+            }
+            if (i == MAX_DEMODS) {
                 BAD_CONFIG_FILE_LINE;
             }
 

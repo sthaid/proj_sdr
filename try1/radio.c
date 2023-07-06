@@ -95,7 +95,7 @@ static void fft_entire_band(band_t *b);
 static void add_to_waterfall(band_t *b);
 
 static void player(void);
-static void demod_and_audio_out(int demod, complex data_freq_shift);
+static void demod_and_audio_out(int demod, double t, complex data_freq_shift);
 static complex lpf(complex x, double f_cut);
 static void downsample_and_audio_out(double x);
 
@@ -131,8 +131,8 @@ void radio_init(void)
     scan_change_demod = DEMOD_NO_CHANGE;
     scan_state_str = "";
 
-    mode = MODE_FFT;
-    start_thread(fft_mode_thread, "sdr_fft_mode");
+    mode = MODE_PLAY;
+    start_thread(play_mode_thread, "sdr_play_mode");
 
     atexit(exit_hndlr);
 }
@@ -195,7 +195,7 @@ bool radio_event(sdl_event_t *ev)
                 b->f_play = b->f_max;
                 set_active_band(b);
             } else {
-                tmp_freq -= 10000;  // xxx step
+                tmp_freq -= 100;  // xxx step
                 if (tmp_freq < b->f_min) tmp_freq = b->f_min;
                 b->f_play = tmp_freq;
             }
@@ -212,7 +212,7 @@ bool radio_event(sdl_event_t *ev)
                 b->f_play = b->f_min;
                 set_active_band(b);
             } else {
-                tmp_freq += 10000;  // xxx step
+                tmp_freq += 100;  // xxx step
                 if (tmp_freq > b->f_max) tmp_freq = b->f_max;
                 b->f_play = tmp_freq;
             }
@@ -234,10 +234,14 @@ bool radio_event(sdl_event_t *ev)
 
     case SDL_EVENT_KEYMOD_CTRL | 'a':  
     case SDL_EVENT_KEYMOD_CTRL | 'f':
+    case SDL_EVENT_KEYMOD_CTRL | 'u':
+    case SDL_EVENT_KEYMOD_CTRL | 'l':
         if ((b = get_active_band())) {
             int ch = ev->event_id - SDL_EVENT_KEYMOD_CTRL;
-            // xxx other demod choices
-            int demod = (ch == 'a' ? DEMOD_AM : DEMOD_FM);
+            int demod = (ch == 'a' ? DEMOD_AM : 
+                         ch == 'f' ? DEMOD_FM : 
+                         ch == 'l' ? DEMOD_LSB : 
+                                     DEMOD_USB); 
             b->demod = demod;
             if (mode == MODE_SCAN) {
                 scan_change_demod = demod;
@@ -735,7 +739,7 @@ static void player(void)
         }
 
         // process the rtlsdr data item
-        demod_and_audio_out(b->demod, data_freq_shift);
+        demod_and_audio_out(b->demod, t, data_freq_shift);
         
         // if fft is paused, becuase ctr freq was changed then 
         //   decrement the pause counter
@@ -790,13 +794,15 @@ terminate:
     free(rb);
 }
 
-static void demod_and_audio_out(int demod, complex data_freq_shift)
+// xxx inline
+static inline void demod_and_audio_out(int demod, double t, complex data_freq_shift)
 {
     #define VOLUME_SCALE 10
 
     complex data_lpf;
     double  data_demod, data_demod_volscale;
 
+    // xxx check the demod lpf freq values
     switch (demod) {
     case DEMOD_AM:
         data_lpf = lpf(data_freq_shift, 4000);
@@ -809,12 +815,22 @@ static void demod_and_audio_out(int demod, complex data_freq_shift)
         prev = data_lpf;
         data_demod = atan2(cimag(product), creal(product));
         break; }
+    case DEMOD_LSB: case DEMOD_USB: {
+        double shift_w = (demod == DEMOD_LSB ? (TWO_PI * -2000) : (TWO_PI * 2000));  // xxx check this
+        complex tmp;
+        data_lpf = lpf(data_freq_shift, 2000);
+        tmp = data_lpf * cexp(I * shift_w * t);
+        data_demod = creal(tmp) + cimag(tmp);
+        break; }
     default:
         data_demod = 0;
         break;
     }
 
-    data_demod_volscale = data_demod * VOLUME_SCALE;
+    // xxx move these back to caller
+    //static double     volume_scale[] = { [DEMOD_AM]=10, [DEMOD_USB]=3, [DEMOD_LSB]=3, [DEMOD_FM]=10 };
+    static double     volume_scale[] = { [DEMOD_AM]=10, [DEMOD_USB]=1.0, [DEMOD_LSB]=1.0, [DEMOD_FM]=10 };
+    data_demod_volscale = data_demod * volume_scale[demod];
     downsample_and_audio_out(data_demod_volscale);
 }
 

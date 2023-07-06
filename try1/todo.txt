@@ -1,15 +1,25 @@
+freq step and snap
+- tuning step
+
+volume scale
+
+demod selection
+- lsb and usb demod
+
 async read in sdr.c, simulate the rate
 in audio.c
 - if rb is full discard
 - if rb is near empty (<50)  add 50
 - adjust the downsampling to favor discarding
 
+have sdr.config be a getopt
+
+save config info
+
 xxxxxxxxx
 
 clean up display.c and radio.c
 
-demod selection
-- lsb and usb demod
 
 start using sdr on the fm band
 select bands and save to config

@@ -111,12 +111,12 @@ static void init_station_white_noise(int modulation, double carrier_freq, double
 
 static void init_antenna(void)
 {
-    init_station_wav_file(   AM,  520000,   1, "wav_files/one_bourbon_one_scotch_one_beer.wav");
-    init_station_wav_file(   AM,  540000,   1, "wav_files/super_critical.wav");
-    init_station_wav_file(   AM,  560000,   1, "wav_files/proud_mary.wav");
-    //init_station_wav_file(   USB, 620000,   4, "wav_files/blue_sky.wav");
-    //init_station_wav_file(   LSB, 640000,   4, "wav_files/blue_sky.wav");
-    init_station_wav_file(   FM,  1000000, 5, "wav_files/not_fade_away.wav");
+    init_station_wav_file(   AM,  530000,   1, "wav_files/one_bourbon_one_scotch_one_beer.wav");
+    init_station_wav_file(   AM,  550000,   1, "wav_files/super_critical.wav");
+    init_station_wav_file(   AM,  570000,   1, "wav_files/proud_mary.wav");
+    init_station_wav_file(   LSB, 620000,   4, "wav_files/blue_sky.wav");
+    init_station_wav_file(   USB, 680000,   4, "wav_files/blue_sky.wav");
+    init_station_wav_file(   FM,  1000000,  5, "wav_files/not_fade_away.wav");
 }
 
 static double get_station_signal(int id, double t)
