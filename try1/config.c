@@ -24,9 +24,7 @@ void config_init(void)
     FILE          *fp;
     int            i, cnt, line_num=0;
     char           s[200];
-    char          *demod_str;
     struct band_s *b=NULL;
-    double         f_min, f_max, f;
 
     #define BAD_CONFIG_FILE_LINE \
         do { \
@@ -50,6 +48,9 @@ void config_init(void)
         }
 
         if (strncmp(s, "BAND ", 5) == 0) {
+            double f_min, f_max, f_snap_intvl, f_snap_offset;
+            char   *name_str, *demod_str;
+
             if (max_band == MAX_BAND) {
                 BAD_CONFIG_FILE_LINE;
             }
@@ -57,28 +58,32 @@ void config_init(void)
             b = calloc(sizeof(band_t), 1);
             band[max_band] = b;
 
-            cnt = sscanf(s+5, "%ms %lf %lf %ms",
-                         &b->name, 
-                         &f_min, &f_max,
+            cnt = sscanf(s+5, "%ms %lf %lf %lf %lf %ms",
+                         &name_str, 
+                         &f_min, &f_max, &f_snap_intvl, &f_snap_offset,
                          &demod_str);
-            if (cnt != 4) {
+            if (cnt != 6) {
                 BAD_CONFIG_FILE_LINE;
             }
 
-            b->idx    = max_band;
-            b->f_min  = nearbyint(f_min * MHZ);
-            b->f_max  = nearbyint(f_max * MHZ);
-            b->f_span = b->f_max - b->f_min;
-            b->f_play = (b->f_max + b->f_min) / 2;
-            b->sim    = (strncmp(b->name, "SIM", 3) == 0);
-            b->width  = 1;
-
+            b->name          = name_str;
+            b->f_min         = nearbyint(f_min * MHZ);
+            b->f_max         = nearbyint(f_max * MHZ);
+            b->f_snap_intvl  = nearbyint(f_snap_intvl * MHZ);
+            b->f_snap_offset = nearbyint(f_snap_offset * MHZ);
             for (i = 0; i < MAX_DEMODS; i++) {
                 if (strcmp(demods[i].name, demod_str) == 0) {
                     b->demod = demods[i].demod;
                     break;
                 }
             }
+
+            b->idx    = max_band;
+            b->f_span = b->f_max - b->f_min;
+            b->f_play = (b->f_max + b->f_min) / 2;
+            b->sim    = (strncmp(b->name, "SIM", 3) == 0);
+            b->width  = 1;
+
             if (i == MAX_DEMODS) {
                 BAD_CONFIG_FILE_LINE;
             }
@@ -86,6 +91,7 @@ void config_init(void)
             if (strncmp(b->name, "SIM", 3) == 0) b->selected = true; // xxx temp
 
             max_band++;
+#if 0
         } else if (strncmp(s, "STATION ", 8) == 0) {
             if (b == NULL) {
                 BAD_CONFIG_FILE_LINE;
@@ -100,6 +106,7 @@ void config_init(void)
             }
 
             b->max_station++;
+#endif
         }
     }
 

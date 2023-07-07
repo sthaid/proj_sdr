@@ -67,7 +67,8 @@ static bool    scan_pause;
 static bool    scan_go_next;
 static bool    scan_go_prior;
 static bool    scan_delete;
-static int     scan_change_demod;
+static bool    scan_change_freq;
+static bool    scan_change_demod;
 
 //
 // prototypes
@@ -103,6 +104,7 @@ static void find_stations(band_t *b);
 static void find(band_t *b, int avg_freq_span, double threshold);
 static int add(band_t *b, freq_t f, freq_t bw);
 static int compare(const void *a_arg, const void *b_arg);
+static freq_t snap(band_t *b, freq_t f);
 
 // -----------------  INIT  --------------------------------------------
 
@@ -128,7 +130,8 @@ void radio_init(void)
     scan_go_next = false;
     scan_go_prior = false;
     scan_delete = false;
-    scan_change_demod = DEMOD_NO_CHANGE;
+    scan_change_freq = false;
+    scan_change_demod = false;;
     scan_state_str = "";
 
     mode = MODE_PLAY;
@@ -155,18 +158,18 @@ bool radio_event(sdl_event_t *ev)
     switch(ev->event_id) {
     case SDL_EVENT_KEY_F(1):
         stop_threads();
-        mode = MODE_FFT;
-        start_thread(fft_mode_thread, "sdr_fft_mode");
-        break;
-    case SDL_EVENT_KEY_F(2):
-        stop_threads();
         mode = MODE_PLAY;
         start_thread(play_mode_thread, "sdr_play_mode");
         break;
-    case SDL_EVENT_KEY_F(3):
+    case SDL_EVENT_KEY_F(2):
         stop_threads();
         mode = MODE_SCAN;
         start_thread(scan_mode_thread, "sdr_scan_mode");
+        break;
+    case SDL_EVENT_KEY_F(3):
+        stop_threads();
+        mode = MODE_FFT;
+        start_thread(fft_mode_thread, "sdr_fft_mode");
         break;
     case SDL_EVENT_KEY_F(4):
         stop_threads();
@@ -174,21 +177,28 @@ bool radio_event(sdl_event_t *ev)
         break;
 
     case SDL_EVENT_KEY_TAB:
+    case '>': case '.':
         if (mode == MODE_PLAY) {
             b = get_next_band();
             set_active_band(b);
+        } else if (mode == MODE_SCAN) {
+            scan_go_next = true;
         }
         break;
     case SDL_EVENT_KEYMOD_CTRL | SDL_EVENT_KEY_TAB:
+    case '<': case ',':
         if (mode == MODE_PLAY) {
             b = get_previous_band();
             set_active_band(b);
+        } else if (mode == MODE_SCAN) {
+            scan_go_prior = true;
         }
         break;
 
     case SDL_EVENT_KEY_LEFT_ARROW:
         if ((b = get_active_band()) == NULL) break;
-        if (mode == MODE_PLAY) {
+// xxx new routine
+        if (mode == MODE_PLAY || mode == MODE_SCAN) {
             tmp_freq = b->f_play;
             if (tmp_freq == b->f_min) {
                 if ((b = get_previous_band()) == NULL) break;
@@ -199,13 +209,15 @@ bool radio_event(sdl_event_t *ev)
                 if (tmp_freq < b->f_min) tmp_freq = b->f_min;
                 b->f_play = tmp_freq;
             }
-        } else if (mode == MODE_SCAN) {
-            scan_go_prior = true;
+
+            if (mode == MODE_SCAN) {
+                scan_change_freq = true;
+            }
         }
         break;
     case SDL_EVENT_KEY_RIGHT_ARROW:
         if ((b = get_active_band()) == NULL) break;
-        if (mode == MODE_PLAY) {
+        if (mode == MODE_PLAY || mode == MODE_SCAN) {
             tmp_freq = b->f_play;
             if (tmp_freq == b->f_max) {
                 if ((b = get_next_band()) == NULL) break;
@@ -216,8 +228,10 @@ bool radio_event(sdl_event_t *ev)
                 if (tmp_freq > b->f_max) tmp_freq = b->f_max;
                 b->f_play = tmp_freq;
             }
-        } else if (mode == MODE_SCAN) {
-            scan_go_next = true;
+
+            if (mode == MODE_SCAN) {
+                scan_change_freq = true;
+            }
         }
         break;
 
@@ -244,7 +258,7 @@ bool radio_event(sdl_event_t *ev)
                                      DEMOD_USB); 
             b->demod = demod;
             if (mode == MODE_SCAN) {
-                scan_change_demod = demod;
+                scan_change_demod = true;
             }
         }
         break;
@@ -410,24 +424,28 @@ static void *play_mode_thread(void *cx)
     return NULL;
 }
 
+static void go_next(int *bidx, int *sidx);
+static void go_prior(int *bidx, int *sidx);
+
 static void *scan_mode_thread(void *cx)
 {
     int           bidx, sidx;
     int           total_scan_stations;
     band_t       *first;
-    bool          go_next;
     unsigned long t;
     int           saved_band_demod[MAX_BAND];
+    bool          no_selected_bands;
 
-top:
     // init 
     scan_pause = false;
     scan_go_next = false;
     scan_go_prior = false;
     scan_delete = false;
-    scan_change_demod = DEMOD_NO_CHANGE;
+    scan_change_freq = false;
+    scan_change_demod = false;
     scan_state_str = "";
 
+    // xxx
     for (bidx = 0; bidx < max_band; bidx++) {
         saved_band_demod[bidx] = band[bidx]->demod;
     }
@@ -439,32 +457,39 @@ top:
     total_scan_stations = 0;
 
     // perform fft and find stations, on all selected bands
-    first = NULL;
-    for (bidx = 0; bidx < max_band; bidx++) {
-        band_t *b = band[bidx];
+    while (true) {
+        first = NULL;
+        no_selected_bands = true;
 
-        if (stop_threads_req) {
+        for (bidx = 0; bidx < max_band; bidx++) {
+            band_t *b = band[bidx];
+
+            if (stop_threads_req) {
+                goto exit;
+            }
+
+            if (b->selected) {
+                no_selected_bands = false;
+                fft_entire_band(b);
+                find_stations(b);
+                if (b->max_scan_station > 0 && !first) {
+                    first = b;
+                }
+                total_scan_stations += b->max_scan_station;
+            }
+        }
+
+        if (first) {
+            break;
+        }
+
+        if (no_selected_bands) {
             goto exit;
         }
 
-        if (b->selected) {
-            fft_entire_band(b);
-
-            find_stations(b);
-
-            if (b->max_scan_station > 0 && !first) {
-                first = b;
-            }
-
-            total_scan_stations += b->max_scan_station;
-        }
-    }
-
-    // if no stations found then try again
-    if (total_scan_stations == 0) {
         scan_state_str = "NO_STATIONS_FOUND";
         sleep(2);
-        goto top;
+        scan_state_str = "";
     }
 
     // start the play_mode_thread
@@ -486,13 +511,14 @@ top:
             if (stop_threads_req) {
                 goto exit;
             }
+
             if (scan_go_next) {
-                go_next = true;
+                go_next(&bidx, &sidx);
                 scan_go_next = false;
                 break;
             }
             if (scan_go_prior) {
-                go_next = false;
+                go_prior(&bidx, &sidx);
                 scan_go_prior = false;
                 break;
             }
@@ -502,70 +528,85 @@ top:
                         (band[bidx]->max_scan_station - 1 - sidx) * sizeof(struct scan_station_s));
                 band[bidx]->max_scan_station--;
                 sidx--;
-                total_scan_stations--;
-                go_next = true;
+                if (--total_scan_stations == 0) {
+                    goto exit;
+                }
+                go_next(&bidx, &sidx);
                 scan_delete = false;
                 break;
             }
-            if (scan_change_demod) {
-                band[bidx]->demod  = scan_change_demod;
-                band[bidx]->scan_station[sidx].demod = scan_change_demod;
-                scan_change_demod = DEMOD_NO_CHANGE;
-            }
-            if (scan_pause) {
-                scan_state_str = "PAUSED";
-                usleep(10000);
-                continue;
-            }
-            scan_state_str = "PLAYING"; // xxx incorporate scan_intvl
-            usleep(10000);
-            t += 10000;
-            if (t > scan_intvl * 1000000L) {
-                go_next = true;
+            if (scan_change_freq) {
+                band[bidx]->scan_station[sidx].f = band[bidx]->f_play;
+                scan_change_freq = false;
                 break;
             }
-        }
+            if (scan_change_demod) {
+                band[bidx]->scan_station[sidx].demod = band[bidx]->demod;
+                scan_change_demod = false;
+                break;
+            }
 
-        // if all scan stations have been deleted then
-        // break out of this loop playing the scan stations
-        if (total_scan_stations == 0) {
-            break;
-        }
-
-        // adjust bidx,sidx to be the next/prior station
-        if (go_next) {
-            while (true) {
-                sidx++; 
-                if (sidx < band[bidx]->max_scan_station) {
+            if (scan_pause) {
+                scan_state_str = "PAUSED";
+            } else {
+                scan_state_str = "PLAYING"; // xxx incorporate scan_intvl
+                if ((t += 10000) > scan_intvl * 1000000L) {
+                    go_next(&bidx, &sidx);
                     break;
-                } else {
-                    if (++bidx == max_band) bidx = 0;
-                    sidx = -1;
                 }
             }
-        } else {
-            while (true) {
-                sidx--; 
-                if (sidx >= 0) {
-                    break;
-                } else {
-                    if (--bidx == -1) bidx = max_band-1;
-                    sidx = band[bidx]->max_scan_station;
-                }
-            }
+
+            usleep(10000);
         }
     }
 
-    // all scan stations have been deleted;
+exit:
+    // cleanup and return
     stop_other_threads();
     mode = MODE_STOPPED;
 
-exit:
-    // cleanup and return
     for (bidx = 0; bidx < max_band; bidx++) {
         band[bidx]->demod = saved_band_demod[bidx];
     }
     return NULL;
+}
+
+static void go_next(int *p_bidx, int *p_sidx) 
+{
+    int bidx = *p_bidx;
+    int sidx = *p_sidx;
+
+    while (true) {
+        sidx++; 
+        if (sidx < band[bidx]->max_scan_station) {
+            break;
+        } else {
+            if (++bidx == max_band) bidx = 0;
+            sidx = -1;
+        }
+    }
+
+    *p_bidx = bidx;
+    *p_sidx = sidx;
+}
+
+static void go_prior(int *p_bidx, int *p_sidx) 
+{
+    int bidx = *p_bidx;
+    int sidx = *p_sidx;
+
+    while (true) {
+        sidx--; 
+        if (sidx >= 0) {
+            break;
+        } else {
+            if (--bidx == -1) bidx = max_band-1;
+            sidx = band[bidx]->max_scan_station;
+        }
+    }
+
+    *p_bidx = bidx;
+    *p_sidx = sidx;
 }
 
 // -----------------  FFT ENTIRE BAND  ---------------------------------
@@ -928,7 +969,8 @@ static void find(band_t *b, int avg_freq_span, double threshold)
 
                 idx_of_max -= n/2;
                 f = b->f_min + idx_of_max * b->f_span / (b->max_cabs_fft - 1);
-                // xxx snap the freq
+
+                f = snap(b, f); //xxx name
 
                 add(b, f, bw);
                 found = false;
@@ -973,5 +1015,18 @@ static int compare(const void *a_arg, const void *b_arg)
     const struct scan_station_s *b = b_arg;
 
     return a->f < b->f ? -1 : a->f == b->f ? 0 : 1;
+}
+
+static freq_t snap(band_t *b, freq_t f)
+{
+    if (b->f_snap_intvl == 0) {
+        return f;
+    }
+
+    f -= b->f_snap_offset;
+    f = (int)nearbyint((double)f / b->f_snap_intvl) * b->f_snap_intvl;
+    f += b->f_snap_offset;
+
+    return f;
 }
 

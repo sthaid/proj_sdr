@@ -45,9 +45,9 @@
 #define MAX_WATERFALL     500
 #define MAX_SDR_ASYNC_RB  (16*32*512/2 * 2)  // 131072 * 2 = 262144
 
-#define MODE_FFT     1
-#define MODE_PLAY    2
-#define MODE_SCAN    3
+#define MODE_PLAY    1
+#define MODE_SCAN    2
+#define MODE_FFT     3
 #define MODE_STOPPED 4
 
 #define MODE_STR(m) \
@@ -57,7 +57,6 @@
      (m) == MODE_STOPPED ? "STOPPED" : \
                            "????")
 
-#define DEMOD_NO_CHANGE 0
 #define DEMOD_AM   1
 #define DEMOD_FM   2
 #define DEMOD_LSB  3
@@ -90,6 +89,8 @@ typedef struct band_s {
     freq_t f_max;
     freq_t f_span;
     freq_t f_step;
+    freq_t f_snap_intvl;
+    freq_t f_snap_offset;
     int max_station;
     struct station_s {
         freq_t f;

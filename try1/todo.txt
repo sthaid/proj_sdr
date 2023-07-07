@@ -1,5 +1,22 @@
+tab for the scan mode
+
+just use arrows for freq
+- update scan freq
+
+freq ctrl and with snap
+
+work again on providing data at sim rate
+
+
+--------
+
 freq step and snap
 - tuning step
+
+scan mode with usb lsb
+- use arrows for tuning
+- use pgup/dn for next and prev station OR tab, ctrl-tab
+- save freq adjustments
 
 volume scale
 
