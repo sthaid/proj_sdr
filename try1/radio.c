@@ -125,6 +125,7 @@ void radio_init(void)
 
     set_active_band(band[0]);
 
+#if 0
     scan_intvl = 3;
     scan_pause = false;
     scan_go_next = false;
@@ -132,6 +133,7 @@ void radio_init(void)
     scan_delete = false;
     scan_change_freq = false;
     scan_change_demod = false;;
+#endif
     scan_state_str = "";
 
     mode = MODE_PLAY;
@@ -149,10 +151,11 @@ static void exit_hndlr(void)
 
 // -----------------  HANDLE EVENTS FROM DISPLAY  ----------------------
 
+static void freq_adjust(int evid);
+
 bool radio_event(sdl_event_t *ev)
 {
     bool event_was_handled = true;
-    freq_t tmp_freq;
     band_t *b;
 
     switch(ev->event_id) {
@@ -196,43 +199,12 @@ bool radio_event(sdl_event_t *ev)
         break;
 
     case SDL_EVENT_KEY_LEFT_ARROW:
-        if ((b = get_active_band()) == NULL) break;
-// xxx new routine
-        if (mode == MODE_PLAY || mode == MODE_SCAN) {
-            tmp_freq = b->f_play;
-            if (tmp_freq == b->f_min) {
-                if ((b = get_previous_band()) == NULL) break;
-                b->f_play = b->f_max;
-                set_active_band(b);
-            } else {
-                tmp_freq -= 100;  // xxx step
-                if (tmp_freq < b->f_min) tmp_freq = b->f_min;
-                b->f_play = tmp_freq;
-            }
-
-            if (mode == MODE_SCAN) {
-                scan_change_freq = true;
-            }
-        }
-        break;
+    case SDL_EVENT_KEY_LEFT_ARROW | SDL_EVENT_KEYMOD_CTRL:
+    case SDL_EVENT_KEY_LEFT_ARROW | SDL_EVENT_KEYMOD_ALT:
     case SDL_EVENT_KEY_RIGHT_ARROW:
-        if ((b = get_active_band()) == NULL) break;
-        if (mode == MODE_PLAY || mode == MODE_SCAN) {
-            tmp_freq = b->f_play;
-            if (tmp_freq == b->f_max) {
-                if ((b = get_next_band()) == NULL) break;
-                b->f_play = b->f_min;
-                set_active_band(b);
-            } else {
-                tmp_freq += 100;  // xxx step
-                if (tmp_freq > b->f_max) tmp_freq = b->f_max;
-                b->f_play = tmp_freq;
-            }
-
-            if (mode == MODE_SCAN) {
-                scan_change_freq = true;
-            }
-        }
+    case SDL_EVENT_KEY_RIGHT_ARROW | SDL_EVENT_KEYMOD_CTRL:
+    case SDL_EVENT_KEY_RIGHT_ARROW | SDL_EVENT_KEYMOD_ALT:
+        freq_adjust(ev->event_id);
         break;
 
     case ' ':
@@ -270,6 +242,45 @@ bool radio_event(sdl_event_t *ev)
 
     // return true if event was handled
     return event_was_handled;
+}
+
+static void freq_adjust(int evid)
+{
+    bool    dir_is_up, do_snap;
+    freq_t  f, delta;
+    band_t *b;
+    int     key = (evid & ~SDL_EVENT_KEYMOD_MASK);
+    int     keymod = (evid & SDL_EVENT_KEYMOD_MASK);
+
+    if ((b = get_active_band()) == NULL) {
+        return;
+    }
+    if (mode != MODE_PLAY && mode != MODE_SCAN) {
+        return;
+    }
+
+    dir_is_up = (key == SDL_EVENT_KEY_RIGHT_ARROW);
+    do_snap = (mode == MODE_PLAY) && (keymod == 0) && (b->f_snap_intvl != 0);
+    delta = (keymod == 0                     ? 100 :
+             keymod == SDL_EVENT_KEYMOD_CTRL ? 10 : 
+                                               1);
+
+    if (do_snap) {
+        f = snap(b, b->f_play);
+        if (dir_is_up && f <= b->f_play) f += b->f_snap_intvl;
+        if (!dir_is_up && f >= b->f_play) f -= b->f_snap_intvl;
+    } else {
+        f = b->f_play + delta * (dir_is_up ? 1 : -1);
+    }
+
+    if (f < b->f_min) f = b->f_min;
+    if (f > b->f_max) f = b->f_max;
+
+    b->f_play = f;
+
+    if (mode == MODE_SCAN) {
+        scan_change_freq = true;
+    }
 }
 
 // -----------------  ACTIVE AND SELECTED BAND SUPPORT  ----------------
@@ -437,7 +448,8 @@ static void *scan_mode_thread(void *cx)
     bool          no_selected_bands;
 
     // init 
-    scan_pause = false;
+    scan_intvl = 5; // secs
+    scan_pause = true;
     scan_go_next = false;
     scan_go_prior = false;
     scan_delete = false;
@@ -549,7 +561,7 @@ static void *scan_mode_thread(void *cx)
             if (scan_pause) {
                 scan_state_str = "PAUSED";
             } else {
-                scan_state_str = "PLAYING"; // xxx incorporate scan_intvl
+                scan_state_str = "AUTO"; // xxx incorporate scan_intvl
                 if ((t += 10000) > scan_intvl * 1000000L) {
                     go_next(&bidx, &sidx);
                     break;
