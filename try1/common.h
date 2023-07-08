@@ -37,7 +37,7 @@
 #define MHZ 1000000
 
 #define SDR_SAMPLE_RATE   2400000   // 2.4 MS/sec
-#define AUDIO_SAMPLE_RATE 22000
+#define AUDIO_SAMPLE_RATE 24000
 
 #define MAX_BAND          20
 #define MAX_STATION       20

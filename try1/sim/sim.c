@@ -113,7 +113,11 @@ static void init_antenna(void)
 {
     init_station_wav_file(   AM,  530000,   1, "wav_files/one_bourbon_one_scotch_one_beer.wav");
     init_station_wav_file(   AM,  550000,   1, "wav_files/super_critical.wav");
+#if 0  //xxx
     init_station_wav_file(   AM,  570000,   1, "wav_files/proud_mary.wav");
+#else
+    init_station_sine_wave(  AM,  570000,   1, 1000);
+#endif
     init_station_wav_file(   LSB, 620000,   4, "wav_files/blue_sky.wav");
     init_station_wav_file(   USB, 680000,   4, "wav_files/blue_sky.wav");
     init_station_wav_file(   FM,  1100000,  5, "wav_files/not_fade_away.wav");
@@ -212,8 +216,8 @@ static void init_station_sine_wave(int modulation, double carrier_freq, double c
     double          t, dt;
     int             i;
 
-    a->audio_n           = 22000;   // 1 sec
-    a->audio_sample_rate = 22000;
+    a->audio_n           = 24000;   // 1 sec
+    a->audio_sample_rate = 24000;
     a->audio_data        = fftw_alloc_real(a->audio_n+2);
     a->carrier_freq      = carrier_freq;
     a->carrier_amp       = carrier_amp;
@@ -235,8 +239,9 @@ static void init_station_white_noise(int modulation, double carrier_freq, double
 {
     struct station_s *a = &station[max_station++];
 
-    a->audio_n           = 10*22000;  // 10 sec
-    a->audio_sample_rate = 22000;;
+//xxx sample rate
+    a->audio_n           = 10*24000;  // 10 sec
+    a->audio_sample_rate = 24000;;
     a->audio_data        = fftw_alloc_real(a->audio_n+2);
     a->carrier_freq      = carrier_freq;
     a->carrier_amp       = carrier_amp;

@@ -378,6 +378,7 @@ static freq_t sim_ctr_freq;
 
 static void *sim_async_read_thread(void *cx);
 static void sim_get_antenna_data(complex *data, int n);
+static void sim_get_antenna_data_init(void);
 
 // - - - - sim set ctr freq - - - - 
 
@@ -399,8 +400,7 @@ static void sim_sdr_read_sync(complex *data, int n)
 static void sim_sdr_read_async(sdr_async_rb_t *rb)
 {
     if (sim_async.tid != 0) {
-        ERROR("sdr sim async read is already active\n");
-        return;
+        FATAL("sdr sim async read is already active\n");
     }
 
     sim_async.cancel = false;
@@ -411,7 +411,10 @@ static void sim_sdr_read_async(sdr_async_rb_t *rb)
 
 static void sim_sdr_cancel_async(void)
 {
-    // xxx make sure the tid is set
+    if (sim_async.tid == 0) {
+        FATAL("sdr sim async read is not active\n");
+    }
+
     sim_async.cancel = true;
 
     pthread_join(sim_async.tid, NULL);
@@ -427,44 +430,49 @@ static void *sim_async_read_thread(void *cx)
 
     sdr_async_rb_t *rb = sim_async.rb;
     complex         data[MAX_DATA];
+    unsigned long   rb_avail, n, rb_tail;
+    unsigned long   delta_t, target, now;
 
     pthread_setname_np(pthread_self(), "sdr_async_read");
 
     NOTICE("async read thread starting\n");
 
-    // xxx feed the simulated data at the sdr sample rate
+    delta_t = nearbyint((double)MAX_DATA / info.sample_rate * 1000000);
+    target = microsec_timer() + delta_t;
+    DEBUG("delta_t = %ld\n", delta_t);
 
     while (true) {
-        // get a block of simulated antenna data
-        sim_get_antenna_data(data, MAX_DATA);
-
-        // wait for room in the ring buffer
-        // xxx maybe just wait for any room
-        while (true) {
-            if (sim_async.cancel) {
-                goto terminate;
-            }
-
-            int rb_avail = MAX_SDR_ASYNC_RB - (rb->tail - rb->head);
-            if (rb_avail >= MAX_DATA) {
-                break;
-            }
-
-            usleep(1000);
-        }
-
-        // copy the data to the tail of ring buffer
-        unsigned long rb_tail = rb->tail;
-        for (int i = 0; i < MAX_DATA; i++) {
-            rb->data[rb_tail % MAX_SDR_ASYNC_RB] = data[i];
-            rb_tail++;
-        }
-        rb->tail = rb_tail;
-
         // check for cancel request
         if (sim_async.cancel) {
             goto terminate;
         }
+
+        // get a block of simulated antenna data
+        sim_get_antenna_data(data, MAX_DATA);
+
+        // wait for it to be time to provide the data
+        now = microsec_timer();
+        if (target > now) {
+            usleep(target - now);
+            DEBUG("slept for %ld us\n", target-now);
+        } else {
+            WARN("target is before now\n");
+        }
+        target += delta_t;
+
+        // copy the data to the tail of ring buffer, 
+        // for as much will fit
+        rb_avail = MAX_SDR_ASYNC_RB - (rb->tail - rb->head);
+        n = (rb_avail < MAX_DATA ? rb_avail : MAX_DATA);
+        if (n != MAX_DATA) {
+            WARN("discarding %ld samples\n", MAX_DATA-n);
+        }
+        rb_tail = rb->tail;
+        for (int i = 0; i < n; i++) {
+            rb->data[rb_tail % MAX_SDR_ASYNC_RB] = data[i];  //xxx more efficient?
+            rb_tail++;
+        }
+        rb->tail = rb_tail;
     }
 
 terminate:
@@ -475,50 +483,56 @@ terminate:
 
 // - - - - sim get antenna data - - - - 
 
+static double      *antenna;
+static unsigned int max_antenna;
+
 static void sim_get_antenna_data(complex *data, int n)
 {
-    static bool first_call = true;
-    static double *antenna;
-    static unsigned int idx, max;
+    static unsigned int idx;
     static double t;
+    double w = TWO_PI * sim_ctr_freq;
 
-    // read the entire sim.dat file on first_call
-    if (first_call) {
-        int fd;
-        size_t len_read;
-        size_t file_size;
-        struct stat statbuf;
-
-        fd = open("sim/sim.dat", O_RDONLY);
-        if (fd < 0) {
-            FATAL("failed open sim/sim.dat, %m\n");
-        }
-
-        fstat(fd, &statbuf);
-        file_size = statbuf.st_size;
-
-        antenna = malloc(file_size);
-
-        len_read = read(fd, antenna, file_size);
-        if (len_read != file_size) {
-            FATAL("read antenna file, len=%zd, %m\n", len_read);
-        }
-
-        close(fd);
-
-        first_call = false;
-        idx        = 0;
-        max        = file_size / sizeof(double);
-        t          = 0;
-    }
+    // init the antenna data on first call
+    sim_get_antenna_data_init();
 
     // shift the frequency to sim_ctr_freq, and copy to caller's buffer
-    double w = TWO_PI * sim_ctr_freq;
     for (int i = 0; i < n; i++) {
         data[i] = antenna[idx++] * cexp(-I * w * t);
-        if (idx == max) idx = 0;
+        if (idx == max_antenna) idx = 0;
         t += DELTA_T;
     }
+}
+
+static void sim_get_antenna_data_init(void)
+{
+    int fd;
+    size_t len_read;
+    size_t file_size;
+    struct stat statbuf;
+
+    // if already initialized then return
+    if (antenna) {
+        return;
+    }
+
+    // read the entire sim.dat file
+    fd = open("sim/sim.dat", O_RDONLY);
+    if (fd < 0) {
+        FATAL("failed open sim/sim.dat, %m\n");
+    }
+
+    fstat(fd, &statbuf);
+    file_size = statbuf.st_size;
+
+    antenna = malloc(file_size);
+    max_antenna = file_size / sizeof(double);
+
+    len_read = read(fd, antenna, file_size);
+    if (len_read != file_size) {
+        FATAL("read antenna file, len=%zd, %m\n", len_read);
+    }
+
+    close(fd);
 }
 
 // --------------------------------------

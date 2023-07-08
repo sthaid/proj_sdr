@@ -1,17 +1,10 @@
-tab for the scan mode
-
-just use arrows for freq
-- update scan freq
-
-freq ctrl and with snap
+rethink tuning ctrls for play and scan modes,  and using freq snap
 
 work again on providing data at sim rate
 
+work on fm band with sdr
 
 --------
-
-freq step and snap
-- tuning step
 
 scan mode with usb lsb
 - use arrows for tuning
