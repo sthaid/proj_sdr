@@ -713,6 +713,7 @@ static void player(void)
     freq_t          last_play_freq = 0;
     freq_t          last_ctr_freq  = 0;
     band_t         *last_actv_band = NULL;
+    bool            last_sim       = false;
     freq_t          ctr_freq       = 0;
     double          offset_w       = 0;
     band_t         *b              = NULL;
@@ -765,18 +766,25 @@ static void player(void)
             print_debug_line("%s  FREQ - PLAY = %ld  CTR = %ld  OFFSET = %.0f", 
                              b->name, play_freq, ctr_freq, offset_w/TWO_PI);
 
+            if (b->sim != last_sim && sdr_started) {
+                sdr_cancel_async(last_sim);
+                sdr_started = false;
+            }
+
+            if (!sdr_started) {
+                sdr_read_async(rb, b->sim);
+                sdr_started = true;
+            }
+
             if (ctr_freq != last_ctr_freq) {
                 sdr_set_ctr_freq(ctr_freq, b->sim);
-                if (!sdr_started) {
-                    sdr_read_async(rb, b->sim);
-                    sdr_started = true;
-                }
                 fft_pause = 300000;
             }
 
             last_ctr_freq = ctr_freq;
             last_play_freq = play_freq;
             last_actv_band = b;
+            last_sim = b->sim;
         }
 
         // if no rtlsdr data avail then continue
