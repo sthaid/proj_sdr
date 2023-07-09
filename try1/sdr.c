@@ -118,10 +118,6 @@ void sdr_init(int dev_idx, int sample_rate)
 {
     int rc;
 
-    if (dev != NULL) {
-        FATAL("sdr_init has already been called\n");
-    }
-
     // open
     rc = rtlsdr_open(&dev, dev_idx);
     if (rc != 0) {
@@ -453,8 +449,6 @@ static void real_async_read_cb(unsigned char *buff, unsigned int len, void *cx)
     n = (rb_avail < items ? rb_avail : items);
     if (n != items) {
         WARN("discarding %ld samples\n", items-n);
-        WARN("   rb head = %ld  tail = %ld  avail = %ld\n",
-            rb->head, rb->tail, rb_avail);
     }
     rb_tail = rb->tail;
     for (int i = 0; i < n; i++) {
@@ -469,15 +463,13 @@ static void real_async_read_cb(unsigned char *buff, unsigned int len, void *cx)
 // -----------------  SIMULATION ROUTINES  -----------------------------
 // ---------------------------------------------------------------------
 
-//xxx dont use struct
-static struct {
-    pthread_t       tid;
-    bool            cancel;
-    sdr_async_rb_t *rb;
-} sim_async;
+// vars
+static freq_t    sim_ctr_freq;
+pthread_t        sim_async_tid;
+bool             sim_async_cancel;
+sdr_async_rb_t * sim_async_rb;
 
-static freq_t sim_ctr_freq;
-
+// prototypes
 static void *sim_async_read_thread(void *cx);
 static void sim_get_antenna_data(complex *data, int n);
 
@@ -500,37 +492,37 @@ static void sim_read_sync(complex *data, int n)
 
 static void sim_read_async(sdr_async_rb_t *rb)
 {
-    if (sim_async.tid != 0) {
+    if (sim_async_tid != 0) {
         FATAL("sdr sim async read is already active\n");
     }
 
-    sim_async.cancel = false;
-    sim_async.rb = rb;
+    sim_async_cancel = false;
+    sim_async_rb = rb;
 
     // xxx detached
-    pthread_create(&sim_async.tid, NULL, sim_async_read_thread, NULL);
+    pthread_create(&sim_async_tid, NULL, sim_async_read_thread, NULL);
 }
 
 static void sim_cancel_async(void)
 {
-    if (sim_async.tid == 0) {
+    if (sim_async_tid == 0) {
         FATAL("sdr sim async read is not active\n");
     }
 
-    sim_async.cancel = true;
+    sim_async_cancel = true;
 
-    pthread_join(sim_async.tid, NULL);
+    pthread_join(sim_async_tid, NULL);
 
-    sim_async.cancel = false;
-    sim_async.rb = NULL;
-    sim_async.tid = 0;
+    sim_async_cancel = false;
+    sim_async_rb = NULL;
+    sim_async_tid = 0;
 }
 
 static void *sim_async_read_thread(void *cx)
 {
     #define MAX_DATA 131072
 
-    sdr_async_rb_t *rb = sim_async.rb;
+    sdr_async_rb_t *rb = sim_async_rb;
     complex         data[MAX_DATA];
     unsigned long   rb_avail, n, rb_tail;
     unsigned long   delta_t, target, now;
@@ -545,7 +537,7 @@ static void *sim_async_read_thread(void *cx)
 
     while (true) {
         // check for cancel request
-        if (sim_async.cancel) {
+        if (sim_async_cancel) {
             goto terminate;
         }
 

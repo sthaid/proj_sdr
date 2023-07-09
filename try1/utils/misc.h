@@ -13,15 +13,13 @@
 
 // -----------------  LOGGING  --------------------
 
-#define NOTICE(fmt, args...) do { log_msg("NOTICE", fmt, ## args); } while (0)
-#define WARN(fmt, args...)   do { log_msg("WARN", fmt, ## args); } while (0)
-#define ERROR(fmt, args...)  do { log_msg("ERROR", fmt, ## args); } while (0)
-#define DEBUG(fmt, args...)  do { if (0) log_msg("FATAL", fmt, ## args); } while (0)
-#define FATAL(fmt, args...)  do { log_msg("FATAL", fmt, ## args); \
-                                  log_msg("FATAL", "%s %d\n", __FILE__, __LINE__); \
-                                  exit(1); } while (0)
+#define NOTICE(fmt, args...) do { log_msg(__FILE__, __LINE__, "NOTICE", fmt, ## args); } while (0)
+#define WARN(fmt, args...)   do { log_msg(__FILE__, __LINE__, "WARN", fmt, ## args); } while (0)
+#define ERROR(fmt, args...)  do { log_msg(__FILE__, __LINE__, "ERROR", fmt, ## args); } while (0)
+#define DEBUG(fmt, args...)  do { if (0) log_msg(__FILE__, __LINE__, "DEBUG", fmt, ## args); } while (0)
+#define FATAL(fmt, args...)  do { log_msg(__FILE__, __LINE__, "FATAL", fmt, ## args); } while (0)
 
-#define BLANKLINE do { log_msg("", "\n"); } while (0)
+#define BLANKLINE do { log_msg(__FILE__, __LINE__, "", "\n"); } while (0)
 
 #define ASSERT_MSG(cond, fmt, args...) \
     do { \
@@ -37,7 +35,7 @@
         FATAL("ASSERTION FAILED: %s\n", #cond); \
     } while (0)
 
-void log_msg(char *lvl, char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
+void log_msg(char *file, int line, char *lvl, char *fmt, ...) __attribute__ ((format (printf, 4, 5)));
 
 // -----------------  TIME  -----------------------
 

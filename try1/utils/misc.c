@@ -8,7 +8,7 @@
 
 // -----------------  LOGGING  --------------------------------------------
 
-void log_msg(char *lvl, char *fmt, ...)
+void log_msg(char *file, int line, char *lvl, char *fmt, ...)
 {
     char s[200];
     va_list ap;
@@ -25,8 +25,14 @@ void log_msg(char *lvl, char *fmt, ...)
 
     if (lvl[0] == '\0') {
         fprintf(stderr, "%s\n", s);
-    } else {
+    } else if (strcmp(lvl, "NOTICE") == 0) {
         fprintf(stderr, "%s: %s\n", lvl, s);
+    } else {
+        fprintf(stderr, "%s %s %d: %s\n", lvl, file, line, s);
+    }
+
+    if (strcmp(lvl, "FATAL") == 0) {
+        exit(1);
     }
 }
 

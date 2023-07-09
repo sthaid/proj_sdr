@@ -249,7 +249,7 @@ static void exit_hndlr(void)
 {
     int32_t i;
 
-    NOTICE("%s exit_hndlr\n", __FILE__);
+    NOTICE("exit_hndlr\n");
     
     for (i = 0; i < MAX_FONT_PTSIZE; i++) {
         if (sdl_font[i].font != NULL) {
