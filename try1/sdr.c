@@ -19,6 +19,9 @@
 // - rtlsdr_get_offset_tuning
 // - rtlsdr_set_bias_tee
 
+// xxx improve logging
+// xxx comments
+
 //
 // defines
 //
@@ -88,21 +91,28 @@ static struct {
     int  ctr_freq;
 } info;
 
-static bool sdr_read_is_active;
+//static bool sdr_read_is_active;
 
 //
 // prototypes
 //
 
+static void real_set_ctr_freq(freq_t f);
+static void real_read_sync(complex *data, int items);
+static void real_read_async(sdr_async_rb_t *rb);
+static void real_cancel_async(void);
+
+static void sim_set_ctr_freq(freq_t f);
+static void sim_read_sync(complex *data, int items);
+static void sim_read_async(sdr_async_rb_t *rb);
+static void sim_cancel_async(void);
+
+// ---------------------------------------------------------------------
+// -----------------  INIT  --------------------------------------------
+// ---------------------------------------------------------------------
+
 static void exit_hndlr(void);
 static void sdr_print_dev_info(void);
-
-static void sim_sdr_set_ctr_freq(freq_t f);
-static void sim_sdr_read_sync(complex *data, int n);
-static void sim_sdr_read_async(sdr_async_rb_t *rb);
-static void sim_sdr_cancel_async(void);
-
-// -----------------  INIT AND LIST_DEVICES  ---------------------------
 
 void sdr_init(int dev_idx, int sample_rate)
 {
@@ -217,6 +227,10 @@ static void sdr_print_dev_info(void)
            info.ctr_freq);
 }
 
+// ---------------------------------------------------------------------
+// -----------------  LIST DEVICES  ------------------------------------
+// ---------------------------------------------------------------------
+
 void sdr_list_devices(void)
 {
     int dev_cnt, idx;
@@ -234,9 +248,10 @@ void sdr_list_devices(void)
     }
 }
 
+// -----------------------------------------------------------------------
 // -----------------  SDR HARDWARE TEST  ---------------------------------
+// -----------------------------------------------------------------------
 
-// xxx comments
 void sdr_hardware_test(void)
 {
     unsigned char *buff, val;
@@ -299,52 +314,68 @@ void sdr_hardware_test(void)
     free(buff);
 }
 
-// -----------------  SDR SET CENTER FREQ  -----------------------------
+// ---------------------------------------------------------------------
+// -----------------  SDR CONTROL  -------------------------------------
+// ---------------------------------------------------------------------
 
 void sdr_set_ctr_freq(freq_t f, bool sim)
 {
     if (sim) {
-        sim_sdr_set_ctr_freq(f);
-        return;
-    }
-
-    rtlsdr_set_center_freq(dev, f);
-}
-
-// -----------------  SDR SYNC READ  -----------------------------------
-
-// xxx move
-unsigned int round_up(unsigned int n, unsigned int multiple)
-{
-    if ((n % multiple) == 0) {
-        return n;
+        sim_set_ctr_freq(f);
     } else {
-        return (n / multiple + 1) * multiple;
+        real_set_ctr_freq(f);
     }
 }
 
 void sdr_read_sync(complex *data, int n, bool sim)
 {
-    if (sdr_read_is_active) {
-        FATAL("sdr read is active\n");
-        return;
-    }
-
     if (sim) {
-        sdr_read_is_active = true;  // xxx needed?
-        sim_sdr_read_sync(data, n);
-        sdr_read_is_active = false;
-        return;
+        sim_read_sync(data, n);
+    } else {
+        real_read_sync(data, n);
     }
+}
 
-// xxx make 2 routines
+void sdr_read_async(sdr_async_rb_t *rb, bool sim)
+{
+    if (sim) {
+        sim_read_async(rb);
+    } else {
+        real_read_async(rb);
+    }
+}
 
-    int n_read=0, buff_len, i;
+void sdr_cancel_async(bool sim)
+{
+    if (sim) {
+        sim_cancel_async();
+    } else {
+        real_cancel_async();
+    }
+}
 
+// ---------------------------------------------------------------------
+// -----------------  REAL ROUTINES  -----------------------------------
+// ---------------------------------------------------------------------
+
+// ---- set ctr freq ----
+
+static void real_set_ctr_freq(freq_t f)
+{
+    rtlsdr_set_center_freq(dev, f);
+}
+
+// ---- read sync ----
+
+static void real_read_sync(complex *data, int items)
+{
     static unsigned char *buff;
     static int            buff_len_alloced;
+
+    int bytes_read, buff_len, i;
     
-    buff_len = round_up(n * 2, 512);
+    buff_len = round_up(items * 2, 512);
+
     if (buff == NULL || buff_len > buff_len_alloced) {
         NOTICE("ALLOCING %d\n", buff_len);
         free(buff);
@@ -354,57 +385,49 @@ void sdr_read_sync(complex *data, int n, bool sim)
 
     rtlsdr_reset_buffer(dev);
 
-    rtlsdr_read_sync(dev, buff, buff_len, &n_read);
-    if (n_read != buff_len) {
-        WARN("sdr_read_sync buff_len=0x%x n_read=0x%x\n", buff_len, n_read);
+    bytes_read = 0;
+    rtlsdr_read_sync(dev, buff, buff_len, &bytes_read);
+
+    if (bytes_read != buff_len) {
+        WARN("sdr_read_sync buff_len=0x%x bytes_read=0x%x\n", buff_len, bytes_read);
     }
 
-    for (i = 0; i < n; i++) {
+    for (i = 0; i < items; i++) {
         data[i] = ((buff[2*i] - 128.) + (buff[2*i+1] - 128.) * I) / 128.;
     }
 }
 
-// -----------------  SDR ASYNC READ  ----------------------------------
+// ---- read async ----
 
-static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx);
-//sdr_async_rb_t *async_rb;
-static void *async_reader_thread(void *cx);
-pthread_t async_tid;
+// vars
+static pthread_t real_async_read_thread_tid;
 
-void sdr_read_async(sdr_async_rb_t *rb, bool sim)
+// prototypes
+static void *real_async_read_thread(void *cx);
+static void real_async_read_cb(unsigned char *buff, unsigned int len, void *cx);
+
+static void real_read_async(sdr_async_rb_t *rb)
 {
-    if (sdr_read_is_active) {
-        FATAL("sdr read is active\n");
-        return;
-    }
-
-    memset(rb, 0, sizeof(sdr_async_rb_t)); // xxx or just head and tail
-
-    if (sim) {
-        sim_sdr_read_async(rb);
-        sdr_read_is_active = true;
-        return;
-    }
-
-//xxxxxxxxxxxxxxxxxx
-    pthread_create(&async_tid, NULL, async_reader_thread, rb);
-
-    //async_rb = rb;
-    //rtlsdr_read_async(dev, async_reader_cb, NULL, 0, 0);
+    rb->head = rb->tail = 0;
+    pthread_create(&real_async_read_thread_tid, NULL, real_async_read_thread, rb);
 }
 
-static void *async_reader_thread(void *cx)
+static void real_cancel_async(void)
 {
-    NOTICE("BEFORE rtlsdr_read_async\n");
-    rtlsdr_read_async(dev, async_reader_cb, cx, 0, 0);
-    NOTICE("AFTER rtlsdr_read_async\n");
-    // xxx need to join
+    rtlsdr_cancel_async(dev);
+    pthread_join(real_async_read_thread_tid, NULL);
+}
 
+static void *real_async_read_thread(void *cx)
+{
+    rtlsdr_reset_buffer(dev);
+    rtlsdr_read_async(dev, real_async_read_cb, cx, 0, 0);
     return NULL;
 }
 
-static void async_reader_cb(unsigned char *buff, unsigned int len, void *cx)
+static void real_async_read_cb(unsigned char *buff, unsigned int len, void *cx)
 {
+    // xxx clean up here
     static unsigned long start;
     static unsigned long total;
     static int cnt;
@@ -442,35 +465,11 @@ static void async_reader_cb(unsigned char *buff, unsigned int len, void *cx)
     rb->tail = rb_tail;
 }
 
-void sdr_cancel_async(bool sim)
-{
-#if 0
-    if (!sdr_read_is_active) {
-        FATAL("sdr read is not active\n");
-        return;
-    }
-#endif
-
-    if (sim) {
-        sim_sdr_cancel_async();
-        sdr_read_is_active = false;
-        return;
-    }
-
-    int rc;
-
-    rc = rtlsdr_cancel_async(dev);
-    if (rc != 0) {
-        ERROR("rtlsdr_cancel_async rc=%d\n", rc);
-    }
-
-    pthread_join(async_tid, NULL);
-}
-
 // ---------------------------------------------------------------------
-// -----------------  SIMULATION  --------------------------------------
+// -----------------  SIMULATION ROUTINES  -----------------------------
 // ---------------------------------------------------------------------
 
+//xxx dont use struct
 static struct {
     pthread_t       tid;
     bool            cancel;
@@ -481,18 +480,17 @@ static freq_t sim_ctr_freq;
 
 static void *sim_async_read_thread(void *cx);
 static void sim_get_antenna_data(complex *data, int n);
-static void sim_get_antenna_data_init(void);
 
 // - - - - sim set ctr freq - - - - 
 
-static void sim_sdr_set_ctr_freq(freq_t f)
+static void sim_set_ctr_freq(freq_t f)
 {
     sim_ctr_freq = f;
 }
 
 // - - - - sim sync read - - - - 
 
-static void sim_sdr_read_sync(complex *data, int n)
+static void sim_read_sync(complex *data, int n)
 {
     sim_get_antenna_data(data, n);
     usleep(1000000 * (n * DELTA_T));
@@ -500,7 +498,7 @@ static void sim_sdr_read_sync(complex *data, int n)
 
 // - - - - sim async read - - - - 
 
-static void sim_sdr_read_async(sdr_async_rb_t *rb)
+static void sim_read_async(sdr_async_rb_t *rb)
 {
     if (sim_async.tid != 0) {
         FATAL("sdr sim async read is already active\n");
@@ -513,7 +511,7 @@ static void sim_sdr_read_async(sdr_async_rb_t *rb)
     pthread_create(&sim_async.tid, NULL, sim_async_read_thread, NULL);
 }
 
-static void sim_sdr_cancel_async(void)
+static void sim_cancel_async(void)
 {
     if (sim_async.tid == 0) {
         FATAL("sdr sim async read is not active\n");
@@ -590,6 +588,8 @@ terminate:
 static double      *antenna;
 static unsigned int max_antenna;
 
+static void sim_get_antenna_data_init(void);
+
 static void sim_get_antenna_data(complex *data, int n)
 {
     static unsigned int idx;
@@ -661,13 +661,6 @@ static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg);
     NOTICE("curr direct sampling = %s\n", DIRECT_SAMPLING_STR(direct_sampling));
     direct_sampling_enabled = (direct_sampling == DIRECT_SAMPLING_Q_ADC_ENABLED);
 
-xxx other routine needed for the remaining
-    // set center frequency
-    unsigned int ctr_freq;
-    rtlsdr_set_center_freq(dev, f);
-    ctr_freq = rtlsdr_get_center_freq(dev);
-    NOTICE("curr ctr_freq %d  %f MHZ\n", ctr_freq, (double)ctr_freq/MHZ);
-
     // start async reader
     pthread_t tid;
     rc = rtlsdr_reset_buffer(dev);
@@ -709,35 +702,6 @@ void sdr_set_freq(double f)
     }
 
     rtlsdr_set_center_freq(dev, f);
-}
-
-// -----------------  LOCAL  -------------------------------------------
-
-static void *async_reader_thread(void *cx)
-{
-    NOTICE("BEFORE rtlsdr_read_async\n");
-    rtlsdr_read_async(dev, async_reader_cb, NULL, 0, 0);
-    NOTICE("AFTER rtlsdr_read_async\n");
-
-    return NULL;
-}
-
-static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx)
-{
-    static unsigned long start;
-    static unsigned long total;
-    static int cnt;
-
-    if (start == 0) {
-        start = microsec_timer();
-    }
-    total += len/2;
-    if (++cnt == 50) {
-        NOTICE("RATE = %f\n", total / ((microsec_timer()-start)/1000000.) / 1000000.);
-        cnt = 0;
-    }
-
-    cb(buf, len);
 }
 
 #endif

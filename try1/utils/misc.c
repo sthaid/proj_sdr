@@ -172,3 +172,13 @@ void zero_complex(complex *data, int n)
     memset(data, 0, n*sizeof(complex));
 }
 
+unsigned int round_up(unsigned int n, unsigned int multiple)
+{
+    if ((n % multiple) == 0) {
+        return n;
+    } else {
+        return (n / multiple + 1) * multiple;
+    }
+}
+
+

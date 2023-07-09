@@ -61,5 +61,6 @@ int mbstrchars(char *s);
 
 void zero_real(double *data, int n);
 void zero_complex(complex *data, int n);
+unsigned int round_up(unsigned int n, unsigned int multiple);
 
 #endif
