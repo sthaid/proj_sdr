@@ -136,8 +136,13 @@ void radio_init(void)
 #endif
     scan_state_str = "";
 
+#if 0  //xxx
     mode = MODE_PLAY;
     start_thread(play_mode_thread, "sdr_play_mode");
+#else
+    mode = MODE_FFT;
+    start_thread(fft_mode_thread, "sdr_fft_mode");
+#endif
 
     atexit(exit_hndlr);
 }
@@ -674,8 +679,8 @@ static void fft_entire_band(band_t *b)
     }
 
     //xxx may not always work ?
-    ASSERT_MSG(k1 == b->max_cabs_fft, "idx=%d k1=%d max_kabs_fft=%d",
-               b->idx, k1, b->max_cabs_fft);
+//  ASSERT_MSG(k1 == b->max_cabs_fft, "idx=%d k1=%d max_kabs_fft=%d",
+//             b->idx, k1, b->max_cabs_fft);
 
     // save new waterfall entry
     add_to_waterfall(b);

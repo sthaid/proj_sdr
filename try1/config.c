@@ -88,7 +88,8 @@ void config_init(void)
                 BAD_CONFIG_FILE_LINE;
             }
 
-            if (strncmp(b->name, "SIM", 3) == 0) b->selected = true; // xxx temp
+            //if (strncmp(b->name, "SIM", 3) == 0) b->selected = true; // xxx temp
+            b->selected = true; //xxx temp
 
             max_band++;
 #if 0

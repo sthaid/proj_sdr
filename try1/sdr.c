@@ -146,8 +146,6 @@ void sdr_init(int dev_idx, int sample_rate)
     // disable direct sampling mode
     rtlsdr_set_direct_sampling(dev, DIRECT_SAMPLING_DISABLED);
 
-    // xxx ctr_freq not set
-
     // readback the dynamic values that can be read back
     info.sample_rate = rtlsdr_get_sample_rate(dev);
     info.tuner_gain = rtlsdr_get_tuner_gain(dev);
@@ -204,6 +202,7 @@ static void sdr_print_dev_info(void)
            info.rtl2832_xtal_freq, 
            info.tuner_xtal_freq);
 
+    // xxx re-read these, and possibly the xtal_freq (above)
     NOTICE("---------- Configurable Values ----------\n");
     NOTICE("sample_rate     = %d\n",
            info.sample_rate);
@@ -237,10 +236,11 @@ void sdr_list_devices(void)
 
 // -----------------  SDR HARDWARE TEST  ---------------------------------
 
+// xxx comments
 void sdr_hardware_test(void)
 {
     unsigned char *buff, val;
-    int rc, n_read, buff_len_desired, buff_len_padded, err_count=0;
+    int rc, n_read, buff_len, err_count=0;
     const int secs = 1;
     unsigned long start, duration;
 
@@ -255,30 +255,34 @@ void sdr_hardware_test(void)
 
     rc = rtlsdr_reset_buffer(dev);
     if (rc != 0) {
-        ERROR("failed to reset buffer\n");
+        ERROR("rtlsdr_reset_buffer failed, rc=%d\n", rc);  //xxx use a new macro for errors
         return;
     }
 
-    buff_len_desired = secs * (2 * info.sample_rate);
-    buff_len_padded  = buff_len_desired + 50000;
-    buff = malloc(buff_len_padded);
-    memset(buff, 0, buff_len_padded);
+    // note: buff_len must be multiple of 512
+    buff_len = (secs * (2 * info.sample_rate)) & ~0x200;
+    buff = malloc(buff_len);
+    memset(buff, 0, buff_len);
     
     NOTICE("reading test data ...\n");
     start = microsec_timer();
-    rtlsdr_read_sync(dev, buff, buff_len_padded, &n_read);
+    rc = rtlsdr_read_sync(dev, buff, buff_len, &n_read);
+    if (rc != 0) {
+        ERROR("rtlsdr_read_sync failed, rc=%d\n", rc);
+        return;
+    }
     duration = microsec_timer() - start;
     NOTICE("done reading test data:  duration = %f s, n_read = %d, rate = %f MB/s\n",
            duration / 1000000., n_read, (double)n_read / duration);
 
-    if (n_read < buff_len_desired) {
-        ERROR("n_read=%d is too small, expected=%d\n", n_read, buff_len_desired);
+    if (n_read != buff_len) {
+        ERROR("n_read=0x%08x expected=0x%08x\n", n_read, buff_len);
         return;
     }
 
     NOTICE("checking test data\n");
-    val = buff[0];
-    for (int i = 0; i < buff_len_desired; i++) {
+    val = buff[2] + 1;
+    for (int i = 3; i < buff_len; i++) {
         if (buff[i] != val) {
             if (++err_count < 10) {
                 ERROR("buff[%d...%d] = %d %d %d %d %d %d %d\n", 
@@ -304,10 +308,20 @@ void sdr_set_ctr_freq(freq_t f, bool sim)
         return;
     }
 
-    FATAL("not coded");
+    rtlsdr_set_center_freq(dev, f);
 }
 
 // -----------------  SDR SYNC READ  -----------------------------------
+
+// xxx move
+unsigned int round_up(unsigned int n, unsigned int multiple)
+{
+    if ((n % multiple) == 0) {
+        return n;
+    } else {
+        return (n / multiple + 1) * multiple;
+    }
+}
 
 void sdr_read_sync(complex *data, int n, bool sim)
 {
@@ -317,18 +331,45 @@ void sdr_read_sync(complex *data, int n, bool sim)
     }
 
     if (sim) {
-        sdr_read_is_active = true;
+        sdr_read_is_active = true;  // xxx needed?
         sim_sdr_read_sync(data, n);
         sdr_read_is_active = false;
         return;
     }
 
-    FATAL("not coded\n");
-    // xxx, be sure to get the full buffer
-    //rtlsdr_read_sync(dev, buff, buff_len, &n_read);
+// xxx make 2 routines
+
+    int n_read=0, buff_len, i;
+
+    static unsigned char *buff;
+    static int            buff_len_alloced;
+    
+    buff_len = round_up(n * 2, 512);
+    if (buff == NULL || buff_len > buff_len_alloced) {
+        NOTICE("ALLOCING %d\n", buff_len);
+        free(buff);
+        buff = malloc(buff_len);
+        buff_len_alloced = buff_len;
+    }
+
+    rtlsdr_reset_buffer(dev);
+
+    rtlsdr_read_sync(dev, buff, buff_len, &n_read);
+    if (n_read != buff_len) {
+        WARN("sdr_read_sync buff_len=0x%x n_read=0x%x\n", buff_len, n_read);
+    }
+
+    for (i = 0; i < n; i++) {
+        data[i] = ((buff[2*i] - 128.) + (buff[2*i+1] - 128.) * I) / 128.;
+    }
 }
 
 // -----------------  SDR ASYNC READ  ----------------------------------
+
+static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx);
+//sdr_async_rb_t *async_rb;
+static void *async_reader_thread(void *cx);
+pthread_t async_tid;
 
 void sdr_read_async(sdr_async_rb_t *rb, bool sim)
 {
@@ -337,7 +378,7 @@ void sdr_read_async(sdr_async_rb_t *rb, bool sim)
         return;
     }
 
-    memset(rb, 0, sizeof(sdr_async_rb_t));
+    memset(rb, 0, sizeof(sdr_async_rb_t)); // xxx or just head and tail
 
     if (sim) {
         sim_sdr_read_async(rb);
@@ -345,15 +386,70 @@ void sdr_read_async(sdr_async_rb_t *rb, bool sim)
         return;
     }
 
-    FATAL("not coded\n");
+//xxxxxxxxxxxxxxxxxx
+    pthread_create(&async_tid, NULL, async_reader_thread, rb);
+
+    //async_rb = rb;
+    //rtlsdr_read_async(dev, async_reader_cb, NULL, 0, 0);
+}
+
+static void *async_reader_thread(void *cx)
+{
+    NOTICE("BEFORE rtlsdr_read_async\n");
+    rtlsdr_read_async(dev, async_reader_cb, cx, 0, 0);
+    NOTICE("AFTER rtlsdr_read_async\n");
+    // xxx need to join
+
+    return NULL;
+}
+
+static void async_reader_cb(unsigned char *buff, unsigned int len, void *cx)
+{
+    static unsigned long start;
+    static unsigned long total;
+    static int cnt;
+
+    sdr_async_rb_t *rb = cx;
+
+    if (start == 0) {
+        start = microsec_timer();
+    }
+    total += len/2;
+    if (++cnt == 50) {
+        NOTICE("RATE = %f\n", total / ((microsec_timer()-start)/1000000.) / 1000000.);
+        cnt = 0;
+    }
+
+    unsigned long   rb_avail, n, rb_tail, items;
+
+    items = len/2;
+
+    // copy the data to the tail of ring buffer, 
+    // for as much will fit
+    rb_avail = MAX_SDR_ASYNC_RB - (rb->tail - rb->head);
+    n = (rb_avail < items ? rb_avail : items);
+    if (n != items) {
+        WARN("discarding %ld samples\n", items-n);
+        WARN("   rb head = %ld  tail = %ld  avail = %ld\n",
+            rb->head, rb->tail, rb_avail);
+    }
+    rb_tail = rb->tail;
+    for (int i = 0; i < n; i++) {
+        rb->data[rb_tail % MAX_SDR_ASYNC_RB] = 
+                ((buff[2*i] - 128.) + (buff[2*i+1] - 128.) * I) / 128.;
+        rb_tail++;
+    }
+    rb->tail = rb_tail;
 }
 
 void sdr_cancel_async(bool sim)
 {
+#if 0
     if (!sdr_read_is_active) {
         FATAL("sdr read is not active\n");
         return;
     }
+#endif
 
     if (sim) {
         sim_sdr_cancel_async();
@@ -361,7 +457,14 @@ void sdr_cancel_async(bool sim)
         return;
     }
 
-    FATAL("not coded\n");
+    int rc;
+
+    rc = rtlsdr_cancel_async(dev);
+    if (rc != 0) {
+        ERROR("rtlsdr_cancel_async rc=%d\n", rc);
+    }
+
+    pthread_join(async_tid, NULL);
 }
 
 // ---------------------------------------------------------------------
@@ -406,6 +509,7 @@ static void sim_sdr_read_async(sdr_async_rb_t *rb)
     sim_async.cancel = false;
     sim_async.rb = rb;
 
+    // xxx detached
     pthread_create(&sim_async.tid, NULL, sim_async_read_thread, NULL);
 }
 
