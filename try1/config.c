@@ -129,7 +129,7 @@ void config_init(void)
 
 static void exit_hndlr(void)
 {
-    NOTICE("%s exit_hndlr\n", __FILE__);
+    NOTICE("config exit_hndlr\n");
 
     // xxx tbd
 }

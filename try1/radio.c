@@ -149,7 +149,7 @@ void radio_init(void)
 
 static void exit_hndlr(void)
 {
-    NOTICE("%s exit_hndlr\n", __FILE__);
+    NOTICE("radio exit_hndlr\n");
 
     stop_threads();
 }

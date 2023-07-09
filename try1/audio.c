@@ -92,7 +92,7 @@ void audio_init(void)
 
 static void exit_hndlr(void)
 {
-    NOTICE("%s exit_hndlr\n", __FILE__);
+    NOTICE("audio exit_hndlr\n");
 
     program_terminating = true;
 }

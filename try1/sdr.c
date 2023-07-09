@@ -2,25 +2,17 @@
 
 #include <rtl-sdr.h>
 
-// xxx add references
-// https://pa3fwm.nl/technotes/tn20.html
-
 // xxx todo
-// - add link to descriptions
-// - check ret codes
-// - use these atexit
-//     rc = rtlsdr_cancel_async(dev);
-//     rtlsdr_close(dev);
-
-// xxx maybe also use
-// - rtlsdr_set_tuner_if_gain
-// - rtlsdr_get_freq_correction
-// - rtlsdr_set_offset_tuning
-// - rtlsdr_get_offset_tuning
-// - rtlsdr_set_bias_tee
-
-// xxx improve logging
-// xxx comments
+// - add references
+//   . https://pa3fwm.nl/technotes/tn20.html
+//   . others
+// - maybe also use
+//   . rtlsdr_set_tuner_if_gain
+//   . rtlsdr_get_freq_correction
+//   . rtlsdr_set_offset_tuning
+//   . rtlsdr_get_offset_tuning
+//   . rtlsdr_set_bias_tee
+// - comments
 
 //
 // defines
@@ -121,7 +113,7 @@ void sdr_init(int dev_idx, int sample_rate)
     // open
     rc = rtlsdr_open(&dev, dev_idx);
     if (rc != 0) {
-        FATAL("rtlsdr_open rc=%d\n", rc);
+        FATAL("rtlsdr_open, rc=%d\n", rc);
     }
 
     // get info
@@ -167,7 +159,7 @@ void sdr_init(int dev_idx, int sample_rate)
 
 static void exit_hndlr(void)
 {
-    NOTICE("%s exit_hndlr\n", __FILE__);
+    NOTICE("sdr exit_hndlr\n");
 
     if (dev) {
         rtlsdr_close(dev);
@@ -180,7 +172,7 @@ static void sdr_print_dev_info(void)
 
     // if sdr_init was not called then error
     if (dev == NULL) {
-        FATAL("no dev\n");
+        FATAL("no sdr dev\n");
     }
 
     // construct string of supported tuner gain values
@@ -191,36 +183,38 @@ static void sdr_print_dev_info(void)
 
     // xxx if gain mode is auto may need to read the gain again
 
-    NOTICE("---------- Static Values ----------\n");
-    NOTICE("dev_idx         = %d\n",
+    NOTICE("sdr dev info: static values\n");
+    NOTICE("  dev_idx         = %d\n",
            info.dev_idx);
-    NOTICE("dev_name        = %s\n",
+    NOTICE("  dev_name        = %s\n",
            info.dev_name);
-    NOTICE("dev strings     = manfact='%s'  product='%s'  serial='%s'\n",
+    NOTICE("  dev strings     = manfact='%s'  product='%s'  serial='%s'\n",
            info.manufact,
            info.product,
            info.serial);
-    NOTICE("tuner_type      = %s\n", 
+    NOTICE("  tuner_type      = %s\n", 
            TUNER_TYPE_STR(info.tuner_type));
-    NOTICE("tuner_gains     = %s\n", 
+    NOTICE("  tuner_gains     = %s\n", 
            tuner_gains_str);
-    NOTICE("xtal_freq       = %d (rtl2832)  %d (tuner)\n",
+    NOTICE("  xtal_freq       = %d (rtl2832)  %d (tuner)\n",
            info.rtl2832_xtal_freq, 
            info.tuner_xtal_freq);
 
     // xxx re-read these, and possibly the xtal_freq (above)
-    NOTICE("---------- Configurable Values ----------\n");
-    NOTICE("sample_rate     = %d\n",
+    NOTICE("sdr dev info: configureable values\n");
+    NOTICE("  sample_rate     = %d\n",
            info.sample_rate);
-    NOTICE("rtl2832_agc     = %s\n",
+    NOTICE("  rtl2832_agc     = %s\n",
            info.rtl2832_agc_enabled ? "enabled" : "disabled");
-    NOTICE("tuner_gain      = %d (%s)\n",
+    NOTICE("  tuner_gain      = %d (%s)\n",
            info.tuner_gain, 
            info.tuner_gain_mode_manual ? "manual" : "auto");
-    NOTICE("direct_sampling = %s\n",
+    NOTICE("  direct_sampling = %s\n",
            DIRECT_SAMPLING_STR(info.direct_sampling));
-    NOTICE("ctr_freq        = %d\n",
+    NOTICE("  ctr_freq        = %d\n",
            info.ctr_freq);
+
+    BLANKLINE;
 }
 
 // ---------------------------------------------------------------------
@@ -255,23 +249,19 @@ void sdr_hardware_test(void)
     const int secs = 1;
     unsigned long start, duration;
 
-    NOTICE("---------- SDR HARDWARE TEST ----------\n");
+    NOTICE("SDR HARDWARE TESTn");
 
     NOTICE("enabling test mode\n");
     rc = rtlsdr_set_testmode(dev, TEST_MODE_ON);
     if (rc != 0) {
-        ERROR("failed to enable test mode\n");
+        ERROR("rtlsdr_set_testmode, rc=%d\n", rc);
         return;
     }
 
-    rc = rtlsdr_reset_buffer(dev);
-    if (rc != 0) {
-        ERROR("rtlsdr_reset_buffer failed, rc=%d\n", rc);  //xxx use a new macro for errors
-        return;
-    }
+    rtlsdr_reset_buffer(dev);
 
-    // note: buff_len must be multiple of 512
-    buff_len = (secs * (2 * info.sample_rate)) & ~0x200;
+    buff_len = secs * (2 * info.sample_rate);
+    buff_len = round_up(buff_len, 512); // must be multiple of 512
     buff = malloc(buff_len);
     memset(buff, 0, buff_len);
     
@@ -279,7 +269,7 @@ void sdr_hardware_test(void)
     start = microsec_timer();
     rc = rtlsdr_read_sync(dev, buff, buff_len, &n_read);
     if (rc != 0) {
-        ERROR("rtlsdr_read_sync failed, rc=%d\n", rc);
+        ERROR("rtlsdr_read_sync, rc=%d\n", rc);
         return;
     }
     duration = microsec_timer() - start;
@@ -303,9 +293,8 @@ void sdr_hardware_test(void)
         }
         val++;
     }
-    NOTICE("number of errors detected = %d : %s\n", 
-           err_count,
-           err_count <= 3 ? "TEST PASSED" : "TEST FAILED");
+    NOTICE("number of errors detected = %d\n", err_count);
+    NOTICE("TEST %s\n", err_count <= 3 ? "PASSED" : "FAILED");
 
     free(buff);
 }
@@ -358,7 +347,12 @@ void sdr_cancel_async(bool sim)
 
 static void real_set_ctr_freq(freq_t f)
 {
-    rtlsdr_set_center_freq(dev, f);
+    int rc;
+
+    rc = rtlsdr_set_center_freq(dev, f);
+    if (rc != 0) {
+        ERROR("rtlsdr_set_center_freq, rc=%d\n", rc);
+    }
 }
 
 // ---- read sync ----
@@ -368,12 +362,11 @@ static void real_read_sync(complex *data, int items)
     static unsigned char *buff;
     static int            buff_len_alloced;
 
-    int bytes_read, buff_len, i;
+    int bytes_read, buff_len, i, rc;
     
     buff_len = round_up(items * 2, 512);
 
     if (buff == NULL || buff_len > buff_len_alloced) {
-        NOTICE("ALLOCING %d\n", buff_len);
         free(buff);
         buff = malloc(buff_len);
         buff_len_alloced = buff_len;
@@ -382,7 +375,12 @@ static void real_read_sync(complex *data, int items)
     rtlsdr_reset_buffer(dev);
 
     bytes_read = 0;
-    rtlsdr_read_sync(dev, buff, buff_len, &bytes_read);
+    rc = rtlsdr_read_sync(dev, buff, buff_len, &bytes_read);
+    if (rc != 0) {
+        ERROR("rtlsdr_read_sync, rc=%d\n", rc);
+        memset(data, 0, items*sizeof(complex));
+        return;
+    }
 
     if (bytes_read != buff_len) {
         WARN("sdr_read_sync buff_len=0x%x bytes_read=0x%x\n", buff_len, bytes_read);
@@ -416,8 +414,17 @@ static void real_cancel_async(void)
 
 static void *real_async_read_thread(void *cx)
 {
+    int rc;
+
+    pthread_setname_np(pthread_self(), "sdr_real_async_read");
+
     rtlsdr_reset_buffer(dev);
-    rtlsdr_read_async(dev, real_async_read_cb, cx, 0, 0);
+
+    rc = rtlsdr_read_async(dev, real_async_read_cb, cx, 0, 0);
+    if (rc != 0) {
+        ERROR("rtlsdr_read_async, rc=%d\n", rc);
+    }
+
     return NULL;
 }
 
@@ -493,20 +500,19 @@ static void sim_read_sync(complex *data, int n)
 static void sim_read_async(sdr_async_rb_t *rb)
 {
     if (sim_async_tid != 0) {
-        FATAL("sdr sim async read is already active\n");
+        FATAL("sim async read is already active\n");
     }
 
     sim_async_cancel = false;
     sim_async_rb = rb;
 
-    // xxx detached
     pthread_create(&sim_async_tid, NULL, sim_async_read_thread, NULL);
 }
 
 static void sim_cancel_async(void)
 {
     if (sim_async_tid == 0) {
-        FATAL("sdr sim async read is not active\n");
+        FATAL("sim async read is not active\n");
     }
 
     sim_async_cancel = true;
@@ -527,13 +533,10 @@ static void *sim_async_read_thread(void *cx)
     unsigned long   rb_avail, n, rb_tail;
     unsigned long   delta_t, target, now;
 
-    pthread_setname_np(pthread_self(), "sdr_async_read");
-
-    NOTICE("async read thread starting\n");
+    pthread_setname_np(pthread_self(), "sdr_sim_async_read");
 
     delta_t = nearbyint((double)MAX_DATA / info.sample_rate * 1000000);
     target = microsec_timer() + delta_t;
-    DEBUG("delta_t = %ld\n", delta_t);
 
     while (true) {
         // check for cancel request
@@ -548,7 +551,6 @@ static void *sim_async_read_thread(void *cx)
         now = microsec_timer();
         if (target > now) {
             usleep(target - now);
-            DEBUG("slept for %ld us\n", target-now);
         } else {
             WARN("target is before now\n");
         }
@@ -563,15 +565,13 @@ static void *sim_async_read_thread(void *cx)
         }
         rb_tail = rb->tail;
         for (int i = 0; i < n; i++) {
-            rb->data[rb_tail % MAX_SDR_ASYNC_RB] = data[i];  //xxx more efficient?
+            rb->data[rb_tail % MAX_SDR_ASYNC_RB] = data[i];
             rb_tail++;
         }
         rb->tail = rb_tail;
     }
 
 terminate:
-    NOTICE("async read thread terminating\n");
-
     return NULL;
 }
 
@@ -614,7 +614,7 @@ static void sim_get_antenna_data_init(void)
     // read the entire sim.dat file
     fd = open("sim/sim.dat", O_RDONLY);
     if (fd < 0) {
-        FATAL("failed open sim/sim.dat, %m\n");
+        FATAL("open sim/sim.dat, %m\n");
     }
 
     fstat(fd, &statbuf);
@@ -625,7 +625,7 @@ static void sim_get_antenna_data_init(void)
 
     len_read = read(fd, antenna, file_size);
     if (len_read != file_size) {
-        FATAL("read antenna file, len=%zd, %m\n", len_read);
+        FATAL("read sim/sim.dat, len=%zd, %m\n", len_read);
     }
 
     close(fd);
@@ -636,15 +636,6 @@ static void sim_get_antenna_data_init(void)
 // --------------------------------------
 // --------------------------------------
 // --------------------------------------
-#if 0 //xxx
-static void(*cb)(unsigned char *iq, size_t len);
-static bool direct_sampling_enabled;
-
-static void print_info(rtlsdr_dev_t *dev);
-static void get_gains(rtlsdr_dev_t *dev, int *num_gains_arg, int **gains_arg);
-static void *async_reader_thread(void *cx);
-static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg);
-#endif
 
 #if 0
     // enable direct sampling
@@ -652,15 +643,6 @@ static void async_reader_cb(unsigned char *buf, unsigned int len, void *cx_arg);
     direct_sampling = (f < F_DS ? DIRECT_SAMPLING_Q_ADC_ENABLED : DIRECT_SAMPLING_DISABLED);
     NOTICE("curr direct sampling = %s\n", DIRECT_SAMPLING_STR(direct_sampling));
     direct_sampling_enabled = (direct_sampling == DIRECT_SAMPLING_Q_ADC_ENABLED);
-
-    // start async reader
-    pthread_t tid;
-    rc = rtlsdr_reset_buffer(dev);
-    if (rc != 0) {
-        FATAL("rtlsdr_reset_buffer\n");
-    }
-    pthread_create(&tid, NULL, async_reader_thread, NULL);
-}
 
 void sdr_set_freq(double f)
 {

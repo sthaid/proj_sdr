@@ -42,7 +42,7 @@ void pa_init(void)
 
 static void exit_hndlr(void)
 {
-    NOTICE("%s exit_hndlr\n", __FILE__);
+    NOTICE("portaudio exit_hndlr\n");
 
     Pa_Terminate();
 }
